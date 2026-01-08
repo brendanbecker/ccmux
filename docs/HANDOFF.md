@@ -6,8 +6,8 @@
 
 **ccmux** is a Claude Code-aware terminal multiplexer in Rust. Development follows the [Context Engineering Methodology](./CONTEXT_ENGINEERING_METHODOLOGY.md).
 
-**Current Stage**: Stage 4 Complete (Architecture Generation)
-**Next Stage**: Stage 5 (Implementation Planning) - Not started
+**Current Stage**: Stage 5 In Progress (Implementation Planning)
+**Next Stage**: Stage 6 (Implementation)
 
 ## Completed Work
 
@@ -40,6 +40,37 @@ docs/architecture/
     ├── 002-claude-communication.md # Both MCP and sideband protocols
     └── 003-session-isolation.md    # CLAUDE_CONFIG_DIR approach
 ```
+
+### Stage 5: Implementation Planning (In Progress)
+Feature enumeration completed via parallel agents (4 batches of 4 agents each):
+
+**14 Features Identified:**
+
+| # | Feature | Crate | Description |
+|---|---------|-------|-------------|
+| 1 | Protocol Layer | ccmux-protocol | Client/server message types, codec |
+| 2 | Utilities | ccmux-utils | Error types, logging, path utilities |
+| 3 | Client UI | ccmux-client | Ratatui widgets, pane rendering |
+| 4 | Client Input | ccmux-client | Keyboard/mouse handling, prefix keys |
+| 5 | Client Connection | ccmux-client | Unix socket client, message framing |
+| 6 | Session Management | ccmux-server | Session/window/pane hierarchy |
+| 7 | PTY Management | ccmux-server | portable-pty lifecycle, I/O |
+| 8 | Terminal Parsing | ccmux-server | vt100 parser integration |
+| 9 | Claude Detection | ccmux-server | State detection, session ID capture |
+| 10 | Persistence | ccmux-server | Checkpoint + WAL, crash recovery |
+| 11 | Configuration | ccmux-server | Hot-reload with ArcSwap |
+| 12 | MCP Server | ccmux-server | Model Context Protocol tools |
+| 13 | Sideband Protocol | ccmux-server | XML command parsing from Claude output |
+| 14 | Session Isolation | ccmux-server | CLAUDE_CONFIG_DIR per pane |
+
+**Implementation Order** (based on dependencies):
+1. Protocol Layer + Utilities (foundation, no deps)
+2. Client Connection + PTY Management (infrastructure)
+3. Terminal Parsing + Session Management (core server)
+4. Client UI + Client Input (core client)
+5. Claude Detection + Session Isolation (Claude awareness)
+6. Persistence + Configuration (reliability)
+7. MCP Server + Sideband Protocol (advanced integration)
 
 ## Key Architectural Decisions
 
@@ -77,6 +108,18 @@ From research consensus:
 ## Session Log
 
 *Track what's done, what's blocked, what changed.*
+
+### 2026-01-07 (Stage 5 - Feature Enumeration)
+- Identified 14 features from architecture documents
+- Launched parallel planning agents in 4 batches (4 agents each)
+- Each agent produced detailed implementation plan:
+  - Files to create
+  - Data structures and types
+  - Key functions/methods
+  - Dependencies
+  - Testing approach
+- Established implementation order based on dependency analysis
+- Updated HANDOFF.md with feature inventory
 
 ### 2026-01-07 (Stage 4 Completion)
 - Created `docs/architecture/` directory structure
