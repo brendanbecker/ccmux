@@ -179,6 +179,61 @@ pub fn init_logging_with_config(config: LogConfig) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+
+    // ==================== LogOutput Tests ====================
+
+    #[test]
+    fn test_log_output_stderr() {
+        let output = LogOutput::Stderr;
+        assert_eq!(output, LogOutput::Stderr);
+    }
+
+    #[test]
+    fn test_log_output_file() {
+        let output = LogOutput::File;
+        assert_eq!(output, LogOutput::File);
+    }
+
+    #[test]
+    fn test_log_output_both() {
+        let output = LogOutput::Both;
+        assert_eq!(output, LogOutput::Both);
+    }
+
+    #[test]
+    fn test_log_output_equality() {
+        assert_eq!(LogOutput::Stderr, LogOutput::Stderr);
+        assert_eq!(LogOutput::File, LogOutput::File);
+        assert_eq!(LogOutput::Both, LogOutput::Both);
+
+        assert_ne!(LogOutput::Stderr, LogOutput::File);
+        assert_ne!(LogOutput::File, LogOutput::Both);
+        assert_ne!(LogOutput::Both, LogOutput::Stderr);
+    }
+
+    #[test]
+    fn test_log_output_clone() {
+        let output = LogOutput::File;
+        let cloned = output.clone();
+        assert_eq!(output, cloned);
+    }
+
+    #[test]
+    fn test_log_output_copy() {
+        let output = LogOutput::Both;
+        let copied = output; // Copy semantics
+        assert_eq!(output, copied);
+    }
+
+    #[test]
+    fn test_log_output_debug() {
+        assert_eq!(format!("{:?}", LogOutput::Stderr), "Stderr");
+        assert_eq!(format!("{:?}", LogOutput::File), "File");
+        assert_eq!(format!("{:?}", LogOutput::Both), "Both");
+    }
+
+    // ==================== LogConfig Default Tests ====================
 
     #[test]
     fn test_log_config_defaults() {
@@ -188,10 +243,69 @@ mod tests {
     }
 
     #[test]
+    fn test_log_config_default_span_events() {
+        let config = LogConfig::default();
+        assert!(!config.span_events);
+    }
+
+    #[test]
+    fn test_log_config_default_file_line() {
+        let config = LogConfig::default();
+        assert!(!config.file_line);
+    }
+
+    // ==================== LogConfig::client() Tests ====================
+
+    #[test]
     fn test_log_config_client() {
         let config = LogConfig::client();
         assert_eq!(config.output, LogOutput::Stderr);
     }
+
+    #[test]
+    fn test_log_config_client_default_filter() {
+        // Save original
+        let original = env::var("CCMUX_LOG").ok();
+        env::remove_var("CCMUX_LOG");
+
+        let config = LogConfig::client();
+        assert_eq!(config.filter, "warn");
+
+        // Restore
+        if let Some(val) = original {
+            env::set_var("CCMUX_LOG", val);
+        }
+    }
+
+    #[test]
+    fn test_log_config_client_with_env() {
+        // Save original
+        let original = env::var("CCMUX_LOG").ok();
+        env::set_var("CCMUX_LOG", "debug");
+
+        let config = LogConfig::client();
+        assert_eq!(config.filter, "debug");
+
+        // Restore
+        match original {
+            Some(val) => env::set_var("CCMUX_LOG", val),
+            None => env::remove_var("CCMUX_LOG"),
+        }
+    }
+
+    #[test]
+    fn test_log_config_client_no_span_events() {
+        let config = LogConfig::client();
+        assert!(!config.span_events);
+    }
+
+    #[test]
+    fn test_log_config_client_no_file_line() {
+        let config = LogConfig::client();
+        assert!(!config.file_line);
+    }
+
+    // ==================== LogConfig::server() Tests ====================
 
     #[test]
     fn test_log_config_server() {
@@ -199,4 +313,199 @@ mod tests {
         assert_eq!(config.output, LogOutput::File);
         assert!(config.span_events);
     }
+
+    #[test]
+    fn test_log_config_server_default_filter() {
+        // Save original
+        let original = env::var("CCMUX_LOG").ok();
+        env::remove_var("CCMUX_LOG");
+
+        let config = LogConfig::server();
+        assert_eq!(config.filter, "info");
+
+        // Restore
+        if let Some(val) = original {
+            env::set_var("CCMUX_LOG", val);
+        }
+    }
+
+    #[test]
+    fn test_log_config_server_with_env() {
+        // Save original
+        let original = env::var("CCMUX_LOG").ok();
+        env::set_var("CCMUX_LOG", "trace");
+
+        let config = LogConfig::server();
+        assert_eq!(config.filter, "trace");
+
+        // Restore
+        match original {
+            Some(val) => env::set_var("CCMUX_LOG", val),
+            None => env::remove_var("CCMUX_LOG"),
+        }
+    }
+
+    #[test]
+    fn test_log_config_server_span_events() {
+        let config = LogConfig::server();
+        assert!(config.span_events);
+    }
+
+    #[test]
+    fn test_log_config_server_file_line() {
+        let config = LogConfig::server();
+        assert!(config.file_line);
+    }
+
+    // ==================== LogConfig::development() Tests ====================
+
+    #[test]
+    fn test_log_config_development() {
+        let config = LogConfig::development();
+        assert_eq!(config.output, LogOutput::Stderr);
+        assert_eq!(config.filter, "debug");
+        assert!(config.span_events);
+        assert!(config.file_line);
+    }
+
+    #[test]
+    fn test_log_config_development_verbose() {
+        let config = LogConfig::development();
+        // Development should be verbose
+        assert!(config.span_events);
+        assert!(config.file_line);
+    }
+
+    // ==================== LogConfig Clone Tests ====================
+
+    #[test]
+    fn test_log_config_clone() {
+        let config = LogConfig {
+            output: LogOutput::Both,
+            filter: "ccmux=debug,tokio=warn".to_string(),
+            span_events: true,
+            file_line: true,
+        };
+
+        let cloned = config.clone();
+        assert_eq!(config.output, cloned.output);
+        assert_eq!(config.filter, cloned.filter);
+        assert_eq!(config.span_events, cloned.span_events);
+        assert_eq!(config.file_line, cloned.file_line);
+    }
+
+    // ==================== LogConfig Debug Tests ====================
+
+    #[test]
+    fn test_log_config_debug() {
+        let config = LogConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("LogConfig"));
+        assert!(debug.contains("Stderr"));
+        assert!(debug.contains("info"));
+    }
+
+    // ==================== LogConfig Custom Tests ====================
+
+    #[test]
+    fn test_log_config_custom_filter() {
+        let config = LogConfig {
+            filter: "ccmux=trace,hyper=warn".to_string(),
+            ..LogConfig::default()
+        };
+        assert_eq!(config.filter, "ccmux=trace,hyper=warn");
+    }
+
+    #[test]
+    fn test_log_config_custom_output() {
+        let config = LogConfig {
+            output: LogOutput::Both,
+            ..LogConfig::default()
+        };
+        assert_eq!(config.output, LogOutput::Both);
+    }
+
+    #[test]
+    fn test_log_config_all_options() {
+        let config = LogConfig {
+            output: LogOutput::File,
+            filter: "error".to_string(),
+            span_events: true,
+            file_line: false,
+        };
+
+        assert_eq!(config.output, LogOutput::File);
+        assert_eq!(config.filter, "error");
+        assert!(config.span_events);
+        assert!(!config.file_line);
+    }
+
+    // ==================== Config Comparison Tests ====================
+
+    #[test]
+    fn test_client_vs_server_config() {
+        let client = LogConfig::client();
+        let server = LogConfig::server();
+
+        // Client should use stderr, server should use file
+        assert_eq!(client.output, LogOutput::Stderr);
+        assert_eq!(server.output, LogOutput::File);
+
+        // Server should be more verbose with spans and file info
+        assert!(!client.span_events);
+        assert!(server.span_events);
+        assert!(!client.file_line);
+        assert!(server.file_line);
+    }
+
+    #[test]
+    fn test_development_vs_default() {
+        let dev = LogConfig::development();
+        let default = LogConfig::default();
+
+        // Both should use stderr
+        assert_eq!(dev.output, LogOutput::Stderr);
+        assert_eq!(default.output, LogOutput::Stderr);
+
+        // Development should be more verbose
+        assert_eq!(dev.filter, "debug");
+        assert_eq!(default.filter, "info");
+
+        // Development should have more detail
+        assert!(dev.span_events);
+        assert!(!default.span_events);
+        assert!(dev.file_line);
+        assert!(!default.file_line);
+    }
+
+    // ==================== Filter String Tests ====================
+
+    #[test]
+    fn test_log_config_various_filters() {
+        let filters = [
+            "info",
+            "debug",
+            "warn",
+            "error",
+            "trace",
+            "ccmux=debug",
+            "ccmux=trace,tokio=warn",
+            "ccmux::server=debug,ccmux::client=info",
+        ];
+
+        for filter_str in filters {
+            let config = LogConfig {
+                filter: filter_str.to_string(),
+                ..LogConfig::default()
+            };
+            assert_eq!(config.filter, filter_str);
+        }
+    }
+
+    // Note: We cannot easily test init_logging() in unit tests because:
+    // 1. The tracing subscriber can only be initialized once per process
+    // 2. Tests run in parallel in the same process
+    // 3. Testing would require mocking file system operations
+    //
+    // Integration tests would be more appropriate for testing init_logging()
 }
