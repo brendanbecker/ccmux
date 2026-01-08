@@ -163,4 +163,269 @@ mod tests {
         let found = manager.find_pane(pane_id);
         assert!(found.is_some());
     }
+
+    #[test]
+    fn test_manager_default() {
+        let manager = SessionManager::default();
+        assert_eq!(manager.session_count(), 0);
+    }
+
+    #[test]
+    fn test_manager_get_session() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        let retrieved = manager.get_session(session_id);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().name(), "work");
+    }
+
+    #[test]
+    fn test_manager_get_session_nonexistent() {
+        let manager = SessionManager::new();
+
+        let nonexistent_id = Uuid::new_v4();
+        assert!(manager.get_session(nonexistent_id).is_none());
+    }
+
+    #[test]
+    fn test_manager_get_session_mut() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        let session_mut = manager.get_session_mut(session_id).unwrap();
+        session_mut.set_name("renamed");
+
+        let session = manager.get_session(session_id).unwrap();
+        assert_eq!(session.name(), "renamed");
+    }
+
+    #[test]
+    fn test_manager_get_session_by_name_nonexistent() {
+        let manager = SessionManager::new();
+
+        assert!(manager.get_session_by_name("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_manager_remove_session() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        assert_eq!(manager.session_count(), 1);
+
+        let removed = manager.remove_session(session_id);
+        assert!(removed.is_some());
+        assert_eq!(manager.session_count(), 0);
+        assert!(manager.get_session_by_name("work").is_none());
+    }
+
+    #[test]
+    fn test_manager_remove_session_nonexistent() {
+        let mut manager = SessionManager::new();
+
+        let nonexistent_id = Uuid::new_v4();
+        let result = manager.remove_session(nonexistent_id);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_manager_list_sessions() {
+        let mut manager = SessionManager::new();
+
+        manager.create_session("work").unwrap();
+        manager.create_session("personal").unwrap();
+        manager.create_session("other").unwrap();
+
+        let sessions = manager.list_sessions();
+        assert_eq!(sessions.len(), 3);
+    }
+
+    #[test]
+    fn test_manager_list_sessions_empty() {
+        let manager = SessionManager::new();
+
+        let sessions = manager.list_sessions();
+        assert!(sessions.is_empty());
+    }
+
+    #[test]
+    fn test_manager_find_pane_nonexistent() {
+        let manager = SessionManager::new();
+
+        let nonexistent_id = Uuid::new_v4();
+        assert!(manager.find_pane(nonexistent_id).is_none());
+    }
+
+    #[test]
+    fn test_manager_find_pane_mut() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        let session = manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        // Get mutable pane and modify
+        let pane_mut = manager.find_pane_mut(pane_id).unwrap();
+        pane_mut.resize(100, 50);
+
+        // Verify modification
+        let (_, _, pane) = manager.find_pane(pane_id).unwrap();
+        assert_eq!(pane.dimensions(), (100, 50));
+    }
+
+    #[test]
+    fn test_manager_find_pane_mut_nonexistent() {
+        let mut manager = SessionManager::new();
+
+        let nonexistent_id = Uuid::new_v4();
+        assert!(manager.find_pane_mut(nonexistent_id).is_none());
+    }
+
+    #[test]
+    fn test_manager_find_window() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        let session = manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(Some("main".into()));
+        let window_id = window.id();
+
+        let found = manager.find_window(window_id);
+        assert!(found.is_some());
+        let (session, window) = found.unwrap();
+        assert_eq!(session.name(), "work");
+        assert_eq!(window.name(), "main");
+    }
+
+    #[test]
+    fn test_manager_find_window_nonexistent() {
+        let manager = SessionManager::new();
+
+        let nonexistent_id = Uuid::new_v4();
+        assert!(manager.find_window(nonexistent_id).is_none());
+    }
+
+    #[test]
+    fn test_manager_debug_format() {
+        let manager = SessionManager::new();
+
+        let debug_str = format!("{:?}", manager);
+        assert!(debug_str.contains("SessionManager"));
+    }
+
+    #[test]
+    fn test_manager_multiple_sessions() {
+        let mut manager = SessionManager::new();
+
+        for i in 0..10 {
+            manager.create_session(format!("session-{}", i)).unwrap();
+        }
+
+        assert_eq!(manager.session_count(), 10);
+    }
+
+    #[test]
+    fn test_manager_find_pane_in_multiple_sessions() {
+        let mut manager = SessionManager::new();
+
+        // Create multiple sessions with windows and panes
+        let session1 = manager.create_session("session1").unwrap();
+        let session1_id = session1.id();
+
+        let session2 = manager.create_session("session2").unwrap();
+        let session2_id = session2.id();
+
+        // Add panes to session1
+        let session = manager.get_session_mut(session1_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        window.create_pane();
+
+        // Add panes to session2
+        let session = manager.get_session_mut(session2_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        // Find pane in session2
+        let found = manager.find_pane(pane_id);
+        assert!(found.is_some());
+        let (session, _, _) = found.unwrap();
+        assert_eq!(session.name(), "session2");
+    }
+
+    #[test]
+    fn test_manager_session_name_uniqueness() {
+        let mut manager = SessionManager::new();
+
+        manager.create_session("unique").unwrap();
+
+        // Try to create with same name
+        let result = manager.create_session("unique");
+        assert!(result.is_err());
+
+        // Different name should work
+        let result = manager.create_session("different");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_manager_remove_and_recreate_session() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("recyclable").unwrap();
+        let session_id = session.id();
+
+        manager.remove_session(session_id);
+        assert_eq!(manager.session_count(), 0);
+
+        // Should be able to recreate with same name
+        let result = manager.create_session("recyclable");
+        assert!(result.is_ok());
+        assert_eq!(manager.session_count(), 1);
+    }
+
+    #[test]
+    fn test_manager_find_window_in_correct_session() {
+        let mut manager = SessionManager::new();
+
+        let session1 = manager.create_session("session1").unwrap();
+        let session1_id = session1.id();
+
+        let session2 = manager.create_session("session2").unwrap();
+        let session2_id = session2.id();
+
+        // Create window in session2
+        let session = manager.get_session_mut(session2_id).unwrap();
+        let window = session.create_window(Some("target".into()));
+        let window_id = window.id();
+
+        // Create window in session1
+        let session = manager.get_session_mut(session1_id).unwrap();
+        session.create_window(Some("other".into()));
+
+        // Find should return session2
+        let (session, window) = manager.find_window(window_id).unwrap();
+        assert_eq!(session.name(), "session2");
+        assert_eq!(window.name(), "target");
+    }
 }

@@ -211,4 +211,277 @@ mod tests {
         assert_eq!(window.pane_count(), 1);
         assert_eq!(window.active_pane_id(), Some(pane2_id));
     }
+
+    #[test]
+    fn test_window_id_is_unique() {
+        let session_id = Uuid::new_v4();
+        let window1 = Window::new(session_id, 0, "main");
+        let window2 = Window::new(session_id, 1, "other");
+
+        assert_ne!(window1.id(), window2.id());
+    }
+
+    #[test]
+    fn test_window_set_name() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        assert_eq!(window.name(), "main");
+        window.set_name("new-name");
+        assert_eq!(window.name(), "new-name");
+    }
+
+    #[test]
+    fn test_window_set_index() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        assert_eq!(window.index(), 0);
+        window.set_index(5);
+        assert_eq!(window.index(), 5);
+    }
+
+    #[test]
+    fn test_window_set_active_pane_success() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane1 = window.create_pane();
+        let pane1_id = pane1.id();
+        let pane2 = window.create_pane();
+        let pane2_id = pane2.id();
+
+        assert_eq!(window.active_pane_id(), Some(pane1_id));
+
+        let result = window.set_active_pane(pane2_id);
+        assert!(result);
+        assert_eq!(window.active_pane_id(), Some(pane2_id));
+    }
+
+    #[test]
+    fn test_window_set_active_pane_nonexistent() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let _ = window.create_pane();
+        let nonexistent_id = Uuid::new_v4();
+
+        let result = window.set_active_pane(nonexistent_id);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_window_get_pane() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        let retrieved = window.get_pane(pane_id);
+        assert!(retrieved.is_some());
+        assert_eq!(retrieved.unwrap().id(), pane_id);
+    }
+
+    #[test]
+    fn test_window_get_pane_nonexistent() {
+        let session_id = Uuid::new_v4();
+        let window = Window::new(session_id, 0, "main");
+
+        let nonexistent_id = Uuid::new_v4();
+        assert!(window.get_pane(nonexistent_id).is_none());
+    }
+
+    #[test]
+    fn test_window_get_pane_mut() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        let pane_mut = window.get_pane_mut(pane_id).unwrap();
+        pane_mut.resize(100, 50);
+
+        let pane = window.get_pane(pane_id).unwrap();
+        assert_eq!(pane.dimensions(), (100, 50));
+    }
+
+    #[test]
+    fn test_window_panes_iterator() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        window.create_pane();
+        window.create_pane();
+        window.create_pane();
+
+        let pane_count = window.panes().count();
+        assert_eq!(pane_count, 3);
+    }
+
+    #[test]
+    fn test_window_panes_iterator_order() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane1_id = window.create_pane().id();
+        let pane2_id = window.create_pane().id();
+        let pane3_id = window.create_pane().id();
+
+        let ids: Vec<_> = window.panes().map(|p| p.id()).collect();
+        assert_eq!(ids, vec![pane1_id, pane2_id, pane3_id]);
+    }
+
+    #[test]
+    fn test_window_pane_ids() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane1_id = window.create_pane().id();
+        let pane2_id = window.create_pane().id();
+
+        let ids = window.pane_ids();
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids[0], pane1_id);
+        assert_eq!(ids[1], pane2_id);
+    }
+
+    #[test]
+    fn test_window_is_empty() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        assert!(window.is_empty());
+
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+        assert!(!window.is_empty());
+
+        window.remove_pane(pane_id);
+        assert!(window.is_empty());
+    }
+
+    #[test]
+    fn test_window_to_info() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 3, "test-window");
+
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        let info = window.to_info();
+
+        assert_eq!(info.id, window.id());
+        assert_eq!(info.session_id, session_id);
+        assert_eq!(info.name, "test-window");
+        assert_eq!(info.index, 3);
+        assert_eq!(info.pane_count, 1);
+        assert_eq!(info.active_pane_id, Some(pane_id));
+    }
+
+    #[test]
+    fn test_window_to_info_empty() {
+        let session_id = Uuid::new_v4();
+        let window = Window::new(session_id, 0, "empty");
+
+        let info = window.to_info();
+
+        assert_eq!(info.pane_count, 0);
+        assert_eq!(info.active_pane_id, None);
+    }
+
+    #[test]
+    fn test_window_remove_pane_nonexistent() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let nonexistent_id = Uuid::new_v4();
+        let result = window.remove_pane(nonexistent_id);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_window_remove_pane_reindexes() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane1_id = window.create_pane().id();
+        let pane2_id = window.create_pane().id();
+        let pane3_id = window.create_pane().id();
+
+        // Remove middle pane
+        window.remove_pane(pane2_id);
+
+        // Check indices were updated
+        let pane1 = window.get_pane(pane1_id).unwrap();
+        let pane3 = window.get_pane(pane3_id).unwrap();
+
+        assert_eq!(pane1.index(), 0);
+        assert_eq!(pane3.index(), 1);
+    }
+
+    #[test]
+    fn test_window_remove_active_pane_updates_active() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane1_id = window.create_pane().id();
+        let pane2_id = window.create_pane().id();
+
+        // Active should be first pane
+        assert_eq!(window.active_pane_id(), Some(pane1_id));
+
+        // Remove active pane
+        window.remove_pane(pane1_id);
+
+        // Active should update to next available
+        assert_eq!(window.active_pane_id(), Some(pane2_id));
+    }
+
+    #[test]
+    fn test_window_remove_last_pane() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane_id = window.create_pane().id();
+        window.remove_pane(pane_id);
+
+        assert!(window.is_empty());
+        assert_eq!(window.active_pane_id(), None);
+    }
+
+    #[test]
+    fn test_window_debug_format() {
+        let session_id = Uuid::new_v4();
+        let window = Window::new(session_id, 0, "main");
+
+        let debug_str = format!("{:?}", window);
+        assert!(debug_str.contains("Window"));
+        assert!(debug_str.contains("main"));
+    }
+
+    #[test]
+    fn test_window_multiple_panes_active_first() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane1_id = window.create_pane().id();
+        let _ = window.create_pane();
+        let _ = window.create_pane();
+
+        // First created pane should be active
+        assert_eq!(window.active_pane_id(), Some(pane1_id));
+    }
+
+    #[test]
+    fn test_window_name_with_special_characters() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "test window!");
+
+        assert_eq!(window.name(), "test window!");
+
+        window.set_name("new-name_123");
+        assert_eq!(window.name(), "new-name_123");
+    }
 }

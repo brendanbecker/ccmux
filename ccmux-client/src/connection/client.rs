@@ -311,4 +311,54 @@ mod tests {
         let copied = state;
         assert_eq!(state, copied);
     }
+
+    #[tokio::test]
+    async fn test_try_recv_empty() {
+        let mut conn = Connection::new();
+        // Channel should be empty
+        assert!(conn.try_recv().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_sender_returns_message_sender() {
+        let conn = Connection::new();
+        let _sender = conn.sender();
+        // Just verify it compiles and returns a MessageSender
+    }
+
+    #[tokio::test]
+    async fn test_with_socket_path_sets_path() {
+        let path = PathBuf::from("/custom/socket.sock");
+        let conn = Connection::with_socket_path(path.clone());
+        assert_eq!(conn.socket_path, path);
+    }
+
+    #[tokio::test]
+    async fn test_disconnect_when_not_connected() {
+        let mut conn = Connection::new();
+        // Should not panic
+        conn.disconnect().await;
+        assert_eq!(conn.state(), ConnectionState::Disconnected);
+    }
+
+    #[tokio::test]
+    async fn test_state_transitions_on_failed_connect() {
+        let mut conn = Connection::with_socket_path("/nonexistent/socket.sock".into());
+        assert_eq!(conn.state(), ConnectionState::Disconnected);
+
+        let _ = conn.connect().await;
+        // Should return to Disconnected on failure
+        assert_eq!(conn.state(), ConnectionState::Disconnected);
+    }
+
+    #[test]
+    fn test_connection_state_equality() {
+        assert_eq!(ConnectionState::Disconnected, ConnectionState::Disconnected);
+        assert_eq!(ConnectionState::Connecting, ConnectionState::Connecting);
+        assert_eq!(ConnectionState::Connected, ConnectionState::Connected);
+        assert_eq!(ConnectionState::Reconnecting, ConnectionState::Reconnecting);
+
+        assert_ne!(ConnectionState::Disconnected, ConnectionState::Connected);
+        assert_ne!(ConnectionState::Connecting, ConnectionState::Reconnecting);
+    }
 }

@@ -210,4 +210,268 @@ mod tests {
         session.detach_client();
         assert_eq!(session.attached_clients(), 1);
     }
+
+    #[test]
+    fn test_session_id_is_unique() {
+        let session1 = Session::new("work1");
+        let session2 = Session::new("work2");
+
+        assert_ne!(session1.id(), session2.id());
+    }
+
+    #[test]
+    fn test_session_set_name() {
+        let mut session = Session::new("work");
+
+        assert_eq!(session.name(), "work");
+        session.set_name("new-name");
+        assert_eq!(session.name(), "new-name");
+    }
+
+    #[test]
+    fn test_session_set_active_window_success() {
+        let mut session = Session::new("work");
+
+        let window1_id = session.create_window(Some("w1".into())).id();
+        let window2_id = session.create_window(Some("w2".into())).id();
+
+        assert_eq!(session.active_window_id(), Some(window1_id));
+
+        let result = session.set_active_window(window2_id);
+        assert!(result);
+        assert_eq!(session.active_window_id(), Some(window2_id));
+    }
+
+    #[test]
+    fn test_session_set_active_window_nonexistent() {
+        let mut session = Session::new("work");
+        session.create_window(None);
+
+        let nonexistent_id = Uuid::new_v4();
+        let result = session.set_active_window(nonexistent_id);
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_session_get_window() {
+        let mut session = Session::new("work");
+        let window_id = session.create_window(Some("main".into())).id();
+
+        let window = session.get_window(window_id);
+        assert!(window.is_some());
+        assert_eq!(window.unwrap().name(), "main");
+    }
+
+    #[test]
+    fn test_session_get_window_nonexistent() {
+        let session = Session::new("work");
+
+        let nonexistent_id = Uuid::new_v4();
+        assert!(session.get_window(nonexistent_id).is_none());
+    }
+
+    #[test]
+    fn test_session_get_window_mut() {
+        let mut session = Session::new("work");
+        let window_id = session.create_window(Some("main".into())).id();
+
+        let window = session.get_window_mut(window_id).unwrap();
+        window.set_name("renamed");
+
+        let window = session.get_window(window_id).unwrap();
+        assert_eq!(window.name(), "renamed");
+    }
+
+    #[test]
+    fn test_session_remove_window() {
+        let mut session = Session::new("work");
+        let window1_id = session.create_window(Some("w1".into())).id();
+        let window2_id = session.create_window(Some("w2".into())).id();
+
+        assert_eq!(session.active_window_id(), Some(window1_id));
+
+        let removed = session.remove_window(window1_id);
+        assert!(removed.is_some());
+        assert_eq!(session.window_count(), 1);
+        assert_eq!(session.active_window_id(), Some(window2_id));
+    }
+
+    #[test]
+    fn test_session_remove_window_nonexistent() {
+        let mut session = Session::new("work");
+        session.create_window(None);
+
+        let nonexistent_id = Uuid::new_v4();
+        let result = session.remove_window(nonexistent_id);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_session_remove_window_reindexes() {
+        let mut session = Session::new("work");
+        let window1_id = session.create_window(Some("w1".into())).id();
+        let window2_id = session.create_window(Some("w2".into())).id();
+        let window3_id = session.create_window(Some("w3".into())).id();
+
+        session.remove_window(window2_id);
+
+        let window1 = session.get_window(window1_id).unwrap();
+        let window3 = session.get_window(window3_id).unwrap();
+
+        assert_eq!(window1.index(), 0);
+        assert_eq!(window3.index(), 1);
+    }
+
+    #[test]
+    fn test_session_windows_iterator() {
+        let mut session = Session::new("work");
+        session.create_window(None);
+        session.create_window(None);
+        session.create_window(None);
+
+        let count = session.windows().count();
+        assert_eq!(count, 3);
+    }
+
+    #[test]
+    fn test_session_windows_iterator_order() {
+        let mut session = Session::new("work");
+        let w1_id = session.create_window(Some("w1".into())).id();
+        let w2_id = session.create_window(Some("w2".into())).id();
+        let w3_id = session.create_window(Some("w3".into())).id();
+
+        let ids: Vec<_> = session.windows().map(|w| w.id()).collect();
+        assert_eq!(ids, vec![w1_id, w2_id, w3_id]);
+    }
+
+    #[test]
+    fn test_session_window_ids() {
+        let mut session = Session::new("work");
+        let w1_id = session.create_window(None).id();
+        let w2_id = session.create_window(None).id();
+
+        let ids = session.window_ids();
+        assert_eq!(ids.len(), 2);
+        assert_eq!(ids[0], w1_id);
+        assert_eq!(ids[1], w2_id);
+    }
+
+    #[test]
+    fn test_session_is_empty() {
+        let mut session = Session::new("work");
+        assert!(session.is_empty());
+
+        let window_id = session.create_window(None).id();
+        assert!(!session.is_empty());
+
+        session.remove_window(window_id);
+        assert!(session.is_empty());
+    }
+
+    #[test]
+    fn test_session_created_at_unix() {
+        let session = Session::new("work");
+        let timestamp = session.created_at_unix();
+
+        // Should be a reasonable timestamp (after year 2020)
+        assert!(timestamp > 1577836800); // Jan 1, 2020
+    }
+
+    #[test]
+    fn test_session_to_info() {
+        let mut session = Session::new("test-session");
+        session.attach_client();
+        session.create_window(None);
+        session.create_window(None);
+
+        let info = session.to_info();
+
+        assert_eq!(info.id, session.id());
+        assert_eq!(info.name, "test-session");
+        assert_eq!(info.window_count, 2);
+        assert_eq!(info.attached_clients, 1);
+        assert!(info.created_at > 0);
+    }
+
+    #[test]
+    fn test_session_to_info_empty() {
+        let session = Session::new("empty");
+
+        let info = session.to_info();
+
+        assert_eq!(info.window_count, 0);
+        assert_eq!(info.attached_clients, 0);
+    }
+
+    #[test]
+    fn test_session_detach_client_saturates() {
+        let mut session = Session::new("work");
+
+        // Detach when no clients should stay at 0
+        session.detach_client();
+        assert_eq!(session.attached_clients(), 0);
+
+        session.attach_client();
+        session.detach_client();
+        assert_eq!(session.attached_clients(), 0);
+
+        session.detach_client();
+        assert_eq!(session.attached_clients(), 0);
+    }
+
+    #[test]
+    fn test_session_create_window_auto_name() {
+        let mut session = Session::new("work");
+
+        let window1 = session.create_window(None);
+        assert_eq!(window1.name(), "0");
+
+        let window2 = session.create_window(None);
+        assert_eq!(window2.name(), "1");
+    }
+
+    #[test]
+    fn test_session_debug_format() {
+        let session = Session::new("debug-test");
+
+        let debug_str = format!("{:?}", session);
+        assert!(debug_str.contains("Session"));
+        assert!(debug_str.contains("debug-test"));
+    }
+
+    #[test]
+    fn test_session_remove_last_window() {
+        let mut session = Session::new("work");
+        let window_id = session.create_window(None).id();
+
+        session.remove_window(window_id);
+
+        assert!(session.is_empty());
+        assert_eq!(session.active_window_id(), None);
+    }
+
+    #[test]
+    fn test_session_multiple_attach_detach() {
+        let mut session = Session::new("work");
+
+        for _ in 0..10 {
+            session.attach_client();
+        }
+        assert_eq!(session.attached_clients(), 10);
+
+        for _ in 0..5 {
+            session.detach_client();
+        }
+        assert_eq!(session.attached_clients(), 5);
+    }
+
+    #[test]
+    fn test_session_name_with_special_characters() {
+        let mut session = Session::new("test session!");
+
+        assert_eq!(session.name(), "test session!");
+
+        session.set_name("new-name_123");
+        assert_eq!(session.name(), "new-name_123");
+    }
 }

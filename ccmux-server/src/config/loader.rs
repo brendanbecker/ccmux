@@ -113,4 +113,188 @@ mod tests {
         let result = ConfigLoader::parse("invalid { toml", Path::new("test.toml"));
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_load_and_validate_success() {
+        // Default config should be valid
+        let result = ConfigLoader::load_and_validate();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_valid_config() {
+        let config = AppConfig::default();
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_max_depth_zero() {
+        let mut config = AppConfig::default();
+        config.general.max_depth = 0;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_max_depth_too_high() {
+        let mut config = AppConfig::default();
+        config.general.max_depth = 11;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_max_depth_boundary_low() {
+        let mut config = AppConfig::default();
+        config.general.max_depth = 1;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_max_depth_boundary_high() {
+        let mut config = AppConfig::default();
+        config.general.max_depth = 10;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_render_interval_too_low() {
+        let mut config = AppConfig::default();
+        config.terminal.render_interval_ms = 7;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_render_interval_boundary() {
+        let mut config = AppConfig::default();
+        config.terminal.render_interval_ms = 8;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_checkpoint_interval_too_low() {
+        let mut config = AppConfig::default();
+        config.persistence.checkpoint_interval_secs = 4;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_checkpoint_interval_boundary() {
+        let mut config = AppConfig::default();
+        config.persistence.checkpoint_interval_secs = 5;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_load_from_path_file_not_found() {
+        let result = ConfigLoader::load_from_path(Path::new("/nonexistent/config.toml"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_empty_config() {
+        let config = ConfigLoader::parse("", Path::new("empty.toml")).unwrap();
+        // Should return defaults
+        assert_eq!(config.general.max_depth, 5);
+    }
+
+    #[test]
+    fn test_parse_partial_config() {
+        let content = r#"
+            [terminal]
+            scrollback_lines = 5000
+        "#;
+
+        let config = ConfigLoader::parse(content, Path::new("partial.toml")).unwrap();
+        assert_eq!(config.terminal.scrollback_lines, 5000);
+        // Other fields should have defaults
+        assert_eq!(config.general.max_depth, 5);
+    }
+
+    #[test]
+    fn test_load_full_config_file() {
+        let dir = tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+
+        std::fs::write(
+            &path,
+            r#"
+            [general]
+            max_depth = 3
+            prefix_key = "Ctrl-b"
+
+            [terminal]
+            scrollback_lines = 20000
+            render_interval_ms = 16
+
+            [persistence]
+            checkpoint_interval_secs = 60
+            "#,
+        )
+        .unwrap();
+
+        let config = ConfigLoader::load_from_path(&path).unwrap();
+        assert_eq!(config.general.max_depth, 3);
+        assert_eq!(config.general.prefix_key, "Ctrl-b");
+        assert_eq!(config.terminal.scrollback_lines, 20000);
+        assert_eq!(config.persistence.checkpoint_interval_secs, 60);
+    }
+
+    #[test]
+    fn test_validate_multiple_errors() {
+        // Test that validation stops at first error
+        let mut config = AppConfig::default();
+        config.general.max_depth = 0;
+        config.terminal.render_interval_ms = 1;
+
+        let result = ConfigLoader::validate(&config);
+        assert!(result.is_err());
+        // Error message should be about max_depth (checked first)
+        let err_str = format!("{}", result.unwrap_err());
+        assert!(err_str.contains("max_depth"));
+    }
+
+    #[test]
+    fn test_parse_with_unknown_fields() {
+        let content = r#"
+            [general]
+            max_depth = 5
+            unknown_field = "ignored"
+
+            [unknown_section]
+            foo = "bar"
+        "#;
+
+        // Unknown fields should be ignored (serde default behavior)
+        let result = ConfigLoader::parse(content, Path::new("test.toml"));
+        // This may or may not error depending on serde strict mode
+        // For our implementation with #[serde(default)], it should succeed
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_parse_invalid_type() {
+        let content = r#"
+            [general]
+            max_depth = "not a number"
+        "#;
+
+        let result = ConfigLoader::parse(content, Path::new("test.toml"));
+        assert!(result.is_err());
+    }
 }

@@ -143,6 +143,7 @@ impl Pane {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ccmux_protocol::ClaudeActivity;
 
     #[test]
     fn test_pane_creation() {
@@ -184,5 +185,174 @@ mod tests {
 
         assert_eq!(info.id, pane.id());
         assert_eq!(info.window_id, window_id);
+    }
+
+    #[test]
+    fn test_pane_id_is_unique() {
+        let window_id = Uuid::new_v4();
+        let pane1 = Pane::new(window_id, 0);
+        let pane2 = Pane::new(window_id, 1);
+
+        assert_ne!(pane1.id(), pane2.id());
+    }
+
+    #[test]
+    fn test_pane_set_index() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        assert_eq!(pane.index(), 0);
+        pane.set_index(5);
+        assert_eq!(pane.index(), 5);
+    }
+
+    #[test]
+    fn test_pane_state_getter_setter() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        assert!(matches!(pane.state(), PaneState::Normal));
+
+        pane.set_state(PaneState::Exited { code: Some(0) });
+        assert!(matches!(pane.state(), PaneState::Exited { code: Some(0) }));
+    }
+
+    #[test]
+    fn test_pane_title_getter_setter() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        assert!(pane.title().is_none());
+
+        pane.set_title(Some("my-title".to_string()));
+        assert_eq!(pane.title(), Some("my-title"));
+
+        pane.set_title(None);
+        assert!(pane.title().is_none());
+    }
+
+    #[test]
+    fn test_pane_cwd_getter_setter() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        assert!(pane.cwd().is_none());
+
+        pane.set_cwd(Some("/home/user".to_string()));
+        assert_eq!(pane.cwd(), Some("/home/user"));
+
+        pane.set_cwd(None);
+        assert!(pane.cwd().is_none());
+    }
+
+    #[test]
+    fn test_pane_claude_state_none_when_not_claude() {
+        let window_id = Uuid::new_v4();
+        let pane = Pane::new(window_id, 0);
+
+        assert!(pane.claude_state().is_none());
+    }
+
+    #[test]
+    fn test_pane_claude_state_with_activity() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        let state = ClaudeState {
+            session_id: Some("test-session".to_string()),
+            activity: ClaudeActivity::Thinking,
+            model: Some("claude-3-opus".to_string()),
+            tokens_used: Some(5000),
+        };
+
+        pane.set_claude_state(state.clone());
+        let claude_state = pane.claude_state().unwrap();
+        assert_eq!(claude_state.activity, ClaudeActivity::Thinking);
+        assert_eq!(claude_state.session_id, Some("test-session".to_string()));
+        assert_eq!(claude_state.tokens_used, Some(5000));
+    }
+
+    #[test]
+    fn test_pane_resize_to_zero() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.resize(0, 0);
+        assert_eq!(pane.dimensions(), (0, 0));
+    }
+
+    #[test]
+    fn test_pane_resize_large_dimensions() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.resize(u16::MAX, u16::MAX);
+        assert_eq!(pane.dimensions(), (u16::MAX, u16::MAX));
+    }
+
+    #[test]
+    fn test_pane_to_info_includes_all_fields() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 3);
+        pane.resize(100, 50);
+        pane.set_title(Some("test-title".to_string()));
+        pane.set_cwd(Some("/tmp".to_string()));
+        pane.set_state(PaneState::Exited { code: Some(1) });
+
+        let info = pane.to_info();
+
+        assert_eq!(info.id, pane.id());
+        assert_eq!(info.window_id, window_id);
+        assert_eq!(info.index, 3);
+        assert_eq!(info.cols, 100);
+        assert_eq!(info.rows, 50);
+        assert_eq!(info.title, Some("test-title".to_string()));
+        assert_eq!(info.cwd, Some("/tmp".to_string()));
+        assert!(matches!(info.state, PaneState::Exited { code: Some(1) }));
+    }
+
+    #[test]
+    fn test_pane_debug_format() {
+        let window_id = Uuid::new_v4();
+        let pane = Pane::new(window_id, 0);
+
+        let debug_str = format!("{:?}", pane);
+        assert!(debug_str.contains("Pane"));
+        assert!(debug_str.contains("cols: 80"));
+        assert!(debug_str.contains("rows: 24"));
+    }
+
+    #[test]
+    fn test_pane_state_transition_exited() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_state(PaneState::Exited { code: Some(0) });
+        assert!(matches!(pane.state(), PaneState::Exited { code: Some(0) }));
+        assert!(!pane.is_claude());
+    }
+
+    #[test]
+    fn test_pane_state_transition_exited_no_code() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_state(PaneState::Exited { code: None });
+        assert!(matches!(pane.state(), PaneState::Exited { code: None }));
+    }
+
+    #[test]
+    fn test_pane_multiple_resizes() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.resize(100, 50);
+        assert_eq!(pane.dimensions(), (100, 50));
+
+        pane.resize(200, 100);
+        assert_eq!(pane.dimensions(), (200, 100));
+
+        pane.resize(80, 24);
+        assert_eq!(pane.dimensions(), (80, 24));
     }
 }

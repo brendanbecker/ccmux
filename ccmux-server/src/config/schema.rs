@@ -249,4 +249,253 @@ mod tests {
         // Other fields should have defaults
         assert_eq!(config.terminal.render_interval_ms, 16);
     }
+
+    #[test]
+    fn test_general_config_defaults() {
+        let config = GeneralConfig::default();
+        assert_eq!(config.max_depth, 5);
+        assert_eq!(config.prefix_key, "Ctrl-a");
+        assert!(!config.default_shell.is_empty());
+    }
+
+    #[test]
+    fn test_appearance_config_defaults() {
+        let config = AppearanceConfig::default();
+        assert_eq!(config.theme, "default");
+        assert_eq!(config.status_position, StatusPosition::Bottom);
+        assert_eq!(config.border_style, BorderStyle::Rounded);
+        assert!(config.show_pane_titles);
+    }
+
+    #[test]
+    fn test_color_config_defaults() {
+        let config = ColorConfig::default();
+        assert_eq!(config.status_bg, "#282c34");
+        assert_eq!(config.claude_thinking, "#e5c07b");
+    }
+
+    #[test]
+    fn test_keybinding_config_defaults() {
+        let config = KeybindingConfig::default();
+        assert_eq!(config.split_horizontal, "prefix %");
+        assert_eq!(config.detach, "prefix d");
+    }
+
+    #[test]
+    fn test_terminal_config_defaults() {
+        let config = TerminalConfig::default();
+        assert_eq!(config.scrollback_lines, 10000);
+        assert_eq!(config.render_interval_ms, 16);
+        assert_eq!(config.parser_timeout_secs, 5);
+    }
+
+    #[test]
+    fn test_claude_config_defaults() {
+        let config = ClaudeConfig::default();
+        assert!(config.detection_enabled);
+        assert_eq!(config.detection_method, DetectionMethod::Pty);
+        assert!(config.show_status);
+        assert!(config.auto_resume);
+    }
+
+    #[test]
+    fn test_persistence_config_defaults() {
+        let config = PersistenceConfig::default();
+        assert_eq!(config.checkpoint_interval_secs, 30);
+        assert_eq!(config.max_wal_size_mb, 128);
+        assert_eq!(config.screen_snapshot_lines, 500);
+    }
+
+    #[test]
+    fn test_status_position_variants() {
+        assert_eq!(StatusPosition::default(), StatusPosition::Bottom);
+
+        // Test parsing from TOML config
+        let toml_str = "[appearance]\nstatus_position = \"top\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.appearance.status_position, StatusPosition::Top);
+
+        let toml_str = "[appearance]\nstatus_position = \"bottom\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.appearance.status_position, StatusPosition::Bottom);
+    }
+
+    #[test]
+    fn test_border_style_variants() {
+        assert_eq!(BorderStyle::default(), BorderStyle::Rounded);
+
+        let toml_str = "[appearance]\nborder_style = \"single\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.appearance.border_style, BorderStyle::Single);
+
+        let toml_str = "[appearance]\nborder_style = \"double\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.appearance.border_style, BorderStyle::Double);
+
+        let toml_str = "[appearance]\nborder_style = \"none\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.appearance.border_style, BorderStyle::None);
+
+        let toml_str = "[appearance]\nborder_style = \"rounded\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.appearance.border_style, BorderStyle::Rounded);
+    }
+
+    #[test]
+    fn test_detection_method_variants() {
+        assert_eq!(DetectionMethod::default(), DetectionMethod::Pty);
+
+        let toml_str = "[claude]\ndetection_method = \"pty\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.claude.detection_method, DetectionMethod::Pty);
+
+        let toml_str = "[claude]\ndetection_method = \"streamjson\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.claude.detection_method, DetectionMethod::StreamJson);
+
+        let toml_str = "[claude]\ndetection_method = \"visual\"";
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.claude.detection_method, DetectionMethod::Visual);
+    }
+
+    #[test]
+    fn test_app_config_clone() {
+        let config = AppConfig::default();
+        let cloned = config.clone();
+        assert_eq!(cloned.general.max_depth, config.general.max_depth);
+    }
+
+    #[test]
+    fn test_app_config_debug() {
+        let config = AppConfig::default();
+        let debug_str = format!("{:?}", config);
+        assert!(debug_str.contains("AppConfig"));
+    }
+
+    #[test]
+    fn test_full_config_parse() {
+        // Build the TOML string without using raw strings for hex colors
+        let toml_str = "[general]
+default_shell = \"/bin/zsh\"
+max_depth = 3
+prefix_key = \"Ctrl-b\"
+
+[appearance]
+theme = \"dark\"
+status_position = \"top\"
+border_style = \"double\"
+show_pane_titles = false
+
+[colors]
+status_bg = \"#000000\"
+status_fg = \"#ffffff\"
+active_border = \"#ff0000\"
+inactive_border = \"#333333\"
+claude_thinking = \"#ffff00\"
+claude_idle = \"#00ff00\"
+claude_error = \"#ff0000\"
+
+[keybindings]
+split_horizontal = \"prefix |\"
+split_vertical = \"prefix -\"
+focus_left = \"prefix Left\"
+focus_right = \"prefix Right\"
+focus_up = \"prefix Up\"
+focus_down = \"prefix Down\"
+new_session = \"prefix n\"
+detach = \"prefix d\"
+list_sessions = \"prefix w\"
+
+[terminal]
+scrollback_lines = 5000
+render_interval_ms = 8
+parser_timeout_secs = 10
+
+[claude]
+detection_enabled = false
+detection_method = \"visual\"
+show_status = false
+auto_resume = false
+
+[persistence]
+checkpoint_interval_secs = 60
+max_wal_size_mb = 256
+screen_snapshot_lines = 1000
+";
+
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+
+        // General
+        assert_eq!(config.general.default_shell, "/bin/zsh");
+        assert_eq!(config.general.max_depth, 3);
+        assert_eq!(config.general.prefix_key, "Ctrl-b");
+
+        // Appearance
+        assert_eq!(config.appearance.theme, "dark");
+        assert_eq!(config.appearance.status_position, StatusPosition::Top);
+        assert_eq!(config.appearance.border_style, BorderStyle::Double);
+        assert!(!config.appearance.show_pane_titles);
+
+        // Colors
+        assert_eq!(config.colors.status_bg, "#000000");
+
+        // Keybindings
+        assert_eq!(config.keybindings.split_horizontal, "prefix |");
+
+        // Terminal
+        assert_eq!(config.terminal.scrollback_lines, 5000);
+        assert_eq!(config.terminal.render_interval_ms, 8);
+
+        // Claude
+        assert!(!config.claude.detection_enabled);
+        assert_eq!(config.claude.detection_method, DetectionMethod::Visual);
+
+        // Persistence
+        assert_eq!(config.persistence.checkpoint_interval_secs, 60);
+    }
+
+    #[test]
+    fn test_status_position_clone_copy() {
+        let pos = StatusPosition::Top;
+        let cloned = pos.clone();
+        let copied = pos;
+        assert_eq!(pos, cloned);
+        assert_eq!(pos, copied);
+    }
+
+    #[test]
+    fn test_border_style_clone_copy() {
+        let style = BorderStyle::Double;
+        let cloned = style.clone();
+        let copied = style;
+        assert_eq!(style, cloned);
+        assert_eq!(style, copied);
+    }
+
+    #[test]
+    fn test_detection_method_clone_copy() {
+        let method = DetectionMethod::StreamJson;
+        let cloned = method.clone();
+        let copied = method;
+        assert_eq!(method, cloned);
+        assert_eq!(method, copied);
+    }
+
+    #[test]
+    fn test_config_sections_debug() {
+        assert!(format!("{:?}", GeneralConfig::default()).contains("GeneralConfig"));
+        assert!(format!("{:?}", AppearanceConfig::default()).contains("AppearanceConfig"));
+        assert!(format!("{:?}", ColorConfig::default()).contains("ColorConfig"));
+        assert!(format!("{:?}", KeybindingConfig::default()).contains("KeybindingConfig"));
+        assert!(format!("{:?}", TerminalConfig::default()).contains("TerminalConfig"));
+        assert!(format!("{:?}", ClaudeConfig::default()).contains("ClaudeConfig"));
+        assert!(format!("{:?}", PersistenceConfig::default()).contains("PersistenceConfig"));
+    }
+
+    #[test]
+    fn test_enum_debug() {
+        assert!(format!("{:?}", StatusPosition::Top).contains("Top"));
+        assert!(format!("{:?}", BorderStyle::Single).contains("Single"));
+        assert!(format!("{:?}", DetectionMethod::Pty).contains("Pty"));
+    }
 }
