@@ -1,9 +1,10 @@
 # WAVES.md - Parallel Feature Rollout Plan
 
 **Generated**: 2026-01-08
-**Total Features**: 20
-**Completed**: 6
-**Remaining**: 14
+**Updated**: 2026-01-09
+**Total Features**: 27
+**Completed**: 20 (Waves 0-3)
+**Remaining**: 7 (Wave 4 - Integration)
 
 This document defines feature waves for parallel development. Features within the same wave
 can be developed concurrently in isolated git worktrees. Each wave must complete before
@@ -14,207 +15,191 @@ the next wave can begin (dependencies are satisfied).
 ## Dependency Graph
 
 ```
-                    [Wave 0 - Foundation Layer (Completed)]
-                    ========================================
-    FEAT-007         FEAT-008         FEAT-013
-    Protocol         Utilities        PTY Mgmt
-       |                |                |
-       +------+    +----+          +-----+-----+
-       |      |    |               |           |
-       v      v    v               v           |
-    FEAT-011  FEAT-012  FEAT-017   FEAT-014    |
-    Client    Session   Config     Terminal    |
-    Connect   Mgmt      (done)     Parsing     |
-    (done)    (done)                  |        |
-       |         |                    |        |
-       |         |         +----------+--------+-----+
-       |         |         |          |        |     |
-       v         |         v          v        |     |
-    FEAT-009     |      FEAT-019   FEAT-015    |     |
-    Client UI    |      Sideband   Claude      |     |
-       |         |      Protocol   Detection   |     |
-       |         |                    |        |     |
-       v         |         +----------+--------+     |
-    FEAT-010     |         |          |              |
-    Client       |         v          v              |
-    Input        +----> FEAT-018   FEAT-020 <--------+
-                        MCP Server Session Isolation
-
-    [Standalone features - no dependencies, can start immediately]
-    FEAT-001 (Pane Content)    FEAT-002 (Scrollback)    FEAT-003 (Viewport)
-    FEAT-004 (Worktree)        FEAT-005 (Response)      FEAT-006 (Logging)
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    WAVES 0-3: COMPLETED (20 features)                         ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║  Wave 0: FEAT-007, 008, 011, 012, 013, 017 (Foundation)                       ║
+║  Wave 1: FEAT-001, 002, 003, 004, 005, 006, 009, 014, 016 (Core)              ║
+║  Wave 2: FEAT-010, 015, 019 (Dependent)                                       ║
+║  Wave 3: FEAT-018, 020 (Final Integration)                                    ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+                                    |
+                                    v
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                    WAVE 4: INTEGRATION (7 features)                           ║
+╠═══════════════════════════════════════════════════════════════════════════════╣
+║                                                                               ║
+║     FEAT-021 (Server Socket Listen Loop)                                      ║
+║         |                                                                     ║
+║         v                                                                     ║
+║     FEAT-027 (Client Connection Registry)                                     ║
+║         |                                                                     ║
+║         +------------------+------------------+                               ║
+║         |                  |                  |                               ║
+║         v                  v                  v                               ║
+║     FEAT-022           FEAT-024          FEAT-023                             ║
+║     (Message           (Session          (PTY Output                          ║
+║     Routing)           Select UI)        Broadcasting)                        ║
+║         |                                    |                                ║
+║         +------------------+-----------------+                                ║
+║                            |                                                  ║
+║                            v                                                  ║
+║                        FEAT-025                                               ║
+║                        (Pane Output                                           ║
+║                        Rendering)                                             ║
+║                            |                                                  ║
+║                            v                                                  ║
+║                        FEAT-026                                               ║
+║                        (Input Testing)                                        ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
 ```
 
 ---
 
-## Wave 0: Completed Foundation
+## Wave 0: Foundation ✅ COMPLETED
 
-These features are already implemented and provide the foundation for subsequent waves.
+| ID | Title | Component | Tests |
+|----|-------|-----------|-------|
+| FEAT-007 | Protocol Layer - IPC Message Types and Codec | ccmux-protocol | 86 |
+| FEAT-008 | Utilities - Error Types, Logging, Path Helpers | ccmux-utils | 108 |
+| FEAT-011 | Client Connection - Unix Socket Client | ccmux-client | 31 |
+| FEAT-012 | Session Management - Session/Window/Pane Hierarchy | ccmux-server | 88 |
+| FEAT-013 | PTY Management - Process Spawning and Lifecycle | ccmux-server | 17 |
+| FEAT-017 | Configuration - TOML Config with Hot Reload | ccmux-server | 38 |
 
-| ID | Title | Component | Effort | Notes |
-|----|-------|-----------|--------|-------|
-| FEAT-007 | Protocol Layer - IPC Message Types and Codec | ccmux-protocol | medium | Foundation for all IPC |
-| FEAT-008 | Utilities - Error Types, Logging, Path Helpers | ccmux-utils | small | Foundation utilities |
-| FEAT-011 | Client Connection - Unix Socket Client | ccmux-client | medium | Depends on FEAT-007 |
-| FEAT-012 | Session Management - Session/Window/Pane Hierarchy | ccmux-server | medium | Depends on FEAT-007 |
-| FEAT-013 | PTY Management - Process Spawning and Lifecycle | ccmux-server | medium | No dependencies |
-| FEAT-017 | Configuration - TOML Config with Hot Reload | ccmux-server | medium | Depends on FEAT-008 |
-
-**Status**: All 6 features completed. Wave 1 can begin immediately.
+**Status**: ✅ All 6 features completed (368 tests).
 
 ---
 
-## Wave 1: Core Implementation
+## Wave 1: Core Implementation ✅ COMPLETED
 
-All dependencies satisfied by Wave 0. These features can be developed **in parallel**.
+| ID | Title | Component | Tests |
+|----|-------|-----------|-------|
+| FEAT-001 | vt100 Parser Integration | session/pane | 23 |
+| FEAT-002 | Per-Session Scrollback Config | config | 47 |
+| FEAT-003 | Viewport Pinning | tui | 23 |
+| FEAT-004a | Worktree Detection | orchestration | 12 |
+| FEAT-004b | Session-Worktree Binding | orchestration | 8 |
+| FEAT-004c | Cross-Session Messaging | orchestration | 45 |
+| FEAT-005 | Response Channel | orchestration | 72 |
+| FEAT-006 | Per-Session Log Levels | logging | 40 |
+| FEAT-009 | Client UI | ccmux-client | 97 |
+| FEAT-016 | Persistence | ccmux-server | 85 |
 
-### Parallel Group 1A: Architecture Requirements (No Server Dependencies)
+**Status**: ✅ All 10 features completed (452 tests).
 
-These are standalone features that don't depend on any other new features.
-
-| ID | Title | Component | Priority | Effort | Dependencies | Parallel |
-|----|-------|-----------|----------|--------|--------------|----------|
-| FEAT-001 | Pane Content Abstraction (Terminal vs Canvas) | session/pane | P1 | large | none | Yes |
-| FEAT-002 | Per-Session-Type Scrollback Configuration | config | P1 | medium | none | Yes |
-| FEAT-003 | Viewport Pinning with New Content Indicator | tui | P2 | medium | none | Yes |
-| FEAT-004 | Worktree-Aware Orchestration | orchestration | P2 | xl | none | Yes |
-| FEAT-005 | Response Channel for Orchestrator-Worker | orchestration | P1 | medium | none | Yes |
-| FEAT-006 | Per-Session Log Levels and Storage | logging | P2 | medium | none | Yes |
-
-### Parallel Group 1B: Core Server & Client Features
-
-These depend on Wave 0 completions.
-
-| ID | Title | Component | Priority | Effort | Dependencies | Parallel |
-|----|-------|-----------|----------|--------|--------------|----------|
-| FEAT-009 | Client UI - Ratatui Terminal Interface | ccmux-client | P1 | large | FEAT-007, FEAT-011 | Yes |
-| FEAT-014 | Terminal Parsing - ANSI/VT100 State Machine | ccmux-server | P1 | medium | FEAT-013 | Yes |
-| FEAT-016 | Persistence - Checkpoint and WAL | ccmux-server | P2 | large | FEAT-012 | Yes |
-
-### Wave 1 Summary
-
-- **Total Features**: 9
-- **Estimated Effort**: 3 large + 5 medium + 1 xl = significant
-- **P1 Features**: 5 (FEAT-001, 002, 005, 009, 014)
-- **P2 Features**: 4 (FEAT-003, 004, 006, 016)
-- **Maximum Parallelism**: 9 (all can run concurrently)
-
-### Recommended Wave 1 Worktree Assignments
-
-For optimal parallelism with limited resources, prioritize P1 features:
-
-| Worktree | Feature | Rationale |
-|----------|---------|-----------|
-| worktree-1 | FEAT-009 (Client UI) | Critical path - blocks FEAT-010 |
-| worktree-2 | FEAT-014 (Terminal Parsing) | Critical path - blocks FEAT-015, 019, 020 |
-| worktree-3 | FEAT-001 (Pane Content) | P1, large effort, standalone |
-| worktree-4 | FEAT-002 (Scrollback) | P1, medium effort, standalone |
-| worktree-5 | FEAT-005 (Response Channel) | P1, medium effort, standalone |
-
-**Deferred to later in Wave 1** (if resources limited):
-- FEAT-003, FEAT-004, FEAT-006, FEAT-016 (all P2)
+> Note: FEAT-004 was decomposed into 004a/b/c. FEAT-014 merged into FEAT-001.
 
 ---
 
-## Wave 2: Dependent Features
+## Wave 2: Dependent Features ✅ COMPLETED
 
-Requires Wave 1 completion (specifically FEAT-009 and FEAT-014).
+| ID | Title | Component | Tests |
+|----|-------|-----------|-------|
+| FEAT-010 | Client Input - Keyboard and Mouse Handling | ccmux-client | 87 |
+| FEAT-015 | Claude Detection - State from PTY Output | ccmux-server | 45 |
+| FEAT-019 | Sideband Protocol - XML Command Parsing | ccmux-server | 92 |
 
-| ID | Title | Component | Priority | Effort | Dependencies | Parallel |
-|----|-------|-----------|----------|--------|--------------|----------|
-| FEAT-010 | Client Input - Keyboard and Mouse Handling | ccmux-client | P1 | medium | FEAT-009 | Yes |
-| FEAT-015 | Claude Detection - State from PTY Output | ccmux-server | P1 | large | FEAT-014 | Yes |
-| FEAT-019 | Sideband Protocol - XML Command Parsing | ccmux-server | P2 | medium | FEAT-014 | Yes |
-
-### Wave 2 Summary
-
-- **Total Features**: 3
-- **Estimated Effort**: 1 large + 2 medium
-- **P1 Features**: 2 (FEAT-010, FEAT-015)
-- **P2 Features**: 1 (FEAT-019)
-- **Maximum Parallelism**: 3 (all can run concurrently)
-- **Blocking Dependencies**:
-  - FEAT-010 blocked by: FEAT-009
-  - FEAT-015 blocked by: FEAT-014
-  - FEAT-019 blocked by: FEAT-014
-
-### Recommended Wave 2 Worktree Assignments
-
-| Worktree | Feature | Rationale |
-|----------|---------|-----------|
-| worktree-1 | FEAT-015 (Claude Detection) | Critical path - blocks FEAT-018, 020 |
-| worktree-2 | FEAT-010 (Client Input) | Completes client functionality |
-| worktree-3 | FEAT-019 (Sideband Protocol) | P2 but enables Claude integration |
+**Status**: ✅ All 3 features completed (224 tests).
 
 ---
 
-## Wave 3: Final Integration
+## Wave 3: Final Integration ✅ COMPLETED
 
-Requires Wave 2 completion (specifically FEAT-015).
+| ID | Title | Component | Tests |
+|----|-------|-----------|-------|
+| FEAT-018 | MCP Server - Model Context Protocol | ccmux-server | 32 |
+| FEAT-020 | Session Isolation - Per-Pane CLAUDE_CONFIG_DIR | ccmux-server | 17 |
 
-| ID | Title | Component | Priority | Effort | Dependencies | Parallel |
-|----|-------|-----------|----------|--------|--------------|----------|
-| FEAT-018 | MCP Server - Model Context Protocol | ccmux-server | P2 | large | FEAT-012, FEAT-015 | Yes |
-| FEAT-020 | Session Isolation - Per-Pane CLAUDE_CONFIG_DIR | ccmux-server | P1 | small | FEAT-013, FEAT-015 | Yes |
+**Status**: ✅ All 2 features completed (49 tests).
 
-### Wave 3 Summary
+---
 
-- **Total Features**: 2
-- **Estimated Effort**: 1 large + 1 small
-- **P1 Features**: 1 (FEAT-020)
-- **P2 Features**: 1 (FEAT-018)
-- **Maximum Parallelism**: 2 (both can run concurrently)
-- **Blocking Dependencies**:
-  - FEAT-018 blocked by: FEAT-012 (Wave 0), FEAT-015 (Wave 2)
-  - FEAT-020 blocked by: FEAT-013 (Wave 0), FEAT-015 (Wave 2)
+## Wave 4: Client-Server Integration 🚧 IN PROGRESS
 
-### Recommended Wave 3 Worktree Assignments
+All component features are complete (Waves 0-3). Wave 4 wires them together into a working application.
 
-| Worktree | Feature | Rationale |
-|----------|---------|-----------|
-| worktree-1 | FEAT-020 (Session Isolation) | P1, small effort, quick win |
-| worktree-2 | FEAT-018 (MCP Server) | P2, large effort, enables AI automation |
+### Critical Path
+
+```
+FEAT-021 → FEAT-027 → FEAT-022 → FEAT-023 → FEAT-025 → FEAT-026
+                    ↘ FEAT-024 (parallel)
+```
+
+### Feature List
+
+| ID | Title | Component | Priority | Effort | Dependencies |
+|----|-------|-----------|----------|--------|--------------|
+| FEAT-021 | Server Socket Listen Loop | ccmux-server | P0 | large (4-6h) | None |
+| FEAT-027 | Client Connection Registry | ccmux-server | P0 | small (1-2h) | FEAT-021 |
+| FEAT-022 | Client Message Routing | ccmux-server | P0 | large (6-8h) | FEAT-027 |
+| FEAT-023 | PTY Output Broadcasting | ccmux-server | P0 | medium (2-3h) | FEAT-027 |
+| FEAT-024 | Session Selection UI | ccmux-client | P1 | small (2h) | FEAT-022 |
+| FEAT-025 | Pane Output Rendering | ccmux-client | P0 | medium (3-4h) | FEAT-022, FEAT-023 |
+| FEAT-026 | Input Testing | ccmux-client | P1 | small (1-2h) | FEAT-025 |
+
+### Wave 4 Summary
+
+- **Total Features**: 7
+- **Estimated Effort**: 20-27 hours
+- **P0 Features**: 5 (FEAT-021, 022, 023, 025, 027)
+- **P1 Features**: 2 (FEAT-024, 026)
+- **Maximum Parallelism**: 3 (after FEAT-027: 022, 023, 024 can run in parallel)
+
+### Recommended Wave 4 Worktree Assignments
+
+| Phase | Worktree | Feature | Rationale |
+|-------|----------|---------|-----------|
+| 1 | wt-socket | FEAT-021 (Socket) | Unblocks everything |
+| 2 | wt-registry | FEAT-027 (Registry) | Small, unblocks routing |
+| 3a | wt-routing | FEAT-022 (Routing) | Core server logic |
+| 3b | wt-output | FEAT-023 (Output) | Can parallel with 022 |
+| 3c | wt-session-ui | FEAT-024 (Session UI) | Can parallel with 022/023 |
+| 4 | wt-render | FEAT-025 (Rendering) | Needs 022+023 |
+| 5 | wt-input-test | FEAT-026 (Testing) | Final verification |
+
+### What Wave 4 Enables
+
+After Wave 4 completion, ccmux will be a **fully functional terminal multiplexer**:
+- Start server daemon
+- Connect client
+- Create/attach sessions
+- See shell output in panes
+- Type commands
+- Multiple concurrent clients
 
 ---
 
 ## Critical Path Analysis
 
-The longest dependency chain determines minimum completion time:
+### Waves 0-3: ✅ COMPLETED
+
+All component features implemented with 1,093 tests passing.
+
+### Wave 4 Critical Path
 
 ```
-FEAT-013 (Wave 0, done)
-    |
-    v
-FEAT-014 (Wave 1)  -----> Total: ~medium effort
-    |
-    v
-FEAT-015 (Wave 2)  -----> Total: ~large effort
-    |
-    +---> FEAT-018 (Wave 3)  -----> Total: ~large effort
-    |
-    +---> FEAT-020 (Wave 3)  -----> Total: ~small effort
+FEAT-021 (4-6h) → FEAT-027 (1-2h) → FEAT-022 (6-8h) → FEAT-025 (3-4h) → FEAT-026 (1-2h)
+                                  ↘ FEAT-023 (2-3h) ↗
+                                  ↘ FEAT-024 (2h) [parallel]
 ```
 
-**Critical Path**: FEAT-013 -> FEAT-014 -> FEAT-015 -> FEAT-020
-
-**Estimated Timeline** (assuming 1 feature per developer):
-- Wave 1: 2-3 weeks (large effort for FEAT-009, FEAT-001)
-- Wave 2: 1-2 weeks (large effort for FEAT-015)
-- Wave 3: 1 week (small effort for FEAT-020, parallel with FEAT-018)
-
-**Total Estimated Duration**: 4-6 weeks with parallelization
+**Minimum Sequential Time**: ~18-24 hours (critical path)
+**With Parallelism**: ~15-20 hours (022/023/024 in parallel)
 
 ---
 
 ## Execution Summary
 
-| Wave | Features | Parallelism | P1 Count | P2 Count | Effort |
-|------|----------|-------------|----------|----------|--------|
-| 0 | 6 | N/A | 5 | 1 | Completed |
-| 1 | 9 | 9 | 5 | 4 | 3L + 5M + 1XL |
-| 2 | 3 | 3 | 2 | 1 | 1L + 2M |
-| 3 | 2 | 2 | 1 | 1 | 1L + 1S |
-| **Total** | **20** | - | **13** | **7** | - |
+| Wave | Features | Status | Tests | Effort |
+|------|----------|--------|-------|--------|
+| 0 | 6 | ✅ Done | 368 | Foundation |
+| 1 | 10 | ✅ Done | 452 | Core Implementation |
+| 2 | 3 | ✅ Done | 224 | Dependent Features |
+| 3 | 2 | ✅ Done | 49 | Final Integration |
+| 4 | 7 | 🚧 Pending | - | Client-Server Integration |
+| **Total** | **27** | **20 done** | **1,093** | **~20-27h remaining** |
 
 ---
 
@@ -227,43 +212,44 @@ For consumption by worktree orchestration (FEAT-004):
   "waves": {
     "0": {
       "status": "completed",
-      "features": ["FEAT-007", "FEAT-008", "FEAT-011", "FEAT-012", "FEAT-013", "FEAT-017"]
+      "features": ["FEAT-007", "FEAT-008", "FEAT-011", "FEAT-012", "FEAT-013", "FEAT-017"],
+      "tests": 368
     },
     "1": {
-      "status": "pending",
-      "features": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005", "FEAT-006", "FEAT-009", "FEAT-014", "FEAT-016"],
-      "parallel": true,
-      "blocking": {
-        "FEAT-009": ["FEAT-007", "FEAT-011"],
-        "FEAT-014": ["FEAT-013"],
-        "FEAT-016": ["FEAT-012"]
-      }
+      "status": "completed",
+      "features": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004a", "FEAT-004b", "FEAT-004c", "FEAT-005", "FEAT-006", "FEAT-009", "FEAT-016"],
+      "tests": 452
     },
     "2": {
-      "status": "blocked",
+      "status": "completed",
       "features": ["FEAT-010", "FEAT-015", "FEAT-019"],
-      "parallel": true,
-      "blocking": {
-        "FEAT-010": ["FEAT-009"],
-        "FEAT-015": ["FEAT-014"],
-        "FEAT-019": ["FEAT-014"]
-      }
+      "tests": 224
     },
     "3": {
-      "status": "blocked",
+      "status": "completed",
       "features": ["FEAT-018", "FEAT-020"],
+      "tests": 49
+    },
+    "4": {
+      "status": "pending",
+      "features": ["FEAT-021", "FEAT-022", "FEAT-023", "FEAT-024", "FEAT-025", "FEAT-026", "FEAT-027"],
       "parallel": true,
       "blocking": {
-        "FEAT-018": ["FEAT-012", "FEAT-015"],
-        "FEAT-020": ["FEAT-013", "FEAT-015"]
+        "FEAT-021": [],
+        "FEAT-027": ["FEAT-021"],
+        "FEAT-022": ["FEAT-027"],
+        "FEAT-023": ["FEAT-027"],
+        "FEAT-024": ["FEAT-022"],
+        "FEAT-025": ["FEAT-022", "FEAT-023"],
+        "FEAT-026": ["FEAT-025"]
       }
     }
   },
-  "critical_path": ["FEAT-013", "FEAT-014", "FEAT-015", "FEAT-020"],
-  "p1_priority_order": [
-    "FEAT-009", "FEAT-014", "FEAT-001", "FEAT-002", "FEAT-005",
-    "FEAT-010", "FEAT-015", "FEAT-020"
-  ]
+  "critical_path": ["FEAT-021", "FEAT-027", "FEAT-022", "FEAT-025", "FEAT-026"],
+  "p0_priority_order": [
+    "FEAT-021", "FEAT-027", "FEAT-022", "FEAT-023", "FEAT-025"
+  ],
+  "total_tests": 1093
 }
 ```
 
@@ -271,19 +257,19 @@ For consumption by worktree orchestration (FEAT-004):
 
 ## Notes for Orchestration System
 
-1. **Wave Gating**: Do not start Wave N+1 until all features in Wave N are merged and tests pass.
+1. **Waves 0-3 Complete**: All 20 component features are implemented and tested.
 
-2. **Merge Strategy**: Features within a wave should be merged in dependency order when possible
-   to allow late-wave features to start before all wave features complete.
+2. **Wave 4 Focus**: Integration features wire existing components together.
 
-3. **P1 Prioritization**: When resources are limited, prioritize P1 features within each wave.
+3. **P0 Prioritization**: Wave 4 has 5 P0 features that form the critical path for MVP.
 
-4. **Critical Path Focus**: FEAT-014 and FEAT-015 are on the critical path - prioritize these
-   to minimize total completion time.
+4. **Critical Path Focus**: FEAT-021 → FEAT-027 → FEAT-022 → FEAT-025 is the critical path.
 
-5. **Test Requirements**: Each feature merge should trigger:
+5. **Parallel Opportunities**: After FEAT-027, features 022/023/024 can run in parallel.
+
+6. **Test Requirements**: Each feature merge should trigger:
    - Unit tests for the feature
    - Integration tests with completed dependencies
-   - Retrospective analysis before next wave
+   - End-to-end smoke test (after FEAT-025)
 
-6. **Worktree Naming Convention**: `worktree-{wave}-{feature_id}` (e.g., `worktree-1-feat-009`)
+7. **Worktree Naming Convention**: `ccmux-wt-{name}` (e.g., `ccmux-wt-socket`)

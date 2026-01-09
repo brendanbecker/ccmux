@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-022",
+  "title": "Client Message Routing and Handlers",
+  "component": "ccmux-server",
+  "priority": "P0",
+  "status": "new",
+  "type": "new_feature",
+  "created_date": "2026-01-09",
+  "updated_date": "2026-01-09",
+  "assigned_to": null,
+  "tags": ["server", "message-handling", "routing", "async"],
+  "estimated_effort": "medium",
+  "dependencies": ["FEAT-021"],
+  "description": "Route incoming ClientMessage types to appropriate handlers and respond with ServerMessages. Implements the complete message handling layer that connects client requests to session, window, pane, and PTY operations.",
+  "business_value": "high",
+  "technical_complexity": "medium",
+  "user_impact": "Enables all client operations including session creation, pane management, input handling, and state synchronization"
+}

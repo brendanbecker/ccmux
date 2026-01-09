@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-026",
+  "title": "Input Handling Integration and Testing",
+  "component": "ccmux-client",
+  "priority": "P1",
+  "status": "new",
+  "type": "enhancement",
+  "created_date": "2026-01-09",
+  "updated_date": "2026-01-09",
+  "assigned_to": null,
+  "tags": ["client", "input", "testing", "integration"],
+  "estimated_effort": "small",
+  "dependencies": ["FEAT-022", "FEAT-023"],
+  "description": "Verify and test keyboard input forwarding from client to server PTY. Input handling code already exists (FEAT-010), including keyboard parsing in input/keys.rs and byte conversion in input_handler.rs. The main gap is integration testing to ensure end-to-end input flow works correctly.",
+  "business_value": "high",
+  "technical_complexity": "low",
+  "user_impact": "Ensures users can type in terminal panes and use all keyboard shortcuts reliably, which is fundamental to terminal multiplexer usability"
+}

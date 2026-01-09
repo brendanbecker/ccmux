@@ -1,25 +1,31 @@
 # Feature Tracking
 
-**Last Updated**: 2026-01-08
+**Last Updated**: 2026-01-09
 **Repository**: ccmux
 
 ## Summary Statistics
 
-- **Total Features**: 20
-- **By Priority**: P0: 0, P1: 13, P2: 7, P3: 0
+- **Total Features**: 27
+- **By Priority**: P0: 5, P1: 15, P2: 7, P3: 0
 - **By Status**:
-  - New: 14
+  - New: 21
   - In Progress: 0
   - Completed: 6
   - Deprecated: 0
 
 ## Features by Priority
 
-### P0 - Critical (0)
+### P0 - Critical (5)
 
-*No P0 features*
+| ID | Title | Component | Status | Link |
+|----|-------|-----------|--------|------|
+| FEAT-021 | Server Socket Listen Loop | ccmux-server | new | [Link](FEAT-021-server-socket-listen-loop/) |
+| FEAT-022 | Client Message Routing and Handlers | ccmux-server | new | [Link](FEAT-022-client-message-routing-and-handlers/) |
+| FEAT-023 | PTY Output Polling and Broadcasting | ccmux-server | new | [Link](FEAT-023-pty-output-polling-and-broadcasting/) |
+| FEAT-025 | Pane Output Rendering | ccmux-client | new | [Link](FEAT-025-pane-output-rendering/) |
+| FEAT-027 | Client Connection Registry | ccmux-server | new | [Link](FEAT-027-client-connection-registry/) |
 
-### P1 - High Priority (13)
+### P1 - High Priority (15)
 
 | ID | Title | Component | Status | Link |
 |----|-------|-----------|--------|------|
@@ -36,6 +42,8 @@
 | FEAT-014 | Terminal Parsing - ANSI/VT100 State Machine | ccmux-server | new | [Link](FEAT-014-terminal-parsing-ansi-vt100-state-machine/) |
 | FEAT-015 | Claude Detection - State Detection from PTY Output | ccmux-server | new | [Link](FEAT-015-claude-detection-state-detection-from-pty-output/) |
 | FEAT-020 | Session Isolation - Per-Pane CLAUDE_CONFIG_DIR | ccmux-server | new | [Link](FEAT-020-session-isolation-per-pane-claude-config-dir/) |
+| FEAT-024 | Session Selection UI | ccmux-client | new | [Link](FEAT-024-session-selection-ui/) |
+| FEAT-026 | Input Handling Integration and Testing | ccmux-client | new | [Link](FEAT-026-input-handling-integration-and-testing/) |
 
 ### P2 - Medium Priority (7)
 
@@ -55,6 +63,13 @@
 
 ## Recent Activity
 
+- 2026-01-09: Created FEAT-027 - Client Connection Registry (P0 Critical)
+- 2026-01-09: Created FEAT-024 - Session Selection UI
+- 2026-01-09: Created FEAT-025 - Pane Output Rendering (P0 Critical)
+- 2026-01-09: Created FEAT-022 - Client Message Routing and Handlers (P0 Critical)
+- 2026-01-09: Created FEAT-021 - Server Socket Listen Loop (P0 Critical)
+- 2026-01-09: Created FEAT-023 - PTY Output Polling and Broadcasting
+- 2026-01-09: Created FEAT-026 - Input Handling Integration and Testing
 - 2026-01-08: Created FEAT-018 - MCP Server - Model Context Protocol Integration
 - 2026-01-08: Created FEAT-016 - Persistence - Checkpoint and WAL for Crash Recovery
 - 2026-01-08: Created FEAT-015 - Claude Detection - State Detection from PTY Output
@@ -85,6 +100,8 @@ See [WAVES.md](/WAVES.md) for the complete parallel development plan with depend
 - **Wave 2 (Blocked)**: 3 features waiting on Wave 1 (Input, Claude Detection, Sideband)
 - **Wave 3 (Blocked)**: 2 features waiting on Wave 2 (MCP Server, Session Isolation)
 
+**Critical Path**: FEAT-021 (Server Socket Listen Loop), FEAT-027 (Client Connection Registry), FEAT-022 (Client Message Routing), FEAT-023 (PTY Output Polling), and FEAT-025 (Pane Output Rendering) are P0 and block client-server communication.
+
 ## Planned Feature Areas
 
 Based on the project vision, features will likely include:
@@ -94,8 +111,14 @@ Based on the project vision, features will likely include:
 - Pane layout and navigation
 - Scrollback and copy mode
 - **Keyboard input handling (FEAT-010)**
+- **Input handling integration and testing (FEAT-026)**
 - **Terminal parsing - ANSI/VT100 state machine (FEAT-014)**
 - **Pane content abstraction for Terminal vs Canvas (FEAT-001)**
+- **Server socket listen loop (FEAT-021)** - P0 Critical
+- **Client connection registry (FEAT-027)** - P0 Critical
+- **Client message routing and handlers (FEAT-022)** - P0 Critical
+- **PTY output polling and broadcasting (FEAT-023)** - P0 Critical
+- **Pane output rendering (FEAT-025)** - P0 Critical
 
 ### Claude Code Integration
 - State detection (thinking, waiting, complete)
@@ -113,6 +136,7 @@ Based on the project vision, features will likely include:
 - Session tree visualization
 - **Session/Window/Pane hierarchy (FEAT-012)** - Completed
 - **Checkpoint + WAL persistence for crash recovery (FEAT-016)**
+- **Session Selection UI (FEAT-024)**
 
 ### Orchestration
 - Child pane spawning on Claude request
@@ -133,9 +157,11 @@ Based on the project vision, features will likely include:
 ### Client UI
 - **Ratatui-based terminal interface (FEAT-009)**
 - **Keyboard and mouse event handling (FEAT-010)**
+- **Session Selection UI (FEAT-024)**
 - Pane rendering with tui-term
 - Status bar and borders
 - Claude state indicators
+- **Pane output rendering (FEAT-025)** - P0 Critical
 
 ### Utilities
 - **Error types, logging, and path helpers (FEAT-008)** - Completed

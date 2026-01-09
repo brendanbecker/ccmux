@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-027",
+  "title": "Client Connection Registry",
+  "component": "ccmux-server",
+  "priority": "P0",
+  "status": "new",
+  "type": "new_feature",
+  "created_date": "2026-01-09",
+  "updated_date": "2026-01-09",
+  "assigned_to": null,
+  "tags": ["server", "networking", "async", "session-management"],
+  "estimated_effort": "small",
+  "dependencies": ["FEAT-021"],
+  "description": "Implement a server-side registry that tracks connected clients and their session associations, enabling targeted message broadcasting. This is a critical dependency for FEAT-022 (Message Routing) and FEAT-023 (PTY Output Broadcasting).",
+  "business_value": "high",
+  "technical_complexity": "low",
+  "user_impact": "Enables targeted message delivery to clients, allowing PTY output to reach only relevant clients and supporting multiple clients viewing the same session"
+}
