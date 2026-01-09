@@ -1,6 +1,6 @@
 //! Connection client for ccmux server
 
-// Allow dead code as this module contains functionality for future use
+// Allow unused code that's part of the public API for future features
 #![allow(dead_code)]
 
 use std::path::PathBuf;

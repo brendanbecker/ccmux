@@ -6,8 +6,8 @@
 
 **ccmux** is a Claude Code-aware terminal multiplexer in Rust. Development follows the [Context Engineering Methodology](./CONTEXT_ENGINEERING_METHODOLOGY.md).
 
-**Current Stage**: Stage 6 (Implementation) - Wave 1 Ready
-**Completed**: Wave 0 (6 of 20 features implemented)
+**Current Stage**: Stage 6 (Implementation) - Wave 1 In Progress
+**Completed**: Wave 0 + 4 Wave 1 features (10 of 20 features implemented)
 
 ## Implementation Progress
 
@@ -16,7 +16,7 @@
 | Wave | Features | Status |
 |------|----------|--------|
 | 0 | Protocol, Utilities, Connection, Session, PTY, Config | ✅ Complete |
-| 1 | Pane Content, Scrollback, Viewport, Worktree, Response Channel, Logging, Client UI, Terminal Parsing, Persistence | ⏳ Ready |
+| 1 | Pane Content, Scrollback, Viewport, Worktree, Response Channel, Logging, Client UI, Terminal Parsing, Persistence | ⏳ In Progress (4/9) |
 | 2 | Client Input, Claude Detection, Sideband Protocol | ⏸️ Blocked by Wave 1 |
 | 3 | MCP Server, Session Isolation | ⏸️ Blocked by Wave 2 |
 
@@ -25,11 +25,11 @@
 | ID | Feature | Component | Status | Tests | Priority |
 |----|---------|-----------|--------|-------|----------|
 | FEAT-001 | Pane Content Abstraction | session/pane | ⏳ Wave 1 | - | P1 |
-| FEAT-002 | Per-Session Scrollback Config | config | ⏳ Wave 1 | - | P1 |
-| FEAT-003 | Viewport Pinning | tui | ⏳ Wave 1 | - | P2 |
+| FEAT-002 | Per-Session Scrollback Config | config | ✅ Done | 47 | P1 |
+| FEAT-003 | Viewport Pinning | tui | ✅ Done | 23 | P2 |
 | FEAT-004 | Worktree-Aware Orchestration | orchestration | ⏳ Wave 1 | - | P2 |
-| FEAT-005 | Response Channel | orchestration | ⏳ Wave 1 | - | P1 |
-| FEAT-006 | Per-Session Log Levels | logging | ⏳ Wave 1 | - | P2 |
+| FEAT-005 | Response Channel | orchestration | ✅ Done | 72 | P1 |
+| FEAT-006 | Per-Session Log Levels | logging | ✅ Done | 40 | P2 |
 | FEAT-007 | Protocol Layer | ccmux-protocol | ✅ Done | 86 | P1 |
 | FEAT-008 | Utilities | ccmux-utils | ✅ Done | 108 | P1 |
 | FEAT-009 | Client UI | ccmux-client | ⏳ Wave 1 | - | P1 |
@@ -45,7 +45,7 @@
 | FEAT-019 | Sideband Protocol | ccmux-server | ⏸️ Wave 2 | - | P2 |
 | FEAT-020 | Session Isolation | ccmux-server | ⏸️ Wave 3 | - | P1 |
 
-**Total Tests**: 384 passing
+**Total Tests**: 566 passing
 
 ## Orchestration Pattern
 
@@ -58,28 +58,33 @@ This project uses **git worktrees** for parallel feature development:
 5. Run test-runner agent to validate and add tests
 6. Repeat for next wave
 
-## Wave 1 Features (Next)
+## Wave 1 Features (In Progress)
 
-All 9 features can be developed **in parallel**. Prioritize P1 features on the critical path.
+4 of 9 features complete. Remaining 5 can be developed **in parallel**.
 
-### Critical Path (P1)
+### Critical Path (P1) - Remaining
 
 | ID | Feature | Component | Dependencies | Effort |
 |----|---------|-----------|--------------|--------|
 | FEAT-009 | Client UI | ccmux-client | FEAT-007, FEAT-011 | large |
 | FEAT-014 | Terminal Parsing | ccmux-server | FEAT-013 | medium |
 | FEAT-001 | Pane Content Abstraction | session/pane | none | large |
-| FEAT-002 | Per-Session Scrollback | config | none | medium |
-| FEAT-005 | Response Channel | orchestration | none | medium |
 
-### Additional (P2)
+### Additional (P2) - Remaining
 
 | ID | Feature | Component | Dependencies | Effort |
 |----|---------|-----------|--------------|--------|
 | FEAT-016 | Persistence | ccmux-server | FEAT-012 | large |
-| FEAT-003 | Viewport Pinning | tui | none | medium |
 | FEAT-004 | Worktree Orchestration | orchestration | none | xl |
-| FEAT-006 | Per-Session Logging | logging | none | medium |
+
+### Completed This Wave
+
+| ID | Feature | Tests |
+|----|---------|-------|
+| FEAT-002 | Per-Session Scrollback | 47 |
+| FEAT-003 | Viewport Pinning | 23 |
+| FEAT-005 | Response Channel | 72 |
+| FEAT-006 | Per-Session Logging | 40 |
 
 ## Critical Path
 
@@ -98,6 +103,16 @@ FEAT-014 and FEAT-015 are on the critical path—prioritize these to minimize to
 - 3 ADRs for key decisions
 
 ### Stage 6: Implementation
+
+**2026-01-08 - Wave 1 Partial (4/9 features)**
+- Merged 4 feature branches from worktrees:
+  - `feature/FEAT-002-scrollback`: Per-session scrollback configuration (47 tests)
+  - `feature/FEAT-003-viewport`: Viewport pinning with ViewportState protocol type (23 tests)
+  - `feature/FEAT-005-response`: Response channel with PaneTarget, ReplyMessage, ReplyResult (72 tests)
+  - `feature/FEAT-006-logging`: Per-session log levels (40 tests)
+- Resolved merge conflicts in protocol types (combined ViewportState + Reply types)
+- Test count: 384 → 566 (+182 tests)
+- Remaining Wave 1: FEAT-001, FEAT-004, FEAT-009, FEAT-014, FEAT-016
 
 **2026-01-08 - Wave 0 Complete**
 - Merged 6 feature branches:

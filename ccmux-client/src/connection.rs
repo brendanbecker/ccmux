@@ -8,7 +8,7 @@ mod handler;
 
 pub use client::Connection;
 
-// These are exported for future use when the full client is implemented
+// These are part of the public API for advanced use cases
 #[allow(unused_imports)]
 pub use client::ConnectionState;
 #[allow(unused_imports)]
