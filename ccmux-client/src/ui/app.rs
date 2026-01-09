@@ -648,6 +648,14 @@ impl App {
                         self.pane_manager.set_active(new_active);
                     }
                 }
+                // If no panes left, go back to session selection
+                if self.panes.is_empty() {
+                    self.session = None;
+                    self.windows.clear();
+                    self.active_pane_id = None;
+                    self.state = AppState::SessionSelect;
+                    self.status_message = Some("Session has no active panes".to_string());
+                }
             }
             ServerMessage::WindowClosed { window_id } => {
                 self.windows.remove(&window_id);
