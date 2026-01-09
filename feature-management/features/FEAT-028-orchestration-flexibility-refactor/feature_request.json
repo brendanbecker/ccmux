@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-028",
+  "title": "Orchestration Flexibility Refactor",
+  "component": "ccmux-protocol",
+  "priority": "P1",
+  "status": "new",
+  "type": "improvement",
+  "created_date": "2026-01-09",
+  "updated_date": "2026-01-09",
+  "assigned_to": null,
+  "tags": ["orchestration", "protocol", "refactor"],
+  "estimated_effort": "medium",
+  "dependencies": ["FEAT-007"],
+  "description": "Replace methodology-specific orchestration concepts with generic primitives so ccmux can support any workflow (Context Engineering, Gas Town, custom) rather than hardcoding a specific coordination pattern. Make ccmux a 'dumb pipe' that handles session lifecycle and message routing with arbitrary metadata, letting users define workflow semantics.",
+  "business_value": "high",
+  "technical_complexity": "medium",
+  "user_impact": "Enables ccmux to support arbitrary multi-agent workflows without protocol changes, increasing flexibility and adoption potential across different orchestration methodologies"
+}

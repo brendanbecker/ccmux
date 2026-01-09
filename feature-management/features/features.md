@@ -5,10 +5,10 @@
 
 ## Summary Statistics
 
-- **Total Features**: 27
-- **By Priority**: P0: 5, P1: 15, P2: 7, P3: 0
+- **Total Features**: 28
+- **By Priority**: P0: 5, P1: 16, P2: 7, P3: 0
 - **By Status**:
-  - New: 21
+  - New: 22
   - In Progress: 0
   - Completed: 6
   - Deprecated: 0
@@ -25,7 +25,7 @@
 | FEAT-025 | Pane Output Rendering | ccmux-client | new | [Link](FEAT-025-pane-output-rendering/) |
 | FEAT-027 | Client Connection Registry | ccmux-server | new | [Link](FEAT-027-client-connection-registry/) |
 
-### P1 - High Priority (15)
+### P1 - High Priority (16)
 
 | ID | Title | Component | Status | Link |
 |----|-------|-----------|--------|------|
@@ -44,6 +44,7 @@
 | FEAT-020 | Session Isolation - Per-Pane CLAUDE_CONFIG_DIR | ccmux-server | new | [Link](FEAT-020-session-isolation-per-pane-claude-config-dir/) |
 | FEAT-024 | Session Selection UI | ccmux-client | new | [Link](FEAT-024-session-selection-ui/) |
 | FEAT-026 | Input Handling Integration and Testing | ccmux-client | new | [Link](FEAT-026-input-handling-integration-and-testing/) |
+| FEAT-028 | Orchestration Flexibility Refactor | ccmux-protocol | new | [Link](FEAT-028-orchestration-flexibility-refactor/) |
 
 ### P2 - Medium Priority (7)
 
@@ -63,6 +64,7 @@
 
 ## Recent Activity
 
+- 2026-01-09: Created FEAT-028 - Orchestration Flexibility Refactor (P1 High)
 - 2026-01-09: Created FEAT-027 - Client Connection Registry (P0 Critical)
 - 2026-01-09: Created FEAT-024 - Session Selection UI
 - 2026-01-09: Created FEAT-025 - Pane Output Rendering (P0 Critical)
@@ -101,6 +103,8 @@ See [WAVES.md](/WAVES.md) for the complete parallel development plan with depend
 - **Wave 3 (Blocked)**: 2 features waiting on Wave 2 (MCP Server, Session Isolation)
 
 **Critical Path**: FEAT-021 (Server Socket Listen Loop), FEAT-027 (Client Connection Registry), FEAT-022 (Client Message Routing), FEAT-023 (PTY Output Polling), and FEAT-025 (Pane Output Rendering) are P0 and block client-server communication.
+
+**Note**: FEAT-028 (Orchestration Flexibility Refactor) should be completed before FEAT-004 (Worktree-Aware Orchestration) and FEAT-005 (Response Channel) to ensure they use the new generic primitives.
 
 ## Planned Feature Areas
 
@@ -142,6 +146,7 @@ Based on the project vision, features will likely include:
 - Child pane spawning on Claude request
 - Recursion depth limits
 - Parent notification on child completion
+- **Orchestration flexibility refactor (FEAT-028)** - Generic primitives for any workflow
 - **Response channel for orchestrator-worker communication (FEAT-005)**
 - **Worktree-aware orchestration for parallel development (FEAT-004)**
 
