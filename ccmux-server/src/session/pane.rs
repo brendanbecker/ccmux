@@ -1,14 +1,15 @@
 // Allow unused fields that are reserved for future use
 #![allow(dead_code)]
 
+use std::fmt;
 use std::time::SystemTime;
 use uuid::Uuid;
+use vt100::Parser;
 use ccmux_protocol::{ClaudeActivity, ClaudeState, PaneInfo, PaneState};
 use crate::config::SessionType;
 use crate::pty::ScrollbackBuffer;
 
 /// A terminal pane within a window
-#[derive(Debug)]
 pub struct Pane {
     /// Unique pane identifier
     id: Uuid,
@@ -33,6 +34,28 @@ pub struct Pane {
     session_type: SessionType,
     /// Scrollback buffer for terminal history
     scrollback: ScrollbackBuffer,
+    /// vt100 parser for terminal emulation
+    parser: Option<Parser>,
+}
+
+impl fmt::Debug for Pane {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Pane")
+            .field("id", &self.id)
+            .field("window_id", &self.window_id)
+            .field("index", &self.index)
+            .field("cols", &self.cols)
+            .field("rows", &self.rows)
+            .field("state", &self.state)
+            .field("title", &self.title)
+            .field("cwd", &self.cwd)
+            .field("created_at", &self.created_at)
+            .field("state_changed_at", &self.state_changed_at)
+            .field("session_type", &self.session_type)
+            .field("scrollback", &self.scrollback)
+            .field("parser", &self.parser.as_ref().map(|_| "Parser { ... }"))
+            .finish()
+    }
 }
 
 /// Default scrollback lines when not specified
@@ -65,6 +88,7 @@ impl Pane {
             state_changed_at: now,
             session_type,
             scrollback: ScrollbackBuffer::new(scrollback_lines),
+            parser: None,
         }
     }
 
@@ -95,6 +119,9 @@ impl Pane {
             cwd,
             created_at,
             state_changed_at: created_at,
+            session_type: SessionType::Default,
+            scrollback: ScrollbackBuffer::new(DEFAULT_SCROLLBACK_LINES),
+            parser: None,
         }
     }
 
@@ -127,6 +154,9 @@ impl Pane {
     pub fn resize(&mut self, cols: u16, rows: u16) {
         self.cols = cols;
         self.rows = rows;
+        if let Some(parser) = &mut self.parser {
+            parser.set_size(rows, cols);
+        }
     }
 
     /// Get current state
@@ -232,6 +262,30 @@ impl Pane {
     /// Get scrollback memory usage in bytes
     pub fn scrollback_bytes(&self) -> usize {
         self.scrollback.total_bytes()
+    }
+
+    /// Initialize the vt100 parser with current dimensions
+    pub fn init_parser(&mut self) {
+        self.parser = Some(Parser::new(self.rows, self.cols, 0));
+    }
+
+    /// Process terminal output through the parser
+    pub fn process(&mut self, data: &[u8]) {
+        if let Some(parser) = &mut self.parser {
+            parser.process(data);
+        }
+        // Also push to scrollback
+        self.scrollback.push_bytes(data);
+    }
+
+    /// Get current screen contents
+    pub fn screen(&self) -> Option<&vt100::Screen> {
+        self.parser.as_ref().map(|p| p.screen())
+    }
+
+    /// Check if parser is initialized
+    pub fn has_parser(&self) -> bool {
+        self.parser.is_some()
     }
 
     /// Get creation timestamp as Unix time
@@ -688,5 +742,78 @@ mod tests {
         });
         assert!(pane.is_awaiting_input());
         assert!(!pane.is_awaiting_confirmation());
+    }
+
+    // ==================== vt100 Parser Tests ====================
+
+    #[test]
+    fn test_pane_parser_init() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+        assert!(!pane.has_parser());
+
+        pane.init_parser();
+        assert!(pane.has_parser());
+    }
+
+    #[test]
+    fn test_pane_process_output() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+        pane.init_parser();
+
+        pane.process(b"Hello, World!");
+
+        let screen = pane.screen().unwrap();
+        assert!(screen.contents().contains("Hello, World!"));
+    }
+
+    #[test]
+    fn test_pane_parser_resize() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+        pane.init_parser();
+        pane.resize(120, 40);
+
+        let screen = pane.screen().unwrap();
+        assert_eq!(screen.size(), (40, 120));
+    }
+
+    #[test]
+    fn test_pane_process_without_parser() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        // Should not panic - just adds to scrollback
+        pane.process(b"Test data\n");
+
+        assert!(pane.screen().is_none());
+        assert_eq!(pane.scrollback_lines(), 1);
+    }
+
+    #[test]
+    fn test_pane_process_also_writes_scrollback() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+        pane.init_parser();
+
+        pane.process(b"Line 1\nLine 2\n");
+
+        // Verify data went to both parser and scrollback
+        let screen = pane.screen().unwrap();
+        assert!(screen.contents().contains("Line 1"));
+        assert_eq!(pane.scrollback_lines(), 2);
+    }
+
+    #[test]
+    fn test_pane_resize_without_parser() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        // Should not panic
+        pane.resize(120, 40);
+
+        assert_eq!(pane.dimensions(), (120, 40));
+        assert!(!pane.has_parser());
     }
 }
