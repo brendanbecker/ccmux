@@ -373,6 +373,12 @@ impl App {
             ServerMessage::Pong => {
                 // Keepalive response, no action needed
             }
+            ServerMessage::ViewportUpdated { .. } => {
+                // Viewport update, handled by terminal display
+            }
+            ServerMessage::ReplyDelivered { .. } => {
+                // Reply delivery confirmation
+            }
         }
         Ok(())
     }

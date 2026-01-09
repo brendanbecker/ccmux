@@ -299,6 +299,8 @@ mod tests {
                     created_at: 1234567890,
                     window_count: 1,
                     attached_clients: 0,
+                    worktree: None,
+                    is_orchestrator: false,
                 }],
             },
             ServerMessage::SessionCreated {
@@ -308,6 +310,8 @@ mod tests {
                     created_at: 1234567890,
                     window_count: 0,
                     attached_clients: 1,
+                    worktree: None,
+                    is_orchestrator: false,
                 },
             },
             ServerMessage::Attached {
@@ -317,6 +321,8 @@ mod tests {
                     created_at: 1234567890,
                     window_count: 1,
                     attached_clients: 1,
+                    worktree: None,
+                    is_orchestrator: false,
                 },
                 windows: vec![WindowInfo {
                     id: window_id,

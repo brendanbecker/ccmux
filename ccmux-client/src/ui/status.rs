@@ -346,6 +346,8 @@ mod tests {
             created_at: 0,
             window_count: 1,
             attached_clients: 1,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         bar.set_session(Some(session.clone()));
@@ -445,6 +447,8 @@ mod tests {
             created_at: 0,
             window_count: 1,
             attached_clients: 1,
+            worktree: None,
+            is_orchestrator: false,
         }));
 
         let spans = bar.left_section();

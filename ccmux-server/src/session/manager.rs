@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use ccmux_utils::{CcmuxError, Result};
 
 use super::{Pane, Session, Window};
+use crate::orchestration::WorktreeDetector;
 
 /// Manages all sessions
 #[derive(Debug, Default)]
@@ -149,6 +151,86 @@ impl SessionManager {
             }
         }
         None
+    }
+
+    /// Create a session with worktree detection
+    ///
+    /// Creates a session and automatically detects and binds any git worktree
+    /// context for the given working directory.
+    pub fn create_session_in_dir(&mut self, name: impl Into<String>, cwd: &Path) -> Result<&Session> {
+        let name = name.into();
+
+        if self.name_to_id.contains_key(&name) {
+            return Err(CcmuxError::SessionExists(name));
+        }
+
+        let mut session = Session::new(&name);
+        let session_id = session.id();
+
+        // Detect worktree context
+        if let Some(worktree_root) = WorktreeDetector::get_worktree_root(cwd) {
+            let worktrees = WorktreeDetector::list_worktrees(cwd);
+
+            if let Some(worktree) = worktrees.into_iter().find(|w| w.path == worktree_root) {
+                let is_orchestrator = worktree.is_main;
+                session.set_worktree(worktree, is_orchestrator);
+            }
+        }
+
+        self.name_to_id.insert(name, session_id);
+        self.sessions.insert(session_id, session);
+
+        Ok(self.sessions.get(&session_id).unwrap())
+    }
+
+    /// Find sessions by worktree path
+    pub fn sessions_for_worktree(&self, worktree_path: &Path) -> Vec<&Session> {
+        self.sessions
+            .values()
+            .filter(|s| {
+                s.worktree()
+                    .map(|w| w.path == worktree_path)
+                    .unwrap_or(false)
+            })
+            .collect()
+    }
+
+    /// Find the orchestrator session for a repository
+    ///
+    /// Returns the session that is marked as orchestrator and belongs to
+    /// the same repository as the given path.
+    pub fn orchestrator_session(&self, repo_path: &Path) -> Option<&Session> {
+        // Get main repo root
+        let main_root = WorktreeDetector::get_main_repo_root(repo_path)?;
+
+        self.sessions.values().find(|s| {
+            s.is_orchestrator()
+                && s.worktree()
+                    .map(|w| {
+                        WorktreeDetector::get_main_repo_root(&w.path)
+                            .map(|r| r == main_root)
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+        })
+    }
+
+    /// Get all sessions grouped by repository
+    ///
+    /// Returns a map from main repository root path to all sessions
+    /// associated with worktrees of that repository.
+    pub fn sessions_by_repo(&self) -> HashMap<PathBuf, Vec<&Session>> {
+        let mut by_repo: HashMap<PathBuf, Vec<&Session>> = HashMap::new();
+
+        for session in self.sessions.values() {
+            if let Some(worktree) = session.worktree() {
+                if let Some(main_root) = WorktreeDetector::get_main_repo_root(&worktree.path) {
+                    by_repo.entry(main_root).or_default().push(session);
+                }
+            }
+        }
+
+        by_repo
     }
 }
 
@@ -597,5 +679,100 @@ mod tests {
         let (session, _, pane) = found.unwrap();
         assert_eq!(pane.title(), Some("target-worker"));
         assert_eq!(session.name(), "session2");
+    }
+
+    // ==================== Worktree Binding Tests ====================
+
+    #[test]
+    fn test_create_session_in_dir() {
+        use std::env;
+
+        let mut manager = SessionManager::new();
+        let cwd = env::current_dir().unwrap();
+
+        let session = manager.create_session_in_dir("test", &cwd).unwrap();
+
+        // Session should be created
+        assert_eq!(session.name(), "test");
+
+        // In a git repo, worktree should be detected
+        // Note: This test assumes we're in a git repo
+        if session.worktree().is_some() {
+            let wt = session.worktree().unwrap();
+            assert!(wt.path.exists());
+        }
+    }
+
+    #[test]
+    fn test_create_session_in_dir_duplicate_name() {
+        use std::env;
+
+        let mut manager = SessionManager::new();
+        let cwd = env::current_dir().unwrap();
+
+        manager.create_session_in_dir("unique", &cwd).unwrap();
+        let result = manager.create_session_in_dir("unique", &cwd);
+
+        assert!(matches!(result, Err(CcmuxError::SessionExists(_))));
+    }
+
+    #[test]
+    fn test_sessions_for_worktree() {
+        use crate::orchestration::WorktreeInfo;
+
+        let mut manager = SessionManager::new();
+
+        // Create sessions with worktrees manually
+        let session1 = manager.create_session("session1").unwrap();
+        let session1_id = session1.id();
+
+        let session2 = manager.create_session("session2").unwrap();
+        let session2_id = session2.id();
+
+        // Set worktrees
+        let worktree_path = PathBuf::from("/test/repo");
+        let worktree = WorktreeInfo {
+            path: worktree_path.clone(),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        manager.get_session_mut(session1_id).unwrap().set_worktree(worktree.clone(), true);
+        manager.get_session_mut(session2_id).unwrap().set_worktree(worktree, false);
+
+        // Both sessions should be found for the worktree
+        let sessions = manager.sessions_for_worktree(&worktree_path);
+        assert_eq!(sessions.len(), 2);
+    }
+
+    #[test]
+    fn test_sessions_for_worktree_no_match() {
+        let manager = SessionManager::new();
+
+        let sessions = manager.sessions_for_worktree(Path::new("/nonexistent/path"));
+        assert!(sessions.is_empty());
+    }
+
+    #[test]
+    fn test_sessions_by_repo_empty() {
+        let manager = SessionManager::new();
+
+        let by_repo = manager.sessions_by_repo();
+        assert!(by_repo.is_empty());
+    }
+
+    #[test]
+    fn test_orchestrator_detection() {
+        use std::env;
+
+        let mut manager = SessionManager::new();
+        let cwd = env::current_dir().unwrap();
+
+        let session = manager.create_session_in_dir("main", &cwd).unwrap();
+
+        // If we're in the main worktree, session should be orchestrator
+        if session.worktree().map(|w| w.is_main).unwrap_or(false) {
+            assert!(session.is_orchestrator());
+        }
     }
 }

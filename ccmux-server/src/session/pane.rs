@@ -95,6 +95,8 @@ impl Pane {
             cwd,
             created_at,
             state_changed_at: created_at,
+            session_type: SessionType::Default,
+            scrollback: ScrollbackBuffer::new(DEFAULT_SCROLLBACK_LINES),
         }
     }
 
