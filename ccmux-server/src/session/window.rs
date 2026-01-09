@@ -157,6 +157,21 @@ impl Window {
         self.panes.get_mut(&pane_id)
     }
 
+    /// Get a pane by its index within the window
+    pub fn get_pane_by_index(&self, index: usize) -> Option<&Pane> {
+        self.pane_order
+            .get(index)
+            .and_then(|id| self.panes.get(id))
+    }
+
+    /// Get a mutable pane by its index within the window
+    pub fn get_pane_by_index_mut(&mut self, index: usize) -> Option<&mut Pane> {
+        self.pane_order
+            .get(index)
+            .copied()
+            .and_then(|id| self.panes.get_mut(&id))
+    }
+
     /// Remove a pane
     pub fn remove_pane(&mut self, pane_id: Uuid) -> Option<Pane> {
         if let Some(pane) = self.panes.remove(&pane_id) {
@@ -530,5 +545,43 @@ mod tests {
 
         window.set_name("new-name_123");
         assert_eq!(window.name(), "new-name_123");
+    }
+
+    #[test]
+    fn test_window_get_pane_by_index() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        let pane1_id = window.create_pane().id();
+        let pane2_id = window.create_pane().id();
+        let pane3_id = window.create_pane().id();
+
+        assert_eq!(window.get_pane_by_index(0).map(|p| p.id()), Some(pane1_id));
+        assert_eq!(window.get_pane_by_index(1).map(|p| p.id()), Some(pane2_id));
+        assert_eq!(window.get_pane_by_index(2).map(|p| p.id()), Some(pane3_id));
+        assert!(window.get_pane_by_index(3).is_none());
+    }
+
+    #[test]
+    fn test_window_get_pane_by_index_empty() {
+        let session_id = Uuid::new_v4();
+        let window = Window::new(session_id, 0, "main");
+
+        assert!(window.get_pane_by_index(0).is_none());
+    }
+
+    #[test]
+    fn test_window_get_pane_by_index_mut() {
+        let session_id = Uuid::new_v4();
+        let mut window = Window::new(session_id, 0, "main");
+
+        window.create_pane();
+        window.create_pane();
+
+        let pane = window.get_pane_by_index_mut(1).unwrap();
+        pane.resize(100, 50);
+
+        let pane = window.get_pane_by_index(1).unwrap();
+        assert_eq!(pane.dimensions(), (100, 50));
     }
 }
