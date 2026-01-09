@@ -5,7 +5,7 @@
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::pty::PtyConfig;
+use crate::pty::{PtyConfig, PtyOutputPoller};
 
 use ccmux_protocol::{ErrorCode, ServerMessage};
 
@@ -72,8 +72,18 @@ impl HandlerContext {
                     let pty_config = PtyConfig::shell().with_size(cols, rows);
 
                     match pty_manager.spawn(pane_id, pty_config) {
-                        Ok(_) => {
+                        Ok(handle) => {
                             info!("PTY spawned for default pane {}", pane_id);
+
+                            // Start output poller to broadcast PTY output to clients
+                            let reader = handle.clone_reader();
+                            let _poller_handle = PtyOutputPoller::spawn(
+                                pane_id,
+                                session_id,
+                                reader,
+                                self.registry.clone(),
+                            );
+                            info!("Output poller started for pane {}", pane_id);
                         }
                         Err(e) => {
                             // Log error but don't fail session creation
