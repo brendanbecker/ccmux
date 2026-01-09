@@ -2,12 +2,15 @@
 
 use ccmux_utils::Result;
 
-mod session;
-mod pty;
-mod parser;
 mod claude;
-mod persistence;
 mod config;
+mod parser;
+mod persistence;
+mod pty;
+mod reply;
+mod session;
+
+pub use reply::{ReplyError, ReplyHandler};
 
 #[tokio::main]
 async fn main() -> Result<()> {

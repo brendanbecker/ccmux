@@ -1,5 +1,8 @@
 //! Message handler trait and utilities
 
+// Allow dead code as this module contains functionality for future use
+#![allow(dead_code)]
+
 use ccmux_protocol::{ClientMessage, ServerMessage};
 use ccmux_utils::Result;
 use tokio::sync::mpsc;

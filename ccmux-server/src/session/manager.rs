@@ -109,6 +109,37 @@ impl SessionManager {
         }
         None
     }
+
+    /// Find pane by name/title across all sessions
+    pub fn find_pane_by_name(&self, name: &str) -> Option<(&Session, &Window, &Pane)> {
+        for session in self.sessions.values() {
+            for window in session.windows() {
+                for pane in window.panes() {
+                    if let Some(title) = pane.title() {
+                        if title == name {
+                            return Some((session, window, pane));
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Find mutable pane by name/title
+    pub fn find_pane_by_name_mut(&mut self, name: &str) -> Option<&mut Pane> {
+        // First find the IDs
+        let location = self.find_pane_by_name(name).map(|(s, w, p)| (s.id(), w.id(), p.id()));
+
+        if let Some((session_id, window_id, pane_id)) = location {
+            if let Some(session) = self.sessions.get_mut(&session_id) {
+                if let Some(window) = session.get_window_mut(window_id) {
+                    return window.get_pane_mut(pane_id);
+                }
+            }
+        }
+        None
+    }
 }
 
 #[cfg(test)]
@@ -427,5 +458,134 @@ mod tests {
         let (session, window) = manager.find_window(window_id).unwrap();
         assert_eq!(session.name(), "session2");
         assert_eq!(window.name(), "target");
+    }
+
+    // ==================== Find Pane by Name Tests ====================
+
+    #[test]
+    fn test_manager_find_pane_by_name() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        let session = manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        // Set a title on the pane
+        let pane_mut = window.get_pane_mut(pane_id).unwrap();
+        pane_mut.set_title(Some("worker-3".to_string()));
+
+        // Find pane by name
+        let found = manager.find_pane_by_name("worker-3");
+        assert!(found.is_some());
+        let (_, _, pane) = found.unwrap();
+        assert_eq!(pane.id(), pane_id);
+    }
+
+    #[test]
+    fn test_manager_find_pane_by_name_nonexistent() {
+        let manager = SessionManager::new();
+
+        let found = manager.find_pane_by_name("nonexistent");
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_manager_find_pane_by_name_no_title() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        let session = manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+
+        let window = session.get_window_mut(window_id).unwrap();
+        window.create_pane(); // Pane without title
+
+        // Can't find a pane with no title
+        let found = manager.find_pane_by_name("anything");
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_manager_find_pane_by_name_mut() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("work").unwrap();
+        let session_id = session.id();
+
+        let session = manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        // Set a title on the pane
+        let pane_mut = window.get_pane_mut(pane_id).unwrap();
+        pane_mut.set_title(Some("worker-3".to_string()));
+
+        // Find and modify pane
+        let pane_mut = manager.find_pane_by_name_mut("worker-3").unwrap();
+        pane_mut.resize(100, 50);
+
+        // Verify modification
+        let (_, _, pane) = manager.find_pane_by_name("worker-3").unwrap();
+        assert_eq!(pane.dimensions(), (100, 50));
+    }
+
+    #[test]
+    fn test_manager_find_pane_by_name_mut_nonexistent() {
+        let mut manager = SessionManager::new();
+
+        let found = manager.find_pane_by_name_mut("nonexistent");
+        assert!(found.is_none());
+    }
+
+    #[test]
+    fn test_manager_find_pane_by_name_multiple_sessions() {
+        let mut manager = SessionManager::new();
+
+        let session1 = manager.create_session("session1").unwrap();
+        let session1_id = session1.id();
+
+        let session2 = manager.create_session("session2").unwrap();
+        let session2_id = session2.id();
+
+        // Create pane in session1
+        let session = manager.get_session_mut(session1_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+        let pane_mut = window.get_pane_mut(pane_id).unwrap();
+        pane_mut.set_title(Some("other-worker".to_string()));
+
+        // Create pane in session2 with target name
+        let session = manager.get_session_mut(session2_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+        let pane_mut = window.get_pane_mut(pane_id).unwrap();
+        pane_mut.set_title(Some("target-worker".to_string()));
+
+        // Find should find the correct pane
+        let found = manager.find_pane_by_name("target-worker");
+        assert!(found.is_some());
+        let (session, _, pane) = found.unwrap();
+        assert_eq!(pane.title(), Some("target-worker"));
+        assert_eq!(session.name(), "session2");
     }
 }

@@ -10,6 +10,7 @@
 
 mod manager;
 mod pane;
+#[allow(clippy::module_inception)]
 mod session;
 mod window;
 

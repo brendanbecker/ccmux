@@ -1,6 +1,9 @@
+// Allow unused fields that are reserved for future use
+#![allow(dead_code)]
+
 use std::time::SystemTime;
 use uuid::Uuid;
-use ccmux_protocol::{PaneInfo, PaneState, ClaudeState};
+use ccmux_protocol::{ClaudeActivity, ClaudeState, PaneInfo, PaneState};
 use crate::config::SessionType;
 use crate::pty::ScrollbackBuffer;
 
@@ -117,6 +120,31 @@ impl Pane {
         match &self.state {
             PaneState::Claude(state) => Some(state),
             _ => None,
+        }
+    }
+
+    /// Check if pane is awaiting user input (AwaitingConfirmation or Idle state)
+    ///
+    /// Returns true if:
+    /// - This is a Claude pane in AwaitingConfirmation state
+    /// - This is a Claude pane in Idle state (also waiting for input)
+    pub fn is_awaiting_input(&self) -> bool {
+        match &self.state {
+            PaneState::Claude(state) => matches!(
+                state.activity,
+                ClaudeActivity::AwaitingConfirmation | ClaudeActivity::Idle
+            ),
+            _ => false,
+        }
+    }
+
+    /// Check specifically if pane is awaiting confirmation (tool use approval, etc.)
+    pub fn is_awaiting_confirmation(&self) -> bool {
+        match &self.state {
+            PaneState::Claude(state) => {
+                matches!(state.activity, ClaudeActivity::AwaitingConfirmation)
+            }
+            _ => false,
         }
     }
 
@@ -469,5 +497,158 @@ mod tests {
 
         assert_eq!(pane.session_type(), SessionType::Worker);
         assert_eq!(pane.scrollback().max_lines(), 500);
+    }
+
+    // ==================== Input-Wait Detection Tests ====================
+
+    #[test]
+    fn test_pane_is_awaiting_input_normal_pane() {
+        let window_id = Uuid::new_v4();
+        let pane = Pane::new(window_id, 0);
+
+        // Normal panes are never awaiting input
+        assert!(!pane.is_awaiting_input());
+        assert!(!pane.is_awaiting_confirmation());
+    }
+
+    #[test]
+    fn test_pane_is_awaiting_input_idle_claude() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::Idle,
+            model: None,
+            tokens_used: None,
+        });
+
+        // Idle Claude panes are awaiting input
+        assert!(pane.is_awaiting_input());
+        assert!(!pane.is_awaiting_confirmation());
+    }
+
+    #[test]
+    fn test_pane_is_awaiting_input_awaiting_confirmation() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::AwaitingConfirmation,
+            model: None,
+            tokens_used: None,
+        });
+
+        // AwaitingConfirmation Claude panes are awaiting input
+        assert!(pane.is_awaiting_input());
+        assert!(pane.is_awaiting_confirmation());
+    }
+
+    #[test]
+    fn test_pane_is_awaiting_input_thinking() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::Thinking,
+            model: None,
+            tokens_used: None,
+        });
+
+        // Thinking Claude panes are NOT awaiting input
+        assert!(!pane.is_awaiting_input());
+        assert!(!pane.is_awaiting_confirmation());
+    }
+
+    #[test]
+    fn test_pane_is_awaiting_input_coding() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::Coding,
+            model: None,
+            tokens_used: None,
+        });
+
+        // Coding Claude panes are NOT awaiting input
+        assert!(!pane.is_awaiting_input());
+        assert!(!pane.is_awaiting_confirmation());
+    }
+
+    #[test]
+    fn test_pane_is_awaiting_input_tool_use() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::ToolUse,
+            model: None,
+            tokens_used: None,
+        });
+
+        // ToolUse Claude panes are NOT awaiting input
+        assert!(!pane.is_awaiting_input());
+        assert!(!pane.is_awaiting_confirmation());
+    }
+
+    #[test]
+    fn test_pane_is_awaiting_input_exited_pane() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        pane.set_state(PaneState::Exited { code: Some(0) });
+
+        // Exited panes are never awaiting input
+        assert!(!pane.is_awaiting_input());
+        assert!(!pane.is_awaiting_confirmation());
+    }
+
+    #[test]
+    fn test_pane_is_awaiting_input_state_transitions() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        // Start as Claude Idle - awaiting input
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::Idle,
+            model: None,
+            tokens_used: None,
+        });
+        assert!(pane.is_awaiting_input());
+
+        // Transition to Thinking - NOT awaiting input
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::Thinking,
+            model: None,
+            tokens_used: None,
+        });
+        assert!(!pane.is_awaiting_input());
+
+        // Transition to AwaitingConfirmation - awaiting input
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::AwaitingConfirmation,
+            model: None,
+            tokens_used: None,
+        });
+        assert!(pane.is_awaiting_input());
+        assert!(pane.is_awaiting_confirmation());
+
+        // Back to Idle - awaiting input
+        pane.set_claude_state(ClaudeState {
+            session_id: None,
+            activity: ClaudeActivity::Idle,
+            model: None,
+            tokens_used: None,
+        });
+        assert!(pane.is_awaiting_input());
+        assert!(!pane.is_awaiting_confirmation());
     }
 }
