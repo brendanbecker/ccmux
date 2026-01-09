@@ -16,6 +16,7 @@ mod persistence;
 mod pty;
 mod reply;
 mod session;
+pub mod sideband;
 
 pub use reply::{ReplyError, ReplyHandler};
 
