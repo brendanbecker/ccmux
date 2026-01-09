@@ -40,7 +40,7 @@ use persistence::{
     parse_compression_method, PersistenceConfig, PersistenceManager, RestorationResult,
     ScrollbackCapture, ScrollbackConfig, SessionRestorer, SessionSnapshot, WindowSnapshot,
 };
-use pty::PtyManager;
+use pty::{PtyManager, PtyOutputPoller};
 use session::SessionManager;
 
 /// Shared state for concurrent access by client handlers
@@ -694,6 +694,32 @@ async fn run_daemon() -> Result<()> {
     server.session_manager_ref = Some(Arc::clone(&shared_state.session_manager));
     server.pty_manager_ref = Some(Arc::clone(&shared_state.pty_manager));
     server.shutdown_tx = shutdown_tx;
+
+    // Start output pollers for any restored panes with PTYs
+    {
+        let session_manager = shared_state.session_manager.read().await;
+        let pty_manager = shared_state.pty_manager.read().await;
+
+        for session in session_manager.list_sessions() {
+            let session_id = session.id();
+            for window in session.windows() {
+                for pane in window.panes() {
+                    let pane_id = pane.id();
+                    // Check if this pane has a PTY (restored panes with PTYs)
+                    if let Some(handle) = pty_manager.get(pane_id) {
+                        let reader = handle.clone_reader();
+                        let _poller = PtyOutputPoller::spawn(
+                            pane_id,
+                            session_id,
+                            reader,
+                            shared_state.registry.clone(),
+                        );
+                        info!("Started output poller for restored pane {}", pane_id);
+                    }
+                }
+            }
+        }
+    }
 
     // Wrap server in Arc<Mutex<>> for checkpoint/persistence access
     let server = Arc::new(Mutex::new(server));
