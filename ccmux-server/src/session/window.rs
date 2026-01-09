@@ -1,3 +1,6 @@
+// Allow unused fields that are reserved for future use
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::time::SystemTime;
 use uuid::Uuid;

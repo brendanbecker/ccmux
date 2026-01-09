@@ -4,9 +4,12 @@ use ccmux_protocol::ClientMessage;
 use ccmux_utils::{init_logging_with_config, LogConfig, Result};
 use uuid::Uuid;
 
+mod commands;
 mod connection;
 mod input;
 mod ui;
+
+pub use commands::{is_command, parse_command, Command, ParseError};
 
 use connection::Connection;
 

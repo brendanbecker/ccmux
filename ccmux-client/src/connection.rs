@@ -6,5 +6,10 @@
 mod client;
 mod handler;
 
-pub use client::{Connection, ConnectionState};
+pub use client::Connection;
+
+// These are exported for future use when the full client is implemented
+#[allow(unused_imports)]
+pub use client::ConnectionState;
+#[allow(unused_imports)]
 pub use handler::{CallbackHandler, MessageHandler, MessageSender};

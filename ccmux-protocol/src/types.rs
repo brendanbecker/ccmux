@@ -102,6 +102,51 @@ pub struct Dimensions {
     pub rows: u16,
 }
 
+/// Reply message for sending input to a pane awaiting confirmation
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReplyMessage {
+    /// Target pane (by ID or name)
+    pub target: PaneTarget,
+    /// Content to send to the pane's stdin
+    pub content: String,
+}
+
+/// Target specification for a pane (by ID or name)
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PaneTarget {
+    /// Target by UUID
+    Id(Uuid),
+    /// Target by pane name/title
+    Name(String),
+}
+
+impl ReplyMessage {
+    /// Create a reply message targeting a pane by ID
+    pub fn by_id(pane_id: Uuid, content: impl Into<String>) -> Self {
+        Self {
+            target: PaneTarget::Id(pane_id),
+            content: content.into(),
+        }
+    }
+
+    /// Create a reply message targeting a pane by name
+    pub fn by_name(name: impl Into<String>, content: impl Into<String>) -> Self {
+        Self {
+            target: PaneTarget::Name(name.into()),
+            content: content.into(),
+        }
+    }
+}
+
+/// Result of a reply operation
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReplyResult {
+    /// The pane that received the reply
+    pub pane_id: Uuid,
+    /// Number of bytes written
+    pub bytes_written: usize,
+}
+
 impl Dimensions {
     pub fn new(cols: u16, rows: u16) -> Self {
         Self { cols, rows }
@@ -804,5 +849,168 @@ mod tests {
         let serialized = bincode::serialize(&session).unwrap();
         let deserialized: SessionInfo = bincode::deserialize(&serialized).unwrap();
         assert_eq!(session, deserialized);
+    }
+
+    // ==================== ReplyMessage Tests ====================
+
+    #[test]
+    fn test_reply_message_by_id() {
+        let pane_id = Uuid::new_v4();
+        let msg = ReplyMessage::by_id(pane_id, "hello world");
+
+        assert_eq!(msg.target, PaneTarget::Id(pane_id));
+        assert_eq!(msg.content, "hello world");
+    }
+
+    #[test]
+    fn test_reply_message_by_name() {
+        let msg = ReplyMessage::by_name("worker-3", "use async");
+
+        assert_eq!(msg.target, PaneTarget::Name("worker-3".to_string()));
+        assert_eq!(msg.content, "use async");
+    }
+
+    #[test]
+    fn test_reply_message_clone() {
+        let msg = ReplyMessage::by_name("test", "content");
+        let cloned = msg.clone();
+        assert_eq!(msg, cloned);
+    }
+
+    #[test]
+    fn test_reply_message_debug() {
+        let msg = ReplyMessage::by_name("worker", "message");
+        let debug = format!("{:?}", msg);
+        assert!(debug.contains("ReplyMessage"));
+        assert!(debug.contains("worker"));
+    }
+
+    #[test]
+    fn test_reply_message_serde() {
+        let msg = ReplyMessage::by_id(Uuid::new_v4(), "test content");
+        let serialized = bincode::serialize(&msg).unwrap();
+        let deserialized: ReplyMessage = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(msg, deserialized);
+    }
+
+    #[test]
+    fn test_reply_message_by_name_serde() {
+        let msg = ReplyMessage::by_name("worker-1", "yes");
+        let serialized = bincode::serialize(&msg).unwrap();
+        let deserialized: ReplyMessage = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(msg, deserialized);
+    }
+
+    // ==================== PaneTarget Tests ====================
+
+    #[test]
+    fn test_pane_target_id() {
+        let id = Uuid::new_v4();
+        let target = PaneTarget::Id(id);
+        assert_eq!(target, PaneTarget::Id(id));
+    }
+
+    #[test]
+    fn test_pane_target_name() {
+        let target = PaneTarget::Name("my-pane".to_string());
+        assert_eq!(target, PaneTarget::Name("my-pane".to_string()));
+    }
+
+    #[test]
+    fn test_pane_target_equality() {
+        let id = Uuid::new_v4();
+        let target1 = PaneTarget::Id(id);
+        let target2 = PaneTarget::Id(id);
+        let target3 = PaneTarget::Name("test".to_string());
+
+        assert_eq!(target1, target2);
+        assert_ne!(target1, target3);
+    }
+
+    #[test]
+    fn test_pane_target_clone() {
+        let target = PaneTarget::Name("test".to_string());
+        let cloned = target.clone();
+        assert_eq!(target, cloned);
+    }
+
+    #[test]
+    fn test_pane_target_serde() {
+        let targets = [
+            PaneTarget::Id(Uuid::new_v4()),
+            PaneTarget::Name("worker-1".to_string()),
+        ];
+
+        for target in targets {
+            let serialized = bincode::serialize(&target).unwrap();
+            let deserialized: PaneTarget = bincode::deserialize(&serialized).unwrap();
+            assert_eq!(target, deserialized);
+        }
+    }
+
+    // ==================== ReplyResult Tests ====================
+
+    #[test]
+    fn test_reply_result_creation() {
+        let pane_id = Uuid::new_v4();
+        let result = ReplyResult {
+            pane_id,
+            bytes_written: 42,
+        };
+
+        assert_eq!(result.pane_id, pane_id);
+        assert_eq!(result.bytes_written, 42);
+    }
+
+    #[test]
+    fn test_reply_result_clone() {
+        let result = ReplyResult {
+            pane_id: Uuid::new_v4(),
+            bytes_written: 100,
+        };
+        let cloned = result.clone();
+        assert_eq!(result, cloned);
+    }
+
+    #[test]
+    fn test_reply_result_equality() {
+        let pane_id = Uuid::new_v4();
+        let result1 = ReplyResult {
+            pane_id,
+            bytes_written: 50,
+        };
+        let result2 = ReplyResult {
+            pane_id,
+            bytes_written: 50,
+        };
+        let result3 = ReplyResult {
+            pane_id,
+            bytes_written: 100,
+        };
+
+        assert_eq!(result1, result2);
+        assert_ne!(result1, result3);
+    }
+
+    #[test]
+    fn test_reply_result_debug() {
+        let result = ReplyResult {
+            pane_id: Uuid::nil(),
+            bytes_written: 25,
+        };
+        let debug = format!("{:?}", result);
+        assert!(debug.contains("ReplyResult"));
+        assert!(debug.contains("25"));
+    }
+
+    #[test]
+    fn test_reply_result_serde() {
+        let result = ReplyResult {
+            pane_id: Uuid::new_v4(),
+            bytes_written: 256,
+        };
+        let serialized = bincode::serialize(&result).unwrap();
+        let deserialized: ReplyResult = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(result, deserialized);
     }
 }

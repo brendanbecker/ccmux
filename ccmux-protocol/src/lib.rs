@@ -11,8 +11,8 @@ pub mod types;
 pub use codec::{ClientCodec, CodecError, ServerCodec};
 pub use messages::{ClientMessage, ErrorCode, ServerMessage};
 pub use types::{
-    ClaudeActivity, ClaudeState, Dimensions, PaneInfo, PaneState, SessionInfo, SplitDirection,
-    WindowInfo,
+    ClaudeActivity, ClaudeState, Dimensions, PaneInfo, PaneState, PaneTarget, ReplyMessage,
+    ReplyResult, SessionInfo, SplitDirection, WindowInfo,
 };
 
 /// Current protocol version

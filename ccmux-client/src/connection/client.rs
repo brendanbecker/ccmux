@@ -1,5 +1,8 @@
 //! Connection client for ccmux server
 
+// Allow dead code as this module contains functionality for future use
+#![allow(dead_code)]
+
 use std::path::PathBuf;
 
 use futures::{SinkExt, StreamExt};

@@ -55,6 +55,9 @@ pub enum ClientMessage {
 
     /// Ping for keepalive
     Ping,
+
+    /// Send a reply to a pane awaiting input
+    Reply { reply: crate::types::ReplyMessage },
 }
 
 /// Messages sent from server to client
@@ -111,6 +114,9 @@ pub enum ServerMessage {
 
     /// Pong response to ping
     Pong,
+
+    /// Reply was delivered successfully
+    ReplyDelivered { result: crate::types::ReplyResult },
 }
 
 /// Error codes for protocol errors
@@ -122,6 +128,8 @@ pub enum ErrorCode {
     InvalidOperation,
     ProtocolMismatch,
     InternalError,
+    /// Target pane is not awaiting input
+    NotAwaitingInput,
 }
 
 #[cfg(test)]
@@ -603,9 +611,10 @@ mod tests {
             ErrorCode::InvalidOperation,
             ErrorCode::ProtocolMismatch,
             ErrorCode::InternalError,
+            ErrorCode::NotAwaitingInput,
         ];
 
-        assert_eq!(codes.len(), 6);
+        assert_eq!(codes.len(), 7);
         for (i, code) in codes.iter().enumerate() {
             // Each code should be unique
             for (j, other) in codes.iter().enumerate() {
@@ -616,5 +625,92 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ==================== Reply Message Tests ====================
+
+    #[test]
+    fn test_client_message_reply_by_id() {
+        use crate::types::{PaneTarget, ReplyMessage};
+
+        let pane_id = Uuid::new_v4();
+        let reply = ReplyMessage::by_id(pane_id, "yes, proceed");
+        let msg = ClientMessage::Reply { reply: reply.clone() };
+
+        if let ClientMessage::Reply { reply: r } = msg {
+            assert_eq!(r.target, PaneTarget::Id(pane_id));
+            assert_eq!(r.content, "yes, proceed");
+        } else {
+            panic!("Expected Reply variant");
+        }
+    }
+
+    #[test]
+    fn test_client_message_reply_by_name() {
+        use crate::types::{PaneTarget, ReplyMessage};
+
+        let reply = ReplyMessage::by_name("worker-3", "use async");
+        let msg = ClientMessage::Reply { reply: reply.clone() };
+
+        if let ClientMessage::Reply { reply: r } = msg {
+            assert_eq!(r.target, PaneTarget::Name("worker-3".to_string()));
+            assert_eq!(r.content, "use async");
+        } else {
+            panic!("Expected Reply variant");
+        }
+    }
+
+    #[test]
+    fn test_client_message_reply_clone() {
+        use crate::types::ReplyMessage;
+
+        let reply = ReplyMessage::by_name("test", "content");
+        let msg = ClientMessage::Reply { reply };
+        let cloned = msg.clone();
+        assert_eq!(msg, cloned);
+    }
+
+    // ==================== ReplyDelivered Message Tests ====================
+
+    #[test]
+    fn test_server_message_reply_delivered() {
+        use crate::types::ReplyResult;
+
+        let pane_id = Uuid::new_v4();
+        let result = ReplyResult {
+            pane_id,
+            bytes_written: 42,
+        };
+        let msg = ServerMessage::ReplyDelivered { result: result.clone() };
+
+        if let ServerMessage::ReplyDelivered { result: r } = msg {
+            assert_eq!(r.pane_id, pane_id);
+            assert_eq!(r.bytes_written, 42);
+        } else {
+            panic!("Expected ReplyDelivered variant");
+        }
+    }
+
+    #[test]
+    fn test_server_message_reply_delivered_clone() {
+        use crate::types::ReplyResult;
+
+        let result = ReplyResult {
+            pane_id: Uuid::new_v4(),
+            bytes_written: 100,
+        };
+        let msg = ServerMessage::ReplyDelivered { result };
+        let cloned = msg.clone();
+        assert_eq!(msg, cloned);
+    }
+
+    #[test]
+    fn test_error_code_not_awaiting_input() {
+        let code = ErrorCode::NotAwaitingInput;
+        assert_eq!(code, ErrorCode::NotAwaitingInput);
+        assert_ne!(code, ErrorCode::PaneNotFound);
+
+        let debug = format!("{:?}", code);
+        assert_eq!(debug, "NotAwaitingInput");
     }
 }
