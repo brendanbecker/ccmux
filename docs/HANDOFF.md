@@ -43,7 +43,7 @@ All component features are implemented and tested (1,093 tests). The project nee
 | FEAT-024 | Session Selection UI | P1 | 2h | ✅ Complete |
 | FEAT-025 | Pane Output Rendering | P0 | 3-4h | 🔲 Pending |
 | FEAT-026 | Input Testing | P1 | 1-2h | 🔲 Pending |
-| BUG-001 | Client Input Not Captured | P0 | TBD | ✅ Fixed (pending merge) |
+| BUG-001 | Client Input Not Captured | P0 | TBD | ✅ Merged |
 
 **Critical Path**: FEAT-021 → FEAT-027 → FEAT-022 → FEAT-025 → FEAT-026
 
@@ -148,6 +148,7 @@ Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`
 10. **FEAT-024** (Session Selection UI) - COMPLETED and merged
 11. **FEAT-027** (Client Connection Registry) - COMPLETED and merged
 12. **BUG-001** filed: Client input not captured (P0 blocker)
+13. **BUG-001** merged to main
 
 ### Key Decisions
 - FEAT-027 (Connection Registry) split out as own feature
@@ -155,21 +156,17 @@ Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`
 - P0 features form critical path for MVP
 
 ### Blockers
-- **BUG-001**: ~~Client input not captured~~ - **FIXED** in worktree, pending merge
-  - Pre-existing bug masked by non-functional server
-  - Fix ready in `ccmux-wt-bug-001` branch
+- None currently
 
 ### Active Worktrees
 | Worktree | Branch | Status |
 |----------|--------|--------|
-| `ccmux-wt-bug-001` | bug-001-client-input-not-captured | ✅ Ready to merge |
 | `ccmux-wt-feat-022` | feat-022-client-message-routing | 🆕 Ready to start |
 | `ccmux-wt-feat-023` | feat-023-pty-output-broadcasting | 🆕 Ready to start |
 
 ### Next Session Tasks
-1. **Merge BUG-001** - `git merge --no-ff bug-001-client-input-not-captured`
-2. **Test HA-001** - Run manual tests for FEAT-024 session selection UI
-3. **Work on FEAT-022 and/or FEAT-023** - Can be parallelized
+1. **Test HA-001** - Run manual tests for FEAT-024 session selection UI
+2. **Work on FEAT-022 and/or FEAT-023** - Can be parallelized
 
 ## Build & Run
 
