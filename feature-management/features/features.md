@@ -5,10 +5,10 @@
 
 ## Summary Statistics
 
-- **Total Features**: 33
-- **By Priority**: P0: 5, P1: 21, P2: 7, P3: 0
+- **Total Features**: 35
+- **By Priority**: P0: 5, P1: 20, P2: 10, P3: 0
 - **By Status**:
-  - New: 26
+  - New: 28
   - In Progress: 0
   - Completed: 6
   - Implemented: 1
@@ -26,7 +26,7 @@
 | FEAT-025 | Pane Output Rendering | ccmux-client | new | [Link](FEAT-025-pane-output-rendering/) |
 | FEAT-027 | Client Connection Registry | ccmux-server | new | [Link](FEAT-027-client-connection-registry/) |
 
-### P1 - High Priority (21)
+### P1 - High Priority (20)
 
 | ID | Title | Component | Status | Link |
 |----|-------|-----------|--------|------|
@@ -51,7 +51,7 @@
 | FEAT-032 | Integrated MCP Server | ccmux-server | new | [Link](FEAT-032-integrated-mcp-server/) |
 | FEAT-033 | tmux-like Auto-Start Behavior | ccmux-client | new | [Link](FEAT-033-tmux-like-auto-start-behavior/) |
 
-### P2 - Medium Priority (7)
+### P2 - Medium Priority (10)
 
 | ID | Title | Component | Status | Link |
 |----|-------|-----------|--------|------|
@@ -63,6 +63,8 @@
 | FEAT-018 | MCP Server - Model Context Protocol Integration | ccmux-server | new | [Link](FEAT-018-mcp-server-model-context-protocol-integration/) |
 | FEAT-019 | Sideband Protocol - XML Command Parsing from Claude Output | ccmux-server | new | [Link](FEAT-019-sideband-protocol-xml-command-parsing/) |
 | FEAT-031 | Session Delete/Kill Keybind in Session Select UI | ccmux-client | new | [Link](FEAT-031-session-delete-keybind/) |
+| FEAT-034 | Mouse Scroll Support | ccmux-client | new | [Link](FEAT-034-mouse-scroll-support/) |
+| FEAT-035 | Configurable Tab/Pane Switching | ccmux-client | new | [Link](FEAT-035-configurable-tab-switching/) |
 
 ### P3 - Low Priority (0)
 
@@ -70,6 +72,8 @@
 
 ## Recent Activity
 
+- 2026-01-09: Created FEAT-035 - Configurable Tab/Pane Switching (P2 Medium)
+- 2026-01-09: Created FEAT-034 - Mouse Scroll Support (P2 Medium)
 - 2026-01-09: Created FEAT-033 - tmux-like Auto-Start Behavior (P1 High)
 - 2026-01-09: Created FEAT-032 - Integrated MCP Server (P1 High)
 - 2026-01-09: Created FEAT-031 - Session Delete/Kill Keybind in Session Select UI (P2 Medium)
@@ -135,6 +139,8 @@ Based on the project vision, features will likely include:
 - **PTY output polling and broadcasting (FEAT-023)** - P0 Critical
 - **Pane output rendering (FEAT-025)** - P0 Critical
 - **tmux-like auto-start behavior (FEAT-033)** - Seamless UX
+- **Mouse scroll support (FEAT-034)** - Scrollback navigation
+- **Configurable tab/pane switching (FEAT-035)** - Quick navigation keybindings
 
 ### Claude Code Integration
 - State detection (thinking, waiting, complete)
@@ -171,6 +177,7 @@ Based on the project vision, features will likely include:
 - Customizable keybindings
 - Theme support
 - **Per-session-type scrollback configuration (FEAT-002)**
+- **Configurable tab/pane switching (FEAT-035)** - Custom keybindings
 
 ### Client Connection
 - **Unix socket client with async message framing (FEAT-011)** - Completed
@@ -184,3 +191,5 @@ Based on the project vision, features will likely include:
 - Status bar and borders
 - Claude state indicators
 - **Pane output rendering (FEAT-025)** - P0 Critical
+- **Mouse scroll support (FEAT-034)** - Scrollback via mouse/trackpad
+- **Configurable tab/pane switching (FEAT-035)** - Quick window/pane navigation

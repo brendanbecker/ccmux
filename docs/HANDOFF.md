@@ -30,11 +30,12 @@
 - Comprehensive modifier key support (Shift+Tab, Alt+key, Ctrl+Arrow, etc.)
 - New panes inherit server's working directory
 - **Integrated MCP bridge**: Claude controls same sessions as TUI user (11 tools)
-- **Sideband pane splitting**: Claude can spawn panes via `<ccmux:spawn>` tags
+- ~~**Sideband pane splitting**: Claude can spawn panes via `<ccmux:spawn>` tags~~ (BUG-005: not working)
 
 ### Known Issues
 - `kill -9` corrupts terminal (SIGKILL can't be caught - run `reset` to fix)
 - Legacy zombie sessions from before BUG-004 fix need manual cleanup (clear `~/.local/share/.ccmux/state/`)
+- **BUG-005**: Sideband commands (`<ccmux:spawn>`) don't work - parsing not integrated into output flow (FEAT-030 incomplete)
 
 ## Wave 4: Integration Features
 
@@ -58,6 +59,7 @@
 | BUG-002 | Flaky test (shared temp dir) | P2 | ✅ Fixed |
 | BUG-003 | Session missing default pane | P0 | ✅ Fixed |
 | BUG-004 | Zombie panes hang client on reattach | P1 | ✅ Fixed |
+| BUG-005 | Sideband parsing not integrated | P0 | 🔴 New |
 
 ## Post-MVP Features
 

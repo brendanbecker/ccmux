@@ -4,18 +4,35 @@
 **Last Updated**: 2026-01-09
 
 ## Summary Statistics
-- Total Bugs: 3
-- New: 1
+- Total Bugs: 5
+- New: 2
 - In Progress: 0
-- Resolved: 1
+- Resolved: 2
 
 ## Bugs by Priority
 
-### P0 - Critical (0)
+### P0 - Critical (1)
 
-*No P0 bugs*
+#### BUG-005: Sideband parsing not integrated into PTY output flow
 
-### P1 - High Priority (1)
+**Status**: New
+**Filed**: 2026-01-09
+**Component**: ccmux-server
+
+**Description**:
+Sideband commands (`<ccmux:spawn>`, etc.) output by Claude are displayed as literal text instead of being parsed and executed. The sideband parsing infrastructure (FEAT-019, FEAT-030) exists but is not wired into the PTY output flow.
+
+**Root Cause**:
+FEAT-030 was marked as merged but is incomplete. `SidebandParser` and `CommandExecutor` are only used in tests. `PtyOutputPoller::flush()` broadcasts raw PTY output without parsing. No code instantiates `CommandExecutor` in the server runtime.
+
+**Impact**:
+- Multi-agent orchestration broken (Claude cannot spawn worker panes)
+- Core sideband protocol feature non-functional
+
+**Proposed Fix**:
+Integrate `SidebandParser` into `PtyOutputPoller` to filter output and execute commands before broadcasting to clients.
+
+### P1 - High Priority (2)
 
 #### BUG-004: Client hangs when reattaching to session with dead pane [RESOLVED]
 
@@ -35,6 +52,22 @@ Added automatic cleanup when PTY processes exit:
 - New `PaneClosedNotification` channel from output pollers
 - `run_pane_cleanup_loop()` task removes dead panes, empty windows, empty sessions
 - All new panes get cleanup channel via `HandlerContext`
+
+#### BUG-006: Viewport not sizing to terminal dimensions [RESOLVED]
+
+**Status**: Resolved
+**Filed**: 2026-01-09
+**Resolved**: 2026-01-09
+**Component**: ccmux-client
+
+**Description**:
+The ccmux viewport does not size itself to match the actual terminal dimensions. When ccmux is started in a full-screen terminal, the viewport renders at approximately quarter-screen size instead of filling the available space.
+
+**Root Cause**:
+Chicken-and-egg problem: Server creates panes at 80x24 default, client used server's dimensions instead of its own terminal size when creating UI panes, and no resize was sent on attach.
+
+**Resolution**:
+Modified `ccmux-client/src/ui/app.rs` to use client's terminal size when creating UI panes on attach, and send resize messages to server for all panes immediately after attach.
 
 ### P2 - Medium Priority (1)
 
@@ -86,5 +119,8 @@ fn test_ensure_dir_nested() {
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-09 | BUG-006 | Resolved | Client now uses terminal size on attach |
+| 2026-01-09 | BUG-006 | Filed | Viewport not sizing to terminal dimensions |
+| 2026-01-09 | BUG-005 | Filed | Sideband parsing not integrated into output flow |
 | 2026-01-09 | BUG-004 | Filed & Resolved | Zombie panes causing client hang |
 | 2026-01-09 | BUG-002 | Filed | Flaky test due to shared temp directory |
