@@ -734,6 +734,7 @@ mod tests {
         let worktree = WorktreeInfo {
             path: worktree_path.clone(),
             branch: Some("main".to_string()),
+            head: "abc123".to_string(),
             is_main: true,
         };
 

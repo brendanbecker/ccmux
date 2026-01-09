@@ -558,6 +558,7 @@ mod tests {
         let worktree = WorktreeInfo {
             path: PathBuf::from("/path/to/worktree"),
             branch: Some("feature-1".to_string()),
+            head: "def456".to_string(),
             is_main: false,
         };
 
@@ -579,6 +580,7 @@ mod tests {
         let worktree = WorktreeInfo {
             path: PathBuf::from("/path/to/main"),
             branch: Some("main".to_string()),
+            head: "abc123".to_string(),
             is_main: true,
         };
 
@@ -597,6 +599,7 @@ mod tests {
         let worktree = WorktreeInfo {
             path: PathBuf::from("/path/to/worktree"),
             branch: Some("feature-1".to_string()),
+            head: "def456".to_string(),
             is_main: false,
         };
 
@@ -621,6 +624,7 @@ mod tests {
         let worktree = WorktreeInfo {
             path: PathBuf::from("/path/to/main"),
             branch: Some("main".to_string()),
+            head: "abc123".to_string(),
             is_main: true,
         };
 

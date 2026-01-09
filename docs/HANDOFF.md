@@ -6,8 +6,8 @@
 
 **ccmux** is a Claude Code-aware terminal multiplexer in Rust. Development follows the [Context Engineering Methodology](./CONTEXT_ENGINEERING_METHODOLOGY.md).
 
-**Current Stage**: Stage 6 (Implementation) - Wave 1 In Progress
-**Completed**: Wave 0 + 4 Wave 1 features (10 of 20 features implemented)
+**Current Stage**: Stage 6 (Implementation) - Wave 1 Complete
+**Completed**: Wave 0 + Wave 1 (16 of 20 features implemented)
 
 ## Implementation Progress
 
@@ -16,36 +16,40 @@
 | Wave | Features | Status |
 |------|----------|--------|
 | 0 | Protocol, Utilities, Connection, Session, PTY, Config | ✅ Complete |
-| 1 | Pane Content, Scrollback, Viewport, Worktree, Response Channel, Logging, Client UI, Terminal Parsing, Persistence | ⏳ In Progress (4/9) |
-| 2 | Client Input, Claude Detection, Sideband Protocol | ⏸️ Blocked by Wave 1 |
+| 1 | Parser, Scrollback, Viewport, Worktree (3), Response, Logging, UI, Persistence | ✅ Complete |
+| 2 | Client Input, Claude Detection, Sideband Protocol | ⏳ Ready |
 | 3 | MCP Server, Session Isolation | ⏸️ Blocked by Wave 2 |
 
 ### Feature Implementation Status
 
 | ID | Feature | Component | Status | Tests | Priority |
 |----|---------|-----------|--------|-------|----------|
-| FEAT-001 | Pane Content Abstraction | session/pane | ⏳ Wave 1 | - | P1 |
+| FEAT-001 | vt100 Parser Integration | session/pane | ✅ Done | 23 | P1 |
 | FEAT-002 | Per-Session Scrollback Config | config | ✅ Done | 47 | P1 |
 | FEAT-003 | Viewport Pinning | tui | ✅ Done | 23 | P2 |
-| FEAT-004 | Worktree-Aware Orchestration | orchestration | ⏳ Wave 1 | - | P2 |
+| FEAT-004a | Worktree Detection | orchestration | ✅ Done | 12 | P2 |
+| FEAT-004b | Session-Worktree Binding | orchestration | ✅ Done | 8 | P2 |
+| FEAT-004c | Cross-Session Messaging | orchestration | ✅ Done | 45 | P2 |
 | FEAT-005 | Response Channel | orchestration | ✅ Done | 72 | P1 |
 | FEAT-006 | Per-Session Log Levels | logging | ✅ Done | 40 | P2 |
 | FEAT-007 | Protocol Layer | ccmux-protocol | ✅ Done | 86 | P1 |
 | FEAT-008 | Utilities | ccmux-utils | ✅ Done | 108 | P1 |
-| FEAT-009 | Client UI | ccmux-client | ⏳ Wave 1 | - | P1 |
-| FEAT-010 | Client Input | ccmux-client | ⏸️ Wave 2 | - | P1 |
+| FEAT-009 | Client UI | ccmux-client | ✅ Done | 97 | P1 |
+| FEAT-010 | Client Input | ccmux-client | ⏳ Wave 2 | - | P1 |
 | FEAT-011 | Client Connection | ccmux-client | ✅ Done | 31 | P1 |
 | FEAT-012 | Session Management | ccmux-server | ✅ Done | 88 | P1 |
 | FEAT-013 | PTY Management | ccmux-server | ✅ Done | 17 | P1 |
-| FEAT-014 | Terminal Parsing | ccmux-server | ⏳ Wave 1 | - | P1 |
-| FEAT-015 | Claude Detection | ccmux-server | ⏸️ Wave 2 | - | P1 |
-| FEAT-016 | Persistence | ccmux-server | ⏳ Wave 1 | - | P2 |
+| FEAT-014 | ~~Terminal Parsing~~ | - | 🔀 Merged | - | - |
+| FEAT-015 | Claude Detection | ccmux-server | ⏳ Wave 2 | - | P1 |
+| FEAT-016 | Persistence | ccmux-server | ✅ Done | 85 | P2 |
 | FEAT-017 | Configuration | ccmux-server | ✅ Done | 38 | P1 |
 | FEAT-018 | MCP Server | ccmux-server | ⏸️ Wave 3 | - | P2 |
-| FEAT-019 | Sideband Protocol | ccmux-server | ⏸️ Wave 2 | - | P2 |
+| FEAT-019 | Sideband Protocol | ccmux-server | ⏳ Wave 2 | - | P2 |
 | FEAT-020 | Session Isolation | ccmux-server | ⏸️ Wave 3 | - | P1 |
 
-**Total Tests**: 566 passing
+> **Note:** FEAT-004 decomposed into 004a/b/c. FEAT-014 merged into FEAT-001 (both add vt100 parsing).
+
+**Total Tests**: 816 passing
 
 ## Orchestration Pattern
 
@@ -58,41 +62,23 @@ This project uses **git worktrees** for parallel feature development:
 5. Run test-runner agent to validate and add tests
 6. Repeat for next wave
 
-## Wave 1 Features (In Progress)
+## Wave 2 Features (Ready)
 
-4 of 9 features complete. Remaining 5 can be developed **in parallel**.
-
-### Critical Path (P1) - Remaining
+3 features to implement:
 
 | ID | Feature | Component | Dependencies | Effort |
 |----|---------|-----------|--------------|--------|
-| FEAT-009 | Client UI | ccmux-client | FEAT-007, FEAT-011 | large |
-| FEAT-014 | Terminal Parsing | ccmux-server | FEAT-013 | medium |
-| FEAT-001 | Pane Content Abstraction | session/pane | none | large |
-
-### Additional (P2) - Remaining
-
-| ID | Feature | Component | Dependencies | Effort |
-|----|---------|-----------|--------------|--------|
-| FEAT-016 | Persistence | ccmux-server | FEAT-012 | large |
-| FEAT-004 | Worktree Orchestration | orchestration | none | xl |
-
-### Completed This Wave
-
-| ID | Feature | Tests |
-|----|---------|-------|
-| FEAT-002 | Per-Session Scrollback | 47 |
-| FEAT-003 | Viewport Pinning | 23 |
-| FEAT-005 | Response Channel | 72 |
-| FEAT-006 | Per-Session Logging | 40 |
+| FEAT-010 | Client Input | ccmux-client | FEAT-009 | medium |
+| FEAT-015 | Claude Detection | ccmux-server | FEAT-001 | medium |
+| FEAT-019 | Sideband Protocol | ccmux-server | FEAT-015 | medium |
 
 ## Critical Path
 
 ```
-FEAT-013 (done) → FEAT-014 → FEAT-015 → FEAT-020
+FEAT-001 (done) → FEAT-015 → FEAT-019 → FEAT-020
 ```
 
-FEAT-014 and FEAT-015 are on the critical path—prioritize these to minimize total completion time.
+FEAT-015 (Claude Detection) is now unblocked and on the critical path.
 
 ## Completed Work
 
@@ -103,6 +89,36 @@ FEAT-014 and FEAT-015 are on the critical path—prioritize these to minimize to
 - 3 ADRs for key decisions
 
 ### Stage 6: Implementation
+
+**2026-01-08 - Wave 1 Complete**
+- Merged final 4 feature branches from worktrees:
+  - `feature/FEAT-001-pane-content`: vt100 parser integration (23 tests)
+  - `feature/FEAT-004a-worktree-detection`: Git worktree discovery (12 tests)
+  - `feature/FEAT-004b-session-binding`: Session-worktree association (8 tests)
+  - `feature/FEAT-004c-cross-session`: Cross-session messaging with router (45 tests)
+- Resolved merge conflicts in orchestration module (combined worktree + router)
+- Fixed WorktreeInfo struct compatibility (added `head` field)
+- Test count: 748 → 816 (+68 tests)
+- Wave 1 fully complete, Wave 2 unblocked
+
+**2026-01-08 - Feature Decomposition**
+- Rescoped FEAT-001 from "Pane Content Abstraction" to "vt100 Parser Integration" (small)
+- Merged FEAT-014 (Terminal Parsing) into FEAT-001 - same goal, avoid duplication
+- Decomposed FEAT-004 (xl effort) into 3 medium features:
+  - FEAT-004a: Worktree Detection
+  - FEAT-004b: Session-Worktree Binding
+  - FEAT-004c: Cross-Session Messaging
+- Created fresh worktrees from current main (all 4 at commit 4bc4813)
+- Wave 1 now has 10 features total (6 complete, 4 remaining)
+
+**2026-01-08 - Wave 1 Progress (6/9 features)**
+- Merged 2 more feature branches:
+  - `feature/FEAT-009-client-ui`: Ratatui-based terminal UI (97 tests)
+  - `feature/FEAT-016-persistence`: WAL + checkpoint persistence with recovery (85 tests)
+- Fixed compile errors from protocol type integration
+- Test count: 566 → 748 (+182 tests)
+- Identified conflicts in FEAT-001 and FEAT-014 (both need reconciliation with scrollback)
+- FEAT-004 has no implementation (only SESSION_PROMPT.md)
 
 **2026-01-08 - Wave 1 Partial (4/9 features)**
 - Merged 4 feature branches from worktrees:
