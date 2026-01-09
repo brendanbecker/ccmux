@@ -63,8 +63,8 @@
 | FEAT-029 | MCP Natural Language Control | P1 | ✅ Merged |
 | FEAT-030 | Sideband Pane Splitting | P1 | ✅ Merged |
 | FEAT-031 | Session Delete Keybind (Ctrl+D) | P2 | ✅ Merged |
-| FEAT-032 | Integrated MCP Server | P1 | 🔄 In progress |
-| FEAT-033 | tmux-like Auto-Start | P1 | 🔄 In progress |
+| FEAT-032 | Integrated MCP Server | P1 | ✅ Merged |
+| FEAT-033 | tmux-like Auto-Start | P1 | ✅ Merged |
 
 ### FEAT-032/033: UX Improvements
 - **FEAT-032**: MCP bridge connects to main daemon, Claude controls same sessions as user
@@ -72,10 +72,7 @@
 
 ## Active Worktrees
 
-| Worktree | Branch | Status |
-|----------|--------|--------|
-| `ccmux-wt-feat-032` | feat-032-integrated-mcp-server | 🔄 In progress |
-| `ccmux-wt-feat-033` | feat-033-tmux-like-auto-start | 🔄 In progress |
+None - all features merged.
 
 ## Session Log (2026-01-09) - Continued
 
