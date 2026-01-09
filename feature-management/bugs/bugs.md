@@ -5,9 +5,9 @@
 
 ## Summary Statistics
 - Total Bugs: 6
-- New: 1
+- New: 0
 - In Progress: 0
-- Resolved: 4
+- Resolved: 5
 
 ## Bugs by Priority
 
@@ -88,12 +88,15 @@ Shift+Tab keystrokes are silently dropped instead of being sent to the PTY. Prog
 **Resolution**:
 Added `KeyCode::BackTab => Some(b"\x1b[Z".to_vec())` to `keys.rs`.
 
-### P2 - Medium Priority (1)
+### P2 - Medium Priority (0)
 
-#### BUG-002: Flaky test `test_ensure_dir_nested` due to shared temp directory
+*No open P2 bugs*
 
-**Status**: New
+#### BUG-002: Flaky test `test_ensure_dir_nested` due to shared temp directory [RESOLVED]
+
+**Status**: Resolved
 **Filed**: 2026-01-09
+**Resolved**: 2026-01-09
 **Component**: ccmux-utils
 **File**: `ccmux-utils/src/paths.rs:413`
 
@@ -118,17 +121,8 @@ assertion failed: result.is_ok()
 2. Test may fail intermittently (not always reproducible)
 3. Running `cargo test -p ccmux-utils test_ensure_dir_nested` passes consistently
 
-**Suggested Fix**:
-Use `tempfile::TempDir` for test isolation, or use unique directory names for each test (e.g., include test function name in the path).
-
-Example fix:
-```rust
-fn test_ensure_dir_nested() {
-    let temp_dir = tempfile::TempDir::new().unwrap();
-    let test_dir = temp_dir.path().join("nested").join("deep");
-    // ... rest of test
-}
-```
+**Resolution**:
+Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 ### P3 - Low Priority (0)
 

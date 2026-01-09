@@ -30,12 +30,11 @@
 - Comprehensive modifier key support (Shift+Tab, Alt+key, Ctrl+Arrow, etc.)
 - New panes inherit server's working directory
 - **Integrated MCP bridge**: Claude controls same sessions as TUI user (11 tools)
-- ~~**Sideband pane splitting**: Claude can spawn panes via `<ccmux:spawn>` tags~~ (BUG-005: not working)
+- **Sideband pane splitting**: Claude can spawn panes via `<ccmux:spawn>` tags
 
 ### Known Issues
 - `kill -9` corrupts terminal (SIGKILL can't be caught - run `reset` to fix)
 - Legacy zombie sessions from before BUG-004 fix need manual cleanup (clear `~/.local/share/.ccmux/state/`)
-- **BUG-005**: Sideband commands (`<ccmux:spawn>`) don't work - parsing not integrated into output flow (FEAT-030 incomplete)
 
 ## Wave 4: Integration Features
 
@@ -59,7 +58,9 @@
 | BUG-002 | Flaky test (shared temp dir) | P2 | ✅ Fixed |
 | BUG-003 | Session missing default pane | P0 | ✅ Fixed |
 | BUG-004 | Zombie panes hang client on reattach | P1 | ✅ Fixed |
-| BUG-005 | Sideband parsing not integrated | P0 | 🔴 New |
+| BUG-005 | Sideband parsing not integrated | P0 | ✅ Fixed |
+| BUG-006 | Viewport not sizing to terminal | P1 | ✅ Fixed |
+| BUG-007 | Shift+Tab not passed through | P1 | ✅ Fixed |
 
 ## Post-MVP Features
 
@@ -70,6 +71,8 @@
 | FEAT-031 | Session Delete Keybind (Ctrl+D) | P2 | ✅ Merged |
 | FEAT-032 | Integrated MCP Server | P1 | ✅ Merged |
 | FEAT-033 | tmux-like Auto-Start | P1 | ✅ Merged |
+| FEAT-034 | Mouse Scroll Support | P2 | 📋 Planned |
+| FEAT-035 | Configurable Tab/Pane Switching | P2 | 📋 Planned |
 
 ### FEAT-032/033: UX Improvements
 - **FEAT-032**: MCP bridge connects to main daemon, Claude controls same sessions as user
@@ -228,3 +231,23 @@ Add to `~/.claude/mcp.json`:
 - `3a1ad12` - fix(server): add pane cleanup loop for BUG-004
 - Merge FEAT-031, FEAT-032, FEAT-033
 - `8501844` - feat(config): add default_command for auto-launching programs
+
+## Session Log (2026-01-09) - Bug Fix & Feature Planning Session
+
+### Work Completed
+1. **BUG-005** fixed - Sideband parsing now integrated into PTY output flow
+2. **BUG-006** fixed - Viewport now sizes to client terminal on attach
+3. **BUG-007** fixed - Shift+Tab (BackTab) now passed through to PTY
+4. **FEAT-034** planned - Mouse scroll support (work item created)
+5. **FEAT-035** planned - Configurable tab/pane switching with Ctrl+PageUp/Down
+
+### Key Technical Discoveries
+- Crossterm sends `KeyCode::BackTab` for Shift+Tab, not `KeyCode::Tab` with SHIFT modifier
+- Left/Right Ctrl distinction not possible in terminal protocols for key combinations
+- Windows captures Alt+Tab/Ctrl+Tab at OS level; use PageUp/PageDown instead
+
+### Commits Made
+- `b3b0d68` - fix(client): use client terminal size on session attach (BUG-006)
+- `dca9e36` - docs: add BUG-005, FEAT-034, FEAT-035 work items
+- `27af339` - fix(client): handle BackTab keycode for Shift+Tab (BUG-007)
+- `afee35a` - Merge BUG-005 (sideband parsing integration)
