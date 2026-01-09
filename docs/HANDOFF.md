@@ -32,6 +32,7 @@
 ### Known Issues
 - `kill -9` corrupts terminal (SIGKILL can't be caught - run `reset` to fix)
 - BUG-002: Flaky test (P2, doesn't affect functionality)
+- Legacy zombie sessions from before BUG-004 fix need manual cleanup (clear `~/.local/share/.ccmux/state/`)
 
 ## Wave 4: Integration Features
 
@@ -52,15 +53,17 @@
 | ID | Description | Priority | Status |
 |----|-------------|----------|--------|
 | BUG-001 | Client input not captured | P0 | ✅ Fixed |
-| BUG-002 | Flaky test (shared temp dir) | P2 | 🔲 Open (worktree ready) |
+| BUG-002 | Flaky test (shared temp dir) | P2 | ✅ Fixed |
 | BUG-003 | Session missing default pane | P0 | ✅ Fixed |
+| BUG-004 | Zombie panes hang client on reattach | P1 | ✅ Fixed |
 
 ## Post-MVP Features
 
 | ID | Feature | Priority | Status |
 |----|---------|----------|--------|
-| FEAT-029 | MCP Natural Language Control | P1 | 🔲 Worktree ready |
-| FEAT-030 | Sideband Pane Splitting | P1 | 🔲 Work item created |
+| FEAT-029 | MCP Natural Language Control | P1 | ✅ Merged |
+| FEAT-030 | Sideband Pane Splitting | P1 | 🔄 In progress |
+| FEAT-031 | Session Delete Keybind (Ctrl+D) | P2 | 🔄 In progress |
 
 ### FEAT-029 Scope (MCP Tools)
 - Fix `ccmux_create_pane` direction parameter (currently ignored)
@@ -73,10 +76,8 @@
 
 | Worktree | Branch | Status |
 |----------|--------|--------|
-| `ccmux-wt-bug-002` | bug-002-flaky-test | Ready to merge |
-| `ccmux-wt-bug-003` | bug-003-session-default-pane | ✅ Merged |
-| `ccmux-wt-feat-025` | feat-025-pane-output-rendering | ✅ Merged |
-| `ccmux-wt-feat-029` | feat-029-mcp-natural-language-control | Ready for implementation |
+| `ccmux-wt-feat-030` | feat-030-sideband-pane-splitting | 🔄 In progress |
+| `ccmux-wt-feat-031` | feat-031-session-delete-keybind | 🔄 In progress |
 
 ## Session Log (2026-01-09) - Continued
 
@@ -91,6 +92,8 @@
 8. **Modifier key support** - Shift+Tab, Alt+key, Ctrl+Arrow, Shift+Arrow, Alt+Backspace
 9. **FEAT-029** work item created - MCP natural language terminal control
 10. **FEAT-030** work item created (by Claude in ccmux) - Sideband pane splitting
+11. **BUG-004** fixed - Zombie panes/sessions now auto-cleanup when PTY dies
+12. **FEAT-031** work item created - Session delete keybind (Ctrl+D) for cleanup
 
 ### Key Fixes Made
 - `ccmux-server/src/handlers/session.rs` - Start output poller after PTY spawn
@@ -98,6 +101,8 @@
 - `ccmux-server/src/pty/output.rs` - Broadcast PaneClosed on EOF
 - `ccmux-client/src/ui/app.rs` - Comprehensive modifier key handling
 - `ccmux-client/src/ui/app.rs` - Return to session select when panes empty
+- `ccmux-server/src/pty/output.rs` - PaneClosedNotification channel for cleanup
+- `ccmux-server/src/main.rs` - run_pane_cleanup_loop() for auto-cleanup of dead panes/sessions
 
 ### Commits Made
 - `890e924` - fix(server): start output poller on session creation
