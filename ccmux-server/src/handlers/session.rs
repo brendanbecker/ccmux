@@ -86,16 +86,17 @@ impl HandlerContext {
                         Ok(handle) => {
                             info!("PTY spawned for default pane {}", pane_id);
 
-                            // Start output poller to broadcast PTY output to clients
+                            // Start output poller with sideband parsing enabled
                             let reader = handle.clone_reader();
-                            let _poller_handle = PtyOutputPoller::spawn_with_cleanup(
+                            let _poller_handle = PtyOutputPoller::spawn_with_sideband(
                                 pane_id,
                                 session_id,
                                 reader,
                                 self.registry.clone(),
                                 Some(self.pane_closed_tx.clone()),
+                                self.command_executor.clone(),
                             );
-                            info!("Output poller started for pane {}", pane_id);
+                            info!("Output poller started for pane {} (sideband enabled)", pane_id);
                         }
                         Err(e) => {
                             // Log error but don't fail session creation
@@ -314,12 +315,18 @@ mod tests {
         let session_manager = Arc::new(RwLock::new(SessionManager::new()));
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
+        let config = Arc::new(crate::config::AppConfig::default());
+        let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+        ));
 
         let (tx, _rx) = mpsc::channel(10);
         let client_id = registry.register_client(tx);
 
         let (pane_closed_tx, _) = mpsc::channel(10);
-        HandlerContext::new(session_manager, pty_manager, registry, client_id, pane_closed_tx)
+        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor)
     }
 
     #[tokio::test]

@@ -33,20 +33,35 @@
 //!
 //! ## Processing Pipeline
 //!
+//! The sideband protocol is integrated into the PTY output flow via
+//! `PtyOutputPoller::spawn_with_sideband()`. The pipeline:
+//!
 //! ```text
-//! PTY Output → SidebandParser → (display_text, commands)
+//! PTY Output → PtyOutputPoller.handle_output()
 //!                    │
-//!                    ├─→ Commands → CommandExecutor → SessionManager
+//!                    ├─→ SidebandParser.parse() → (display_text, commands)
 //!                    │
-//!                    └─→ Display Text → vt100 Parser → Client
+//!                    ├─→ Commands → AsyncCommandExecutor → SessionManager
+//!                    │
+//!                    └─→ Display Text → Client Broadcast
 //! ```
 //!
 //! Commands are stripped from the output before reaching the terminal display.
+//!
+//! ## Components
+//!
+//! - [`SidebandParser`]: Extracts XML commands from PTY output text
+//! - [`AsyncCommandExecutor`]: Executes commands (async, uses tokio RwLock)
+//! - [`CommandExecutor`]: Executes commands (sync, uses parking_lot Mutex)
+//! - [`SidebandCommand`]: Enum of all command types
+//! - [`SpawnResult`]: Result of spawn commands with PTY reader for new pollers
 
+mod async_executor;
 mod commands;
 mod executor;
 mod parser;
 
+pub use async_executor::AsyncCommandExecutor;
 pub use commands::{ControlAction, NotifyLevel, PaneRef, SidebandCommand, SplitDirection};
 pub use executor::{CommandExecutor, ExecuteError, ExecuteResult, SpawnResult};
 pub use parser::SidebandParser;

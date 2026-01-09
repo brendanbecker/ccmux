@@ -3,6 +3,12 @@
 //! This module implements background tasks that poll PTY output and broadcast
 //! it to connected clients in real-time. Each pane's PTY gets its own polling
 //! task that reads output and routes it to all clients attached to that session.
+//!
+//! ## Sideband Command Integration
+//!
+//! When sideband parsing is enabled, the poller intercepts XML command tags
+//! embedded in PTY output (e.g., `<ccmux:spawn direction="vertical" />`),
+//! executes them, and strips them from the display output.
 
 use std::io::Read;
 use std::sync::Arc;
@@ -19,6 +25,7 @@ use uuid::Uuid;
 use ccmux_protocol::ServerMessage;
 
 use crate::registry::ClientRegistry;
+use crate::sideband::{AsyncCommandExecutor, SidebandCommand, SidebandParser, SplitDirection};
 
 /// Default buffer flush timeout in milliseconds
 const DEFAULT_FLUSH_TIMEOUT_MS: u64 = 50;
@@ -88,6 +95,7 @@ pub struct PaneClosedNotification {
 /// - Buffers output for efficient broadcasting
 /// - Flushes on newline, timeout, or buffer size threshold
 /// - Broadcasts to all clients attached to the session
+/// - Optionally parses and executes sideband commands from output
 pub struct PtyOutputPoller {
     /// Pane ID this poller is associated with
     pane_id: Uuid,
@@ -107,6 +115,10 @@ pub struct PtyOutputPoller {
     last_data_time: Instant,
     /// Channel to notify server when pane closes (for cleanup)
     pane_closed_tx: Option<mpsc::Sender<PaneClosedNotification>>,
+    /// Sideband parser for extracting commands from output (optional)
+    sideband_parser: Option<SidebandParser>,
+    /// Command executor for processing sideband commands (optional)
+    command_executor: Option<Arc<AsyncCommandExecutor>>,
 }
 
 impl PtyOutputPoller {
@@ -156,6 +168,46 @@ impl PtyOutputPoller {
             cancel_token: cancel_token.clone(),
             last_data_time: Instant::now(),
             pane_closed_tx,
+            sideband_parser: None,
+            command_executor: None,
+        };
+
+        let join_handle = tokio::spawn(poller.run());
+
+        PollerHandle {
+            cancel_token,
+            join_handle,
+        }
+    }
+
+    /// Spawn a new output poller with sideband command parsing enabled
+    ///
+    /// This version integrates sideband parsing, which:
+    /// - Intercepts XML command tags (e.g., `<ccmux:spawn ... />`) from output
+    /// - Executes the commands against the session manager
+    /// - Strips command tags from the display output
+    pub fn spawn_with_sideband(
+        pane_id: Uuid,
+        session_id: Uuid,
+        pty_reader: Arc<Mutex<Box<dyn Read + Send>>>,
+        registry: Arc<ClientRegistry>,
+        pane_closed_tx: Option<mpsc::Sender<PaneClosedNotification>>,
+        command_executor: Arc<AsyncCommandExecutor>,
+    ) -> PollerHandle {
+        let cancel_token = CancellationToken::new();
+        let config = OutputPollerConfig::default();
+        let poller = Self {
+            pane_id,
+            session_id,
+            pty_reader,
+            registry,
+            buffer: Vec::with_capacity(config.max_buffer_size),
+            config,
+            cancel_token: cancel_token.clone(),
+            last_data_time: Instant::now(),
+            pane_closed_tx,
+            sideband_parser: Some(SidebandParser::new()),
+            command_executor: Some(command_executor),
         };
 
         let join_handle = tokio::spawn(poller.run());
@@ -333,20 +385,129 @@ impl PtyOutputPoller {
     }
 
     /// Handle new output data
+    ///
+    /// If sideband parsing is enabled:
+    /// - Parses the data for embedded sideband commands
+    /// - Executes any commands found (spawn, notify, etc.)
+    /// - Buffers only the display text (with commands stripped)
+    ///
+    /// If sideband parsing is disabled:
+    /// - Buffers raw data unchanged (legacy behavior)
     async fn handle_output(&mut self, data: &[u8]) {
-        self.buffer.extend_from_slice(data);
         self.last_data_time = Instant::now();
 
-        trace!(
-            pane_id = %self.pane_id,
-            bytes = data.len(),
-            buffer_size = self.buffer.len(),
-            "Received PTY output"
-        );
+        // Check if sideband parsing is enabled
+        if let (Some(parser), Some(executor)) = (
+            self.sideband_parser.as_mut(),
+            self.command_executor.as_ref(),
+        ) {
+            // Convert bytes to string for parsing (lossy for non-UTF-8 data)
+            let text = String::from_utf8_lossy(data);
+
+            // Parse for sideband commands
+            let (display_text, commands) = parser.parse(&text);
+
+            trace!(
+                pane_id = %self.pane_id,
+                bytes = data.len(),
+                display_bytes = display_text.len(),
+                commands = commands.len(),
+                "Parsed PTY output for sideband commands"
+            );
+
+            // Execute any commands found
+            for cmd in commands {
+                self.execute_sideband_command(cmd, executor.clone()).await;
+            }
+
+            // Buffer the display text (with commands stripped)
+            self.buffer.extend_from_slice(display_text.as_bytes());
+        } else {
+            // No sideband parsing - buffer raw data
+            self.buffer.extend_from_slice(data);
+
+            trace!(
+                pane_id = %self.pane_id,
+                bytes = data.len(),
+                buffer_size = self.buffer.len(),
+                "Received PTY output"
+            );
+        }
 
         // Check if we should flush
         if self.should_flush() {
             self.flush().await;
+        }
+    }
+
+    /// Execute a sideband command
+    ///
+    /// For spawn commands, this also starts the output poller for the new pane.
+    async fn execute_sideband_command(
+        &self,
+        cmd: SidebandCommand,
+        executor: Arc<AsyncCommandExecutor>,
+    ) {
+        match &cmd {
+            SidebandCommand::Spawn { direction, command, cwd } => {
+                // Handle spawn specially - we need to start a poller for the new pane
+                info!(
+                    pane_id = %self.pane_id,
+                    direction = ?direction,
+                    command = ?command,
+                    cwd = ?cwd,
+                    "Executing sideband spawn command"
+                );
+
+                match executor.execute_spawn_command(
+                    self.pane_id,
+                    direction.clone(),
+                    command.clone(),
+                    cwd.clone(),
+                ).await {
+                    Ok(result) => {
+                        info!(
+                            source_pane = %self.pane_id,
+                            new_pane = %result.pane_id,
+                            session = %result.session_id,
+                            "Sideband spawn succeeded, starting output poller for new pane"
+                        );
+
+                        // Start output poller for the new pane with sideband enabled
+                        let _new_poller = PtyOutputPoller::spawn_with_sideband(
+                            result.pane_id,
+                            result.session_id,
+                            result.pty_reader,
+                            self.registry.clone(),
+                            self.pane_closed_tx.clone(),
+                            executor,
+                        );
+                    }
+                    Err(e) => {
+                        error!(
+                            pane_id = %self.pane_id,
+                            error = %e,
+                            "Sideband spawn command failed"
+                        );
+                    }
+                }
+            }
+            _ => {
+                // For non-spawn commands, just execute them
+                debug!(
+                    pane_id = %self.pane_id,
+                    command = ?cmd,
+                    "Executing sideband command"
+                );
+
+                if let Err(e) = executor.execute(cmd, self.pane_id).await {
+                    warn!(
+                        pane_id = %self.pane_id,
+                        error = %e,
+                        "Sideband command execution failed"
+                    );
+                }
+            }
         }
     }
 

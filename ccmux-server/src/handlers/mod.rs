@@ -20,6 +20,7 @@ use crate::config::AppConfig;
 use crate::pty::{PaneClosedNotification, PtyManager};
 use crate::registry::{ClientId, ClientRegistry};
 use crate::session::SessionManager;
+use crate::sideband::AsyncCommandExecutor;
 
 /// Context for message handlers
 ///
@@ -37,6 +38,8 @@ pub struct HandlerContext {
     pub client_id: ClientId,
     /// Channel to notify when panes close (for cleanup)
     pub pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
+    /// Sideband command executor for processing Claude commands
+    pub command_executor: Arc<AsyncCommandExecutor>,
 }
 
 /// Result of handling a message
@@ -62,6 +65,7 @@ impl HandlerContext {
         config: Arc<AppConfig>,
         client_id: ClientId,
         pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
+        command_executor: Arc<AsyncCommandExecutor>,
     ) -> Self {
         Self {
             session_manager,
@@ -70,6 +74,7 @@ impl HandlerContext {
             config,
             client_id,
             pane_closed_tx,
+            command_executor,
         }
     }
 
@@ -212,6 +217,12 @@ mod tests {
         let session_manager = Arc::new(RwLock::new(SessionManager::new()));
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
+        let config = Arc::new(crate::config::AppConfig::default());
+        let command_executor = Arc::new(AsyncCommandExecutor::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+        ));
 
         // Register a test client
         let (tx, _rx) = mpsc::channel(10);
@@ -220,7 +231,7 @@ mod tests {
         // Create cleanup channel (receiver is dropped in tests)
         let (pane_closed_tx, _pane_closed_rx) = mpsc::channel(10);
 
-        HandlerContext::new(session_manager, pty_manager, registry, client_id, pane_closed_tx)
+        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor)
     }
 
     #[tokio::test]

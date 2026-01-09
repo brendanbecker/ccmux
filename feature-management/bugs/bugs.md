@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-09
 
 ## Summary Statistics
-- Total Bugs: 3
-- New: 1
+- Total Bugs: 4
+- New: 2
 - In Progress: 0
 - Resolved: 1
 
@@ -15,7 +15,34 @@
 
 *No P0 bugs*
 
-### P1 - High Priority (1)
+### P1 - High Priority (2)
+
+#### BUG-005: Sideband parsing not integrated into PTY output flow [NEW]
+
+**Status**: New
+**Filed**: 2026-01-09
+**Component**: ccmux-server
+**Directory**: [BUG-005-sideband-parsing-not-integrated](BUG-005-sideband-parsing-not-integrated/)
+
+**Description**:
+Sideband commands (`<ccmux:spawn>`, `<ccmux:focus>`, etc.) output by Claude are displayed as literal text instead of being parsed and executed. The sideband parsing infrastructure (FEAT-019, FEAT-030) exists but is not wired into the PTY output flow.
+
+**Root Cause**:
+- FEAT-019 implemented `SidebandParser` and command types
+- FEAT-030 implemented `CommandExecutor` with spawn functionality
+- The integration point - wiring parser/executor into `PtyOutputPoller::flush()` - was never completed
+- `SidebandParser` and `CommandExecutor` are only instantiated in test code
+- No code in server runtime creates these components
+
+**Impact**:
+Claude cannot control ccmux via sideband commands. The core value proposition of Claude-ccmux integration (autonomous pane spawning, input routing, notifications) is non-functional.
+
+**Key Files**:
+- `ccmux-server/src/pty/output.rs:389-394` - flush() broadcasts raw data
+- `ccmux-server/src/sideband/mod.rs:63-72` - executor only in tests
+- `ccmux-server/src/main.rs` - no sideband instantiation
+
+---
 
 #### BUG-004: Client hangs when reattaching to session with dead pane [RESOLVED]
 
@@ -86,5 +113,6 @@ fn test_ensure_dir_nested() {
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-09 | BUG-005 | Filed | Sideband parsing not integrated into PTY output flow |
 | 2026-01-09 | BUG-004 | Filed & Resolved | Zombie panes causing client hang |
 | 2026-01-09 | BUG-002 | Filed | Flaky test due to shared temp directory |
