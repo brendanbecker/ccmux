@@ -7,28 +7,27 @@
 **ccmux** is a Claude Code-aware terminal multiplexer in Rust. Development follows the [Context Engineering Methodology](./CONTEXT_ENGINEERING_METHODOLOGY.md).
 
 **Current Stage**: Stage 6 (Implementation) - Wave 4 Integration
-**Completed**: 20 component features (Waves 0-3)
-**Remaining**: 7 integration features (Wave 4) to wire components into working MVP
+**Completed**: 20 component features (Waves 0-3) + 6/7 Wave 4 features
+**Remaining**: 1 feature + 2 bugs to MVP
 
 ## Current State
 
-All component features are implemented and tested (1,093 tests). The project needs **client-server integration** to become a usable terminal multiplexer.
+Wave 4 integration is nearly complete. **1,219 tests passing.**
 
 ### What Works
-- All protocol types defined
-- Session/Window/Pane hierarchy
-- PTY spawning and management
-- Client UI framework (ratatui)
-- Input handling
+- Server accepts client connections via Unix socket
+- Client connects and displays session selection UI
+- Full message routing (17 message types)
+- PTY output broadcasting infrastructure
+- Client connection registry with session tracking
 - Persistence/recovery framework
 - MCP server (for Claude integration)
-- Sideband protocol parsing
 
-### What's Missing
-- Server doesn't listen for connections (TODO in main.rs:316)
-- No message routing between client and server
-- PTY output not broadcast to clients
-- Pane rendering not wired to output
+### What's Blocking MVP
+- **BUG-003**: Session creation doesn't create default window/pane (P0)
+  - Client attaches to empty session, shows "No active pane"
+  - Blocks all E2E testing
+- **FEAT-025**: Pane output not yet wired to UI rendering
 
 ## Wave 4: Integration Features
 
@@ -36,44 +35,56 @@ All component features are implemented and tested (1,093 tests). The project nee
 
 | ID | Feature | Priority | Effort | Status |
 |----|---------|----------|--------|--------|
-| FEAT-021 | Server Socket Listen Loop | P0 | 4-6h | ✅ Complete |
-| FEAT-027 | Client Connection Registry | P0 | 1-2h | ✅ Complete |
-| FEAT-022 | Client Message Routing | P0 | 6-8h | ✅ Complete |
-| FEAT-023 | PTY Output Broadcasting | P0 | 2-3h | ✅ Complete |
-| FEAT-024 | Session Selection UI | P1 | 2h | ✅ Complete |
+| FEAT-021 | Server Socket Listen Loop | P0 | 4-6h | ✅ Merged |
+| FEAT-027 | Client Connection Registry | P0 | 1-2h | ✅ Merged |
+| FEAT-022 | Client Message Routing | P0 | 6-8h | ✅ Merged |
+| FEAT-023 | PTY Output Broadcasting | P0 | 2-3h | ✅ Merged |
+| FEAT-024 | Session Selection UI | P1 | 2h | ✅ Merged |
 | FEAT-025 | Pane Output Rendering | P0 | 3-4h | 🔲 Pending |
 | FEAT-026 | Input Testing | P1 | 1-2h | 🔲 Pending |
-| BUG-001 | Client Input Not Captured | P0 | TBD | ✅ Merged |
 
-**Critical Path**: FEAT-021 → FEAT-027 → FEAT-022 → FEAT-025 → FEAT-026
+## Open Bugs
 
-**Total Estimated Effort**: 20-27 hours
+| ID | Description | Priority | Status |
+|----|-------------|----------|--------|
+| BUG-001 | Client input not captured | P0 | ✅ Merged |
+| BUG-002 | Flaky test (shared temp dir) | P2 | 🔲 Open |
+| BUG-003 | Session missing default pane | P0 | 🔴 Open - BLOCKS MVP |
 
-### Feature Work Items
+## Critical Path to MVP
 
-Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`:
-- `PROMPT.md` - Implementation instructions
-- `PLAN.md` - Architecture decisions
-- `TASKS.md` - Checkbox task breakdown
-- `feature_request.json` - Metadata
+```
+BUG-003 (30 min) → FEAT-025 (3-4h) → FEAT-026 (1-2h) → HA-001 (1h)
+```
 
-## Next Steps
+**Total remaining: ~6-8 hours**
 
-1. **Start with FEAT-021** (Server Socket Listen Loop)
-   - Location: `ccmux-server/src/main.rs` line 316
-   - Implement Unix socket listener with tokio
-   - Accept loop with per-client task spawning
-   - See `feature-management/features/FEAT-021-*/PROMPT.md`
+## Next Session Tasks
 
-2. **Then FEAT-027** (Client Connection Registry)
-   - Track connected clients and session associations
-   - Enable broadcasting to session members
+### Priority 1: Unblock Testing
+1. **Fix BUG-003** - Session creation must auto-create window+pane+PTY
+   - Location: `ccmux-server/src/handlers/session.rs:28-53`
+   - After `create_session()`, create window, pane, spawn PTY
 
-3. **Then parallel**: FEAT-022, FEAT-023, FEAT-024
-   - Message routing, PTY output, session UI
+### Priority 2: Complete MVP
+2. **FEAT-025** (Pane Output Rendering)
+   - Wire PTY output to client pane display
+   - Location: `ccmux-client/src/ui/app.rs` (stubs at lines 565, 606)
 
-4. **Finally**: FEAT-025, FEAT-026
-   - Wire output to rendering, verify input works
+3. **FEAT-026** (Input Testing) + **HA-001** (Manual Testing)
+   - End-to-end verification
+
+### Low Priority (Can Wait)
+4. **BUG-002** - Flaky test fix (P2, doesn't block MVP)
+
+## Parallelization Options
+
+| Parallel Track A | Parallel Track B |
+|------------------|------------------|
+| BUG-003 fix | BUG-002 fix |
+| FEAT-025 implementation | (waits for BUG-003) |
+
+Limited parallelism - BUG-003 must merge before testing.
 
 ## Implementation Progress
 
@@ -85,35 +96,9 @@ Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`
 | 1 | Parser, Scrollback, Viewport, Worktree (3), Response, Logging, UI, Persistence | ✅ Complete | 452 |
 | 2 | Client Input, Claude Detection, Sideband Protocol | ✅ Complete | 224 |
 | 3 | MCP Server, Session Isolation | ✅ Complete | 49 |
-| 4 | Client-Server Integration (7 features) | 🚧 Pending | - |
+| 4 | Client-Server Integration (7 features) | 🚧 6/7 Complete | 126 |
 
-**Total Tests**: 1,093 passing
-
-### Component Features (Waves 0-3) - All Complete
-
-| ID | Feature | Component | Tests |
-|----|---------|-----------|-------|
-| FEAT-001 | vt100 Parser Integration | session/pane | 23 |
-| FEAT-002 | Per-Session Scrollback Config | config | 47 |
-| FEAT-003 | Viewport Pinning | tui | 23 |
-| FEAT-004a | Worktree Detection | orchestration | 12 |
-| FEAT-004b | Session-Worktree Binding | orchestration | 8 |
-| FEAT-004c | Cross-Session Messaging | orchestration | 45 |
-| FEAT-005 | Response Channel | orchestration | 72 |
-| FEAT-006 | Per-Session Log Levels | logging | 40 |
-| FEAT-007 | Protocol Layer | ccmux-protocol | 86 |
-| FEAT-008 | Utilities | ccmux-utils | 108 |
-| FEAT-009 | Client UI | ccmux-client | 97 |
-| FEAT-010 | Client Input | ccmux-client | 87 |
-| FEAT-011 | Client Connection | ccmux-client | 31 |
-| FEAT-012 | Session Management | ccmux-server | 88 |
-| FEAT-013 | PTY Management | ccmux-server | 17 |
-| FEAT-015 | Claude Detection | ccmux-server | 45 |
-| FEAT-016 | Persistence | ccmux-server | 85 |
-| FEAT-017 | Configuration | ccmux-server | 38 |
-| FEAT-018 | MCP Server | ccmux-server | 32 |
-| FEAT-019 | Sideband Protocol | ccmux-server | 92 |
-| FEAT-020 | Session Isolation | ccmux-server | 17 |
+**Total Tests**: 1,219 passing
 
 ## Key Documents
 
@@ -121,6 +106,7 @@ Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`
 |----------|---------|
 | `WAVES.md` | Canonical wave plan with dependency graph |
 | `feature-management/features/` | Wave 4 feature work items |
+| `feature-management/bugs/` | Bug work items (BUG-001, 002, 003) |
 | `docs/architecture/ARCHITECTURE.md` | System overview |
 | `docs/architecture/CRATE_STRUCTURE.md` | Workspace layout |
 
@@ -133,7 +119,7 @@ Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`
 - **Persistence**: okaywal (WAL) + bincode
 - **Config**: notify + arc-swap
 
-## Recent Session (2026-01-09)
+## Session Log (2026-01-09)
 
 ### Work Completed
 1. Fixed MCP error handling per spec (protocol vs tool errors)
@@ -144,32 +130,32 @@ Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`
 6. Created feature work items (FEAT-021 through FEAT-027)
 7. Updated WAVES.md with Wave 4
 8. Ran retrospective agent to validate features
-9. **FEAT-021** (Server Socket Listen Loop) - COMPLETED and merged
-10. **FEAT-024** (Session Selection UI) - COMPLETED and merged
-11. **FEAT-027** (Client Connection Registry) - COMPLETED and merged
-12. **BUG-001** filed: Client input not captured (P0 blocker)
-13. **BUG-001** merged to main
-14. **FEAT-023** (PTY Output Broadcasting) merged
-15. **FEAT-022** (Client Message Routing) merged - unblocks HA-001
+9. **FEAT-021** (Server Socket Listen Loop) - merged
+10. **FEAT-024** (Session Selection UI) - merged
+11. **FEAT-027** (Client Connection Registry) - merged
+12. **BUG-001** (Client input not captured) - fixed and merged
+13. **FEAT-023** (PTY Output Broadcasting) - merged
+14. **FEAT-022** (Client Message Routing) - merged
+15. **HA-001** partial testing - discovered BUG-003
+16. **BUG-003** filed (session missing default pane)
+17. **BUG-002** work item created (flaky test)
 
 ### Key Decisions
 - FEAT-027 (Connection Registry) split out as own feature
 - FEAT-022 estimate raised to 6-8h (17 message types)
-- P0 features form critical path for MVP
+- BUG-003 fix should be server-side (auto-create pane)
+- Discussed orchestration coupling - may generalize post-MVP
 
 ### Blockers
-- None currently
+- **BUG-003**: Session creation doesn't create default pane
+  - Blocks HA-001 manual testing
+  - Blocks FEAT-025/026 verification
 
 ### Active Worktrees
 | Worktree | Branch | Status |
 |----------|--------|--------|
-| `ccmux-wt-feat-022` | feat-022-client-message-routing | ✅ Merged |
-| `ccmux-wt-feat-023` | feat-023-pty-output-broadcasting | ✅ Merged |
-
-### Next Session Tasks
-1. **HA-001** - Manual test FEAT-024 (now unblocked)
-2. **FEAT-025** (Pane Output Rendering)
-3. **FEAT-026** (Input Testing)
+| `ccmux-wt-feat-022` | feat-022-client-message-routing | ✅ Merged (can delete) |
+| `ccmux-wt-feat-023` | feat-023-pty-output-broadcasting | ✅ Merged (can delete) |
 
 ## Build & Run
 
@@ -177,15 +163,19 @@ Each feature has full documentation in `feature-management/features/FEAT-XXX-*/`
 # Build
 cargo build --release
 
-# Run server (currently exits immediately - needs FEAT-021)
+# Run server
 ./target/release/ccmux-server
 
-# Run MCP server mode (works)
-./target/release/ccmux-server mcp-server
-
-# Run client (fails to connect - needs server)
+# Run client (connects to server)
 ./target/release/ccmux
+
+# Run MCP server mode
+./target/release/ccmux-server mcp-server
 
 # Run tests
 cargo test --workspace
 ```
+
+## Future Considerations
+
+**Post-MVP discussion**: The orchestration system (FEAT-004) has methodology-specific coupling (orchestrator/worker concepts). Consider generalizing to tag-based session roles for broader usability. See session notes for analysis.
