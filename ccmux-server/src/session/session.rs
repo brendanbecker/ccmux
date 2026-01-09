@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::time::SystemTime;
 use uuid::Uuid;
-use ccmux_protocol::SessionInfo;
+use ccmux_protocol::{SessionInfo, WorktreeInfo as ProtocolWorktreeInfo};
 
 use super::Window;
+use crate::orchestration::WorktreeInfo;
 
 /// A session containing one or more windows
 #[derive(Debug)]
@@ -22,6 +23,10 @@ pub struct Session {
     attached_clients: usize,
     /// When created
     created_at: SystemTime,
+    /// Associated worktree (if any)
+    worktree: Option<WorktreeInfo>,
+    /// Whether this is the orchestrator session
+    is_orchestrator: bool,
 }
 
 impl Session {
@@ -35,6 +40,8 @@ impl Session {
             active_window_id: None,
             attached_clients: 0,
             created_at: SystemTime::now(),
+            worktree: None,
+            is_orchestrator: false,
         }
     }
 
@@ -50,6 +57,8 @@ impl Session {
             active_window_id: None,
             attached_clients: 0,
             created_at: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(created_at),
+            worktree: None,
+            is_orchestrator: false,
         }
     }
 
@@ -115,6 +124,22 @@ impl Session {
         } else {
             false
         }
+    }
+
+    /// Get associated worktree
+    pub fn worktree(&self) -> Option<&WorktreeInfo> {
+        self.worktree.as_ref()
+    }
+
+    /// Check if this session is the orchestrator
+    pub fn is_orchestrator(&self) -> bool {
+        self.is_orchestrator
+    }
+
+    /// Set worktree association
+    pub fn set_worktree(&mut self, worktree: WorktreeInfo, is_orchestrator: bool) {
+        self.is_orchestrator = is_orchestrator;
+        self.worktree = Some(worktree);
     }
 
     /// Create a new window
@@ -198,6 +223,12 @@ impl Session {
             created_at: self.created_at_unix(),
             window_count: self.windows.len(),
             attached_clients: self.attached_clients,
+            worktree: self.worktree.as_ref().map(|w| ProtocolWorktreeInfo {
+                path: w.path.to_string_lossy().into_owned(),
+                branch: w.branch.clone(),
+                is_main: w.is_main,
+            }),
+            is_orchestrator: self.is_orchestrator,
         }
     }
 }
@@ -420,6 +451,8 @@ mod tests {
         assert_eq!(info.window_count, 2);
         assert_eq!(info.attached_clients, 1);
         assert!(info.created_at > 0);
+        assert!(info.worktree.is_none());
+        assert!(!info.is_orchestrator);
     }
 
     #[test]
@@ -430,6 +463,8 @@ mod tests {
 
         assert_eq!(info.window_count, 0);
         assert_eq!(info.attached_clients, 0);
+        assert!(info.worktree.is_none());
+        assert!(!info.is_orchestrator);
     }
 
     #[test]
@@ -502,5 +537,98 @@ mod tests {
 
         session.set_name("new-name_123");
         assert_eq!(session.name(), "new-name_123");
+    }
+
+    // ==================== Worktree Tests ====================
+
+    #[test]
+    fn test_session_worktree_default() {
+        let session = Session::new("work");
+
+        assert!(session.worktree().is_none());
+        assert!(!session.is_orchestrator());
+    }
+
+    #[test]
+    fn test_session_set_worktree() {
+        use std::path::PathBuf;
+
+        let mut session = Session::new("work");
+
+        let worktree = WorktreeInfo {
+            path: PathBuf::from("/path/to/worktree"),
+            branch: Some("feature-1".to_string()),
+            is_main: false,
+        };
+
+        session.set_worktree(worktree.clone(), false);
+
+        let wt = session.worktree().unwrap();
+        assert_eq!(wt.path, PathBuf::from("/path/to/worktree"));
+        assert_eq!(wt.branch, Some("feature-1".to_string()));
+        assert!(!wt.is_main);
+        assert!(!session.is_orchestrator());
+    }
+
+    #[test]
+    fn test_session_set_worktree_as_orchestrator() {
+        use std::path::PathBuf;
+
+        let mut session = Session::new("orchestrator");
+
+        let worktree = WorktreeInfo {
+            path: PathBuf::from("/path/to/main"),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        session.set_worktree(worktree, true);
+
+        assert!(session.worktree().is_some());
+        assert!(session.is_orchestrator());
+    }
+
+    #[test]
+    fn test_session_to_info_with_worktree() {
+        use std::path::PathBuf;
+
+        let mut session = Session::new("worker");
+
+        let worktree = WorktreeInfo {
+            path: PathBuf::from("/path/to/worktree"),
+            branch: Some("feature-1".to_string()),
+            is_main: false,
+        };
+
+        session.set_worktree(worktree, false);
+
+        let info = session.to_info();
+
+        assert!(info.worktree.is_some());
+        let proto_wt = info.worktree.unwrap();
+        assert_eq!(proto_wt.path, "/path/to/worktree");
+        assert_eq!(proto_wt.branch, Some("feature-1".to_string()));
+        assert!(!proto_wt.is_main);
+        assert!(!info.is_orchestrator);
+    }
+
+    #[test]
+    fn test_session_to_info_orchestrator() {
+        use std::path::PathBuf;
+
+        let mut session = Session::new("main");
+
+        let worktree = WorktreeInfo {
+            path: PathBuf::from("/path/to/main"),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        session.set_worktree(worktree, true);
+
+        let info = session.to_info();
+
+        assert!(info.worktree.is_some());
+        assert!(info.is_orchestrator);
     }
 }

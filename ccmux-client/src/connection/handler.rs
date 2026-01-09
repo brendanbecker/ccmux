@@ -191,6 +191,8 @@ mod tests {
                 created_at: 0,
                 window_count: 1,
                 attached_clients: 0,
+                worktree: None,
+                is_orchestrator: false,
             }],
         });
 

@@ -1,4 +1,6 @@
 //! Git worktree detection and discovery
+//!
+//! Provides utilities for detecting and working with git worktrees.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -134,6 +136,15 @@ impl WorktreeDetector {
 
         worktrees
     }
+
+    /// Get worktree info for a specific path
+    #[allow(dead_code)]
+    pub fn get_worktree_info(path: &Path) -> Option<WorktreeInfo> {
+        let worktree_root = Self::get_worktree_root(path)?;
+        let worktrees = Self::list_worktrees(&worktree_root);
+
+        worktrees.into_iter().find(|w| w.path == worktree_root)
+    }
 }
 
 #[cfg(test)]
@@ -169,6 +180,25 @@ branch refs/heads/feature/test
         assert_eq!(worktrees.len(), 2);
         assert_eq!(worktrees[0].branch, Some("main".to_string()));
         assert_eq!(worktrees[1].branch, Some("feature/test".to_string()));
+        assert!(worktrees[0].is_main);
+        assert!(!worktrees[1].is_main);
+    }
+
+    #[test]
+    fn test_parse_worktree_list_detached_head() {
+        let output = "worktree /path/to/repo\nHEAD abc123\ndetached\n";
+        let worktrees = WorktreeDetector::parse_worktree_list(output);
+
+        assert_eq!(worktrees.len(), 1);
+        assert!(worktrees[0].branch.is_none());
+        assert_eq!(worktrees[0].head, "abc123");
+    }
+
+    #[test]
+    fn test_parse_worktree_list_empty() {
+        let output = "";
+        let worktrees = WorktreeDetector::parse_worktree_list(output);
+        assert!(worktrees.is_empty());
     }
 
     #[test]
@@ -188,6 +218,13 @@ branch refs/heads/feature/test
         let cwd = env::current_dir().unwrap();
         let root = WorktreeDetector::get_worktree_root(&cwd);
         assert!(root.is_some());
+    }
+
+    #[test]
+    fn test_get_worktree_root_nonexistent() {
+        let path = PathBuf::from("/nonexistent/path/that/does/not/exist");
+        let root = WorktreeDetector::get_worktree_root(&path);
+        assert!(root.is_none());
     }
 
     #[test]

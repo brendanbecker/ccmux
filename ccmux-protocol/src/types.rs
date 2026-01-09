@@ -10,6 +10,17 @@ pub enum SplitDirection {
     Vertical,
 }
 
+/// Worktree information for protocol messages
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorktreeInfo {
+    /// Absolute path to the worktree
+    pub path: String,
+    /// Branch name (if any)
+    pub branch: Option<String>,
+    /// Whether this is the main worktree
+    pub is_main: bool,
+}
+
 /// Session information
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SessionInfo {
@@ -18,6 +29,10 @@ pub struct SessionInfo {
     pub created_at: u64, // Unix timestamp
     pub window_count: usize,
     pub attached_clients: usize,
+    /// Associated worktree (if any)
+    pub worktree: Option<WorktreeInfo>,
+    /// Whether this is the orchestrator session
+    pub is_orchestrator: bool,
 }
 
 /// Window information
@@ -701,6 +716,8 @@ mod tests {
             created_at: 1704067200, // 2024-01-01 00:00:00 UTC
             window_count: 2,
             attached_clients: 1,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         assert_eq!(session.id, id);
@@ -718,6 +735,8 @@ mod tests {
             created_at: 0,
             window_count: 1,
             attached_clients: 0,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         assert_eq!(session.attached_clients, 0);
@@ -731,6 +750,8 @@ mod tests {
             created_at: 0,
             window_count: 1,
             attached_clients: 5,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         assert_eq!(session.attached_clients, 5);
@@ -744,6 +765,8 @@ mod tests {
             created_at: 12345,
             window_count: 3,
             attached_clients: 2,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         let cloned = session.clone();
@@ -760,6 +783,8 @@ mod tests {
             created_at: 1000,
             window_count: 1,
             attached_clients: 0,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         let session2 = SessionInfo {
@@ -768,6 +793,8 @@ mod tests {
             created_at: 1000,
             window_count: 1,
             attached_clients: 0,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         let session3 = SessionInfo {
@@ -776,6 +803,8 @@ mod tests {
             created_at: 1000,
             window_count: 1,
             attached_clients: 0,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         assert_eq!(session1, session2);
@@ -790,6 +819,8 @@ mod tests {
             created_at: 0,
             window_count: 0,
             attached_clients: 0,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         let debug = format!("{:?}", session);
@@ -902,6 +933,8 @@ mod tests {
             created_at: 1234567890,
             window_count: 3,
             attached_clients: 1,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         let serialized = bincode::serialize(&session).unwrap();
@@ -1190,5 +1223,174 @@ mod tests {
         let serialized = bincode::serialize(&result).unwrap();
         let deserialized: ReplyResult = bincode::deserialize(&serialized).unwrap();
         assert_eq!(result, deserialized);
+    }
+
+    // ==================== WorktreeInfo Tests ====================
+
+    #[test]
+    fn test_worktree_info_creation() {
+        let wt = WorktreeInfo {
+            path: "/path/to/worktree".to_string(),
+            branch: Some("feature-1".to_string()),
+            is_main: false,
+        };
+
+        assert_eq!(wt.path, "/path/to/worktree");
+        assert_eq!(wt.branch, Some("feature-1".to_string()));
+        assert!(!wt.is_main);
+    }
+
+    #[test]
+    fn test_worktree_info_main() {
+        let wt = WorktreeInfo {
+            path: "/path/to/repo".to_string(),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        assert!(wt.is_main);
+    }
+
+    #[test]
+    fn test_worktree_info_no_branch() {
+        let wt = WorktreeInfo {
+            path: "/path/to/worktree".to_string(),
+            branch: None,
+            is_main: false,
+        };
+
+        assert!(wt.branch.is_none());
+    }
+
+    #[test]
+    fn test_worktree_info_clone() {
+        let wt = WorktreeInfo {
+            path: "/path/to/worktree".to_string(),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        let cloned = wt.clone();
+        assert_eq!(wt, cloned);
+    }
+
+    #[test]
+    fn test_worktree_info_equality() {
+        let wt1 = WorktreeInfo {
+            path: "/path/a".to_string(),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        let wt2 = WorktreeInfo {
+            path: "/path/a".to_string(),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        let wt3 = WorktreeInfo {
+            path: "/path/b".to_string(),
+            branch: Some("main".to_string()),
+            is_main: true,
+        };
+
+        assert_eq!(wt1, wt2);
+        assert_ne!(wt1, wt3);
+    }
+
+    #[test]
+    fn test_worktree_info_debug() {
+        let wt = WorktreeInfo {
+            path: "/debug/path".to_string(),
+            branch: Some("test".to_string()),
+            is_main: false,
+        };
+
+        let debug = format!("{:?}", wt);
+        assert!(debug.contains("WorktreeInfo"));
+        assert!(debug.contains("/debug/path"));
+    }
+
+    #[test]
+    fn test_worktree_info_serde() {
+        let wt = WorktreeInfo {
+            path: "/path/to/worktree".to_string(),
+            branch: Some("feature".to_string()),
+            is_main: false,
+        };
+
+        let serialized = bincode::serialize(&wt).unwrap();
+        let deserialized: WorktreeInfo = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(wt, deserialized);
+    }
+
+    #[test]
+    fn test_worktree_info_serde_no_branch() {
+        let wt = WorktreeInfo {
+            path: "/path/to/worktree".to_string(),
+            branch: None,
+            is_main: true,
+        };
+
+        let serialized = bincode::serialize(&wt).unwrap();
+        let deserialized: WorktreeInfo = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(wt, deserialized);
+    }
+
+    #[test]
+    fn test_session_info_with_worktree() {
+        let session = SessionInfo {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            created_at: 1234567890,
+            window_count: 1,
+            attached_clients: 0,
+            worktree: Some(WorktreeInfo {
+                path: "/path/to/repo".to_string(),
+                branch: Some("main".to_string()),
+                is_main: true,
+            }),
+            is_orchestrator: true,
+        };
+
+        assert!(session.worktree.is_some());
+        assert!(session.is_orchestrator);
+    }
+
+    #[test]
+    fn test_session_info_without_worktree() {
+        let session = SessionInfo {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            created_at: 1234567890,
+            window_count: 1,
+            attached_clients: 0,
+            worktree: None,
+            is_orchestrator: false,
+        };
+
+        assert!(session.worktree.is_none());
+        assert!(!session.is_orchestrator);
+    }
+
+    #[test]
+    fn test_session_info_with_worktree_serde() {
+        let session = SessionInfo {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            created_at: 1234567890,
+            window_count: 2,
+            attached_clients: 1,
+            worktree: Some(WorktreeInfo {
+                path: "/path/to/worktree".to_string(),
+                branch: Some("feature".to_string()),
+                is_main: false,
+            }),
+            is_orchestrator: false,
+        };
+
+        let serialized = bincode::serialize(&session).unwrap();
+        let deserialized: SessionInfo = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(session, deserialized);
     }
 }

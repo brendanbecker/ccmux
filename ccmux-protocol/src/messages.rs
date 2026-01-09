@@ -334,6 +334,8 @@ mod tests {
                 created_at: 1000,
                 window_count: 2,
                 attached_clients: 1,
+                worktree: None,
+                is_orchestrator: false,
             },
             SessionInfo {
                 id: Uuid::new_v4(),
@@ -341,6 +343,8 @@ mod tests {
                 created_at: 2000,
                 window_count: 1,
                 attached_clients: 0,
+                worktree: None,
+                is_orchestrator: false,
             },
         ];
 
@@ -363,6 +367,8 @@ mod tests {
             created_at: 12345,
             window_count: 0,
             attached_clients: 1,
+            worktree: None,
+            is_orchestrator: false,
         };
 
         let msg = ServerMessage::SessionCreated {
@@ -388,6 +394,8 @@ mod tests {
                 created_at: 0,
                 window_count: 1,
                 attached_clients: 1,
+                worktree: None,
+                is_orchestrator: false,
             },
             windows: vec![WindowInfo {
                 id: window_id,
