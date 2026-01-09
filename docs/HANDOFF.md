@@ -6,85 +6,128 @@
 
 **ccmux** is a Claude Code-aware terminal multiplexer in Rust. Development follows the [Context Engineering Methodology](./CONTEXT_ENGINEERING_METHODOLOGY.md).
 
-**Current Stage**: Stage 6 (Implementation) - Wave 4 Integration
-**Completed**: 20 component features (Waves 0-3) + 6/7 Wave 4 features
-**Remaining**: 1 feature + 2 bugs to MVP
+**Current Stage**: Stage 6 (Implementation) - MVP FUNCTIONAL
+**Completed**: All Wave 4 core features + critical bug fixes
+**Status**: Working terminal multiplexer with Claude Code integration
 
 ## Current State
 
-Wave 4 integration is nearly complete. **1,219 tests passing.**
+**MVP IS FUNCTIONAL!** Terminal multiplexer works end-to-end.
 
 ### What Works
 - Server accepts client connections via Unix socket
 - Client connects and displays session selection UI
-- Full message routing (17 message types)
-- PTY output broadcasting infrastructure
-- Client connection registry with session tracking
-- Persistence/recovery framework
-- MCP server (for Claude integration)
+- Create new sessions with `n` key
+- Sessions auto-create default window/pane/PTY
+- Full terminal I/O (shell prompt, commands, output)
+- PTY output broadcasting to connected clients
+- Session persistence and recovery (sessions survive server restart)
+- Output pollers for restored sessions
+- Pane close detection and cleanup
+- Return to session selection when last pane closes
+- Comprehensive modifier key support (Shift+Tab, Alt+key, Ctrl+Arrow, etc.)
+- New panes inherit server's working directory
+- MCP server for Claude integration (7 tools)
 
-### What's Blocking MVP
-- **BUG-003**: Session creation doesn't create default window/pane (P0)
-  - Client attaches to empty session, shows "No active pane"
-  - Blocks all E2E testing
-- **FEAT-025**: Pane output not yet wired to UI rendering
+### Known Issues
+- `kill -9` corrupts terminal (SIGKILL can't be caught - run `reset` to fix)
+- BUG-002: Flaky test (P2, doesn't affect functionality)
 
 ## Wave 4: Integration Features
 
 **Goal**: Wire existing components into a working terminal multiplexer.
 
-| ID | Feature | Priority | Effort | Status |
-|----|---------|----------|--------|--------|
-| FEAT-021 | Server Socket Listen Loop | P0 | 4-6h | ✅ Merged |
-| FEAT-027 | Client Connection Registry | P0 | 1-2h | ✅ Merged |
-| FEAT-022 | Client Message Routing | P0 | 6-8h | ✅ Merged |
-| FEAT-023 | PTY Output Broadcasting | P0 | 2-3h | ✅ Merged |
-| FEAT-024 | Session Selection UI | P1 | 2h | ✅ Merged |
-| FEAT-025 | Pane Output Rendering | P0 | 3-4h | 🔲 Pending |
-| FEAT-026 | Input Testing | P1 | 1-2h | 🔲 Pending |
+| ID | Feature | Priority | Status |
+|----|---------|----------|--------|
+| FEAT-021 | Server Socket Listen Loop | P0 | ✅ Merged |
+| FEAT-027 | Client Connection Registry | P0 | ✅ Merged |
+| FEAT-022 | Client Message Routing | P0 | ✅ Merged |
+| FEAT-023 | PTY Output Broadcasting | P0 | ✅ Merged |
+| FEAT-024 | Session Selection UI | P1 | ✅ Merged |
+| FEAT-025 | Pane Output Rendering | P0 | ✅ Merged |
+| FEAT-026 | Input Testing | P1 | ✅ Working (verified manually) |
 
-## Open Bugs
+## Bug Status
 
 | ID | Description | Priority | Status |
 |----|-------------|----------|--------|
-| BUG-001 | Client input not captured | P0 | ✅ Merged |
-| BUG-002 | Flaky test (shared temp dir) | P2 | 🔲 Open |
-| BUG-003 | Session missing default pane | P0 | 🔴 Open - BLOCKS MVP |
+| BUG-001 | Client input not captured | P0 | ✅ Fixed |
+| BUG-002 | Flaky test (shared temp dir) | P2 | 🔲 Open (worktree ready) |
+| BUG-003 | Session missing default pane | P0 | ✅ Fixed |
 
-## Critical Path to MVP
+## Post-MVP Features
 
+| ID | Feature | Priority | Status |
+|----|---------|----------|--------|
+| FEAT-029 | MCP Natural Language Control | P1 | 🔲 Worktree ready |
+| FEAT-030 | Sideband Pane Splitting | P1 | 🔲 Work item created |
+
+### FEAT-029 Scope (MCP Tools)
+- Fix `ccmux_create_pane` direction parameter (currently ignored)
+- Add `ccmux_create_session` tool
+- Add `ccmux_create_window` tool
+- Add `ccmux_list_sessions` tool
+- Add `ccmux_list_windows` tool
+
+## Active Worktrees
+
+| Worktree | Branch | Status |
+|----------|--------|--------|
+| `ccmux-wt-bug-002` | bug-002-flaky-test | Ready to merge |
+| `ccmux-wt-bug-003` | bug-003-session-default-pane | ✅ Merged |
+| `ccmux-wt-feat-025` | feat-025-pane-output-rendering | ✅ Merged |
+| `ccmux-wt-feat-029` | feat-029-mcp-natural-language-control | Ready for implementation |
+
+## Session Log (2026-01-09) - Continued
+
+### Work Completed This Session
+1. **BUG-003** fixed - Session creation now auto-creates window/pane/PTY
+2. **FEAT-025** merged - Pane output rendering with tui-term
+3. **Output poller startup** - Fixed missing poller on session creation
+4. **Restored session pollers** - Fixed empty panes on attach to restored sessions
+5. **CWD inheritance** - New panes start in server's working directory
+6. **Pane close notification** - Server broadcasts PaneClosed on PTY EOF
+7. **Session select on empty** - Client returns to session select when last pane closes
+8. **Modifier key support** - Shift+Tab, Alt+key, Ctrl+Arrow, Shift+Arrow, Alt+Backspace
+9. **FEAT-029** work item created - MCP natural language terminal control
+10. **FEAT-030** work item created (by Claude in ccmux) - Sideband pane splitting
+
+### Key Fixes Made
+- `ccmux-server/src/handlers/session.rs` - Start output poller after PTY spawn
+- `ccmux-server/src/main.rs` - Start output pollers for restored panes
+- `ccmux-server/src/pty/output.rs` - Broadcast PaneClosed on EOF
+- `ccmux-client/src/ui/app.rs` - Comprehensive modifier key handling
+- `ccmux-client/src/ui/app.rs` - Return to session select when panes empty
+
+### Commits Made
+- `890e924` - fix(server): start output poller on session creation
+- `336273b` - fix: inherit cwd for new panes and notify on pane close
+- `3eb04e3` - fix: start output pollers for restored panes
+- `cec6c73` - fix(client): return to session select when last pane closes
+
+## Build & Run
+
+```bash
+# Build
+cargo build --release
+
+# Run server (in background or separate terminal)
+./target/release/ccmux-server
+
+# Run client (connects to server)
+./target/release/ccmux
+
+# In client:
+#   n = create new session
+#   Enter = attach to selected session
+#   q = quit
+
+# Run MCP server mode
+./target/release/ccmux-server mcp-server
+
+# Run tests
+cargo test --workspace
 ```
-BUG-003 (30 min) → FEAT-025 (3-4h) → FEAT-026 (1-2h) → HA-001 (1h)
-```
-
-**Total remaining: ~6-8 hours**
-
-## Next Session Tasks
-
-### Priority 1: Unblock Testing
-1. **Fix BUG-003** - Session creation must auto-create window+pane+PTY
-   - Location: `ccmux-server/src/handlers/session.rs:28-53`
-   - After `create_session()`, create window, pane, spawn PTY
-
-### Priority 2: Complete MVP
-2. **FEAT-025** (Pane Output Rendering)
-   - Wire PTY output to client pane display
-   - Location: `ccmux-client/src/ui/app.rs` (stubs at lines 565, 606)
-
-3. **FEAT-026** (Input Testing) + **HA-001** (Manual Testing)
-   - End-to-end verification
-
-### Low Priority (Can Wait)
-4. **BUG-002** - Flaky test fix (P2, doesn't block MVP)
-
-## Parallelization Options
-
-| Parallel Track A | Parallel Track B |
-|------------------|------------------|
-| BUG-003 fix | BUG-002 fix |
-| FEAT-025 implementation | (waits for BUG-003) |
-
-Limited parallelism - BUG-003 must merge before testing.
 
 ## Implementation Progress
 
@@ -96,7 +139,7 @@ Limited parallelism - BUG-003 must merge before testing.
 | 1 | Parser, Scrollback, Viewport, Worktree (3), Response, Logging, UI, Persistence | ✅ Complete | 452 |
 | 2 | Client Input, Claude Detection, Sideband Protocol | ✅ Complete | 224 |
 | 3 | MCP Server, Session Isolation | ✅ Complete | 49 |
-| 4 | Client-Server Integration (7 features) | 🚧 6/7 Complete | 126 |
+| 4 | Client-Server Integration (7 features) | ✅ Complete | 126 |
 
 **Total Tests**: 1,219 passing
 
@@ -105,8 +148,8 @@ Limited parallelism - BUG-003 must merge before testing.
 | Document | Purpose |
 |----------|---------|
 | `WAVES.md` | Canonical wave plan with dependency graph |
-| `feature-management/features/` | Wave 4 feature work items |
-| `feature-management/bugs/` | Bug work items (BUG-001, 002, 003) |
+| `feature-management/features/` | Feature work items |
+| `feature-management/bugs/` | Bug work items |
 | `docs/architecture/ARCHITECTURE.md` | System overview |
 | `docs/architecture/CRATE_STRUCTURE.md` | Workspace layout |
 
@@ -114,68 +157,25 @@ Limited parallelism - BUG-003 must merge before testing.
 
 - **PTY**: portable-pty 0.9
 - **Parser**: vt100 0.15
-- **TUI**: ratatui 0.29 + crossterm 0.28
+- **TUI**: ratatui 0.29 + crossterm 0.28 + tui-term 0.2
 - **Async**: tokio 1.x
 - **Persistence**: okaywal (WAL) + bincode
 - **Config**: notify + arc-swap
 
-## Session Log (2026-01-09)
+## Next Steps
 
-### Work Completed
-1. Fixed MCP error handling per spec (protocol vs tool errors)
-2. Added `.gitignore` for Rust project
-3. Cleaned git history (922MB → 1.1MB via filter-repo)
-4. Pushed clean repo to GitHub
-5. Scoped Wave 4 integration work (7 features, 20-27h)
-6. Created feature work items (FEAT-021 through FEAT-027)
-7. Updated WAVES.md with Wave 4
-8. Ran retrospective agent to validate features
-9. **FEAT-021** (Server Socket Listen Loop) - merged
-10. **FEAT-024** (Session Selection UI) - merged
-11. **FEAT-027** (Client Connection Registry) - merged
-12. **BUG-001** (Client input not captured) - fixed and merged
-13. **FEAT-023** (PTY Output Broadcasting) - merged
-14. **FEAT-022** (Client Message Routing) - merged
-15. **HA-001** partial testing - discovered BUG-003
-16. **BUG-003** filed (session missing default pane)
-17. **BUG-002** work item created (flaky test)
+### Priority 1: Polish
+1. Merge BUG-002 (flaky test fix)
+2. Clean up old worktrees (feat-022, feat-023)
 
-### Key Decisions
-- FEAT-027 (Connection Registry) split out as own feature
-- FEAT-022 estimate raised to 6-8h (17 message types)
-- BUG-003 fix should be server-side (auto-create pane)
-- Discussed orchestration coupling - may generalize post-MVP
+### Priority 2: Enhanced MCP
+3. Implement FEAT-029 (MCP natural language control)
+   - Enables commands like "create new window", "split pane horizontally"
 
-### Blockers
-- **BUG-003**: Session creation doesn't create default pane
-  - Blocks HA-001 manual testing
-  - Blocks FEAT-025/026 verification
-
-### Active Worktrees
-| Worktree | Branch | Status |
-|----------|--------|--------|
-| `ccmux-wt-feat-022` | feat-022-client-message-routing | ✅ Merged (can delete) |
-| `ccmux-wt-feat-023` | feat-023-pty-output-broadcasting | ✅ Merged (can delete) |
-
-## Build & Run
-
-```bash
-# Build
-cargo build --release
-
-# Run server
-./target/release/ccmux-server
-
-# Run client (connects to server)
-./target/release/ccmux
-
-# Run MCP server mode
-./target/release/ccmux-server mcp-server
-
-# Run tests
-cargo test --workspace
-```
+### Priority 3: Pane Management
+4. Implement FEAT-030 (Sideband pane splitting)
+   - Claude can spawn new panes via `<ccmux:spawn>` tags
 
 ## Future Considerations
 
-**Post-MVP discussion**: The orchestration system (FEAT-004) has methodology-specific coupling (orchestrator/worker concepts). Consider generalizing to tag-based session roles for broader usability. See session notes for analysis.
+**Post-MVP discussion**: The orchestration system (FEAT-004) has methodology-specific coupling (orchestrator/worker concepts). Consider generalizing to tag-based session roles for broader usability.
