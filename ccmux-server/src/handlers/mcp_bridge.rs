@@ -584,11 +584,18 @@ mod tests {
         let session_manager = Arc::new(RwLock::new(SessionManager::new()));
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
+        let config = Arc::new(crate::config::AppConfig::default());
+        let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+        ));
 
         let (tx, _rx) = mpsc::channel(10);
         let client_id = registry.register_client(tx);
 
-        HandlerContext::new(session_manager, pty_manager, registry, client_id)
+        let (pane_closed_tx, _) = mpsc::channel(10);
+        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor)
     }
 
     async fn create_session_with_pane(ctx: &HandlerContext) -> (Uuid, Uuid, Uuid) {

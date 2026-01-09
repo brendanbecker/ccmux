@@ -5,32 +5,15 @@
 
 ## Summary Statistics
 - Total Bugs: 6
-- New: 2
+- New: 1
 - In Progress: 0
-- Resolved: 3
+- Resolved: 4
 
 ## Bugs by Priority
 
-### P0 - Critical (1)
+### P0 - Critical (0)
 
-#### BUG-005: Sideband parsing not integrated into PTY output flow
-
-**Status**: New
-**Filed**: 2026-01-09
-**Component**: ccmux-server
-
-**Description**:
-Sideband commands (`<ccmux:spawn>`, etc.) output by Claude are displayed as literal text instead of being parsed and executed. The sideband parsing infrastructure (FEAT-019, FEAT-030) exists but is not wired into the PTY output flow.
-
-**Root Cause**:
-FEAT-030 was marked as merged but is incomplete. `SidebandParser` and `CommandExecutor` are only used in tests. `PtyOutputPoller::flush()` broadcasts raw PTY output without parsing. No code instantiates `CommandExecutor` in the server runtime.
-
-**Impact**:
-- Multi-agent orchestration broken (Claude cannot spawn worker panes)
-- Core sideband protocol feature non-functional
-
-**Proposed Fix**:
-Integrate `SidebandParser` into `PtyOutputPoller` to filter output and execute commands before broadcasting to clients.
+*No open P0 bugs*
 
 ### P1 - High Priority (3)
 
@@ -52,6 +35,26 @@ Added automatic cleanup when PTY processes exit:
 - New `PaneClosedNotification` channel from output pollers
 - `run_pane_cleanup_loop()` task removes dead panes, empty windows, empty sessions
 - All new panes get cleanup channel via `HandlerContext`
+
+#### BUG-005: Sideband parsing not integrated into PTY output flow [RESOLVED]
+
+**Status**: Resolved
+**Filed**: 2026-01-09
+**Resolved**: 2026-01-09
+**Component**: ccmux-server
+**Directory**: [BUG-005-sideband-parsing-not-integrated](BUG-005-sideband-parsing-not-integrated/)
+
+**Description**:
+Sideband commands (`<ccmux:spawn>`, `<ccmux:focus>`, etc.) output by Claude are displayed as literal text instead of being parsed and executed. The sideband parsing infrastructure (FEAT-019, FEAT-030) exists but is not wired into the PTY output flow.
+
+**Root Cause**:
+- FEAT-019 implemented `SidebandParser` and command types
+- FEAT-030 implemented `CommandExecutor` with spawn functionality
+- The integration point - wiring parser/executor into `PtyOutputPoller::flush()` - was never completed
+- `SidebandParser` and `CommandExecutor` are only instantiated in test code
+
+**Resolution**:
+Integrated `SidebandParser` into `PtyOutputPoller` to filter output and execute commands before broadcasting to clients.
 
 #### BUG-006: Viewport not sizing to terminal dimensions [RESOLVED]
 
@@ -135,6 +138,7 @@ fn test_ensure_dir_nested() {
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-09 | BUG-005 | Resolved | Integrated sideband parsing into PTY output flow |
 | 2026-01-09 | BUG-007 | Resolved | Added KeyCode::BackTab handler |
 | 2026-01-09 | BUG-007 | Filed | Shift+Tab not passed through (missing BackTab case) |
 | 2026-01-09 | BUG-006 | Resolved | Client now uses terminal size on attach |

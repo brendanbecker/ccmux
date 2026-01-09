@@ -42,6 +42,7 @@ use persistence::{
 };
 use pty::{PaneClosedNotification, PtyManager, PtyOutputPoller};
 use session::SessionManager;
+use sideband::AsyncCommandExecutor;
 
 /// Shared state for concurrent access by client handlers
 ///
@@ -61,6 +62,8 @@ pub struct SharedState {
     shutdown_tx: broadcast::Sender<()>,
     /// Channel for pane cleanup notifications (when PTY dies)
     pub pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
+    /// Sideband command executor for processing Claude commands
+    pub command_executor: Arc<AsyncCommandExecutor>,
 }
 
 impl SharedState {
@@ -555,6 +558,7 @@ async fn handle_client(stream: UnixStream, shared_state: SharedState) {
         Arc::clone(&shared_state.config),
         client_id,
         shared_state.pane_closed_tx.clone(),
+        Arc::clone(&shared_state.command_executor),
     );
 
     // Message pump loop
@@ -696,22 +700,36 @@ async fn run_daemon() -> Result<()> {
     // Extract managers into Arc<RwLock<>> for concurrent access
     let (shutdown_tx, _) = broadcast::channel(1);
     let (pane_closed_tx, pane_closed_rx) = mpsc::channel::<PaneClosedNotification>(100);
+
+    // Create the managers first so we can reference them for the executor
+    let session_manager = Arc::new(RwLock::new(std::mem::replace(
+        &mut server.session_manager,
+        SessionManager::new(),
+    )));
+    let pty_manager = Arc::new(RwLock::new(std::mem::replace(
+        &mut server.pty_manager,
+        PtyManager::new(),
+    )));
+    let registry = Arc::new(std::mem::replace(
+        &mut server.client_registry,
+        ClientRegistry::new(),
+    ));
+
+    // Create the sideband command executor
+    let command_executor = Arc::new(AsyncCommandExecutor::new(
+        Arc::clone(&session_manager),
+        Arc::clone(&pty_manager),
+        Arc::clone(&registry),
+    ));
+
     let shared_state = SharedState {
-        session_manager: Arc::new(RwLock::new(std::mem::replace(
-            &mut server.session_manager,
-            SessionManager::new(),
-        ))),
-        pty_manager: Arc::new(RwLock::new(std::mem::replace(
-            &mut server.pty_manager,
-            PtyManager::new(),
-        ))),
-        registry: Arc::new(std::mem::replace(
-            &mut server.client_registry,
-            ClientRegistry::new(),
-        )),
+        session_manager,
+        pty_manager,
+        registry,
         config: Arc::new(app_config),
         shutdown_tx: shutdown_tx.clone(),
         pane_closed_tx,
+        command_executor,
     };
 
     // Store references back in server for persistence operations
@@ -732,14 +750,16 @@ async fn run_daemon() -> Result<()> {
                     // Check if this pane has a PTY (restored panes with PTYs)
                     if let Some(handle) = pty_manager.get(pane_id) {
                         let reader = handle.clone_reader();
-                        let _poller = PtyOutputPoller::spawn_with_cleanup(
+                        // Start poller with sideband parsing enabled
+                        let _poller = PtyOutputPoller::spawn_with_sideband(
                             pane_id,
                             session_id,
                             reader,
                             shared_state.registry.clone(),
                             Some(shared_state.pane_closed_tx.clone()),
+                            shared_state.command_executor.clone(),
                         );
-                        info!("Started output poller for restored pane {}", pane_id);
+                        info!("Started output poller for restored pane {} (sideband enabled)", pane_id);
                     }
                 }
             }
@@ -1107,13 +1127,22 @@ mod tests {
     fn create_test_shared_state() -> SharedState {
         let (shutdown_tx, _) = broadcast::channel(1);
         let (pane_closed_tx, _) = mpsc::channel(100);
+        let session_manager = Arc::new(RwLock::new(SessionManager::new()));
+        let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
+        let registry = Arc::new(ClientRegistry::new());
+        let command_executor = Arc::new(AsyncCommandExecutor::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+        ));
         SharedState {
-            session_manager: Arc::new(RwLock::new(SessionManager::new())),
-            pty_manager: Arc::new(RwLock::new(PtyManager::new())),
-            registry: Arc::new(ClientRegistry::new()),
+            session_manager,
+            pty_manager,
+            registry,
             config: Arc::new(config::AppConfig::default()),
             shutdown_tx,
             pane_closed_tx,
+            command_executor,
         }
     }
 
@@ -1498,6 +1527,7 @@ mod tests {
             shared_state.config,
             client_id,
             shared_state.pane_closed_tx,
+            shared_state.command_executor,
         )
     }
 
