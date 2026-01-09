@@ -12,7 +12,7 @@ pub use codec::{ClientCodec, CodecError, ServerCodec};
 pub use messages::{ClientMessage, ErrorCode, ServerMessage};
 pub use types::{
     ClaudeActivity, ClaudeState, Dimensions, PaneInfo, PaneState, SessionInfo, SplitDirection,
-    WindowInfo,
+    ViewportState, WindowInfo,
 };
 
 /// Current protocol version

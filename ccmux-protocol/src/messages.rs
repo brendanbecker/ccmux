@@ -55,6 +55,16 @@ pub enum ClientMessage {
 
     /// Ping for keepalive
     Ping,
+
+    /// Set viewport scroll offset for a pane
+    SetViewportOffset {
+        pane_id: Uuid,
+        /// Lines from bottom (0 = at bottom, following output)
+        offset: usize,
+    },
+
+    /// Jump viewport to bottom (unpin and follow output)
+    JumpToBottom { pane_id: Uuid },
 }
 
 /// Messages sent from server to client
@@ -111,6 +121,12 @@ pub enum ServerMessage {
 
     /// Pong response to ping
     Pong,
+
+    /// Viewport state updated for a pane
+    ViewportUpdated {
+        pane_id: Uuid,
+        state: crate::types::ViewportState,
+    },
 }
 
 /// Error codes for protocol errors
@@ -616,5 +632,139 @@ mod tests {
                 }
             }
         }
+    }
+
+    // ==================== Viewport Message Tests ====================
+
+    #[test]
+    fn test_client_message_set_viewport_offset() {
+        let pane_id = Uuid::new_v4();
+        let msg = ClientMessage::SetViewportOffset {
+            pane_id,
+            offset: 100,
+        };
+
+        if let ClientMessage::SetViewportOffset {
+            pane_id: pid,
+            offset,
+        } = msg
+        {
+            assert_eq!(pid, pane_id);
+            assert_eq!(offset, 100);
+        } else {
+            panic!("Wrong variant");
+        }
+    }
+
+    #[test]
+    fn test_client_message_set_viewport_offset_zero() {
+        let pane_id = Uuid::new_v4();
+        let msg = ClientMessage::SetViewportOffset {
+            pane_id,
+            offset: 0,
+        };
+
+        if let ClientMessage::SetViewportOffset { offset, .. } = msg {
+            assert_eq!(offset, 0);
+        }
+    }
+
+    #[test]
+    fn test_client_message_jump_to_bottom() {
+        let pane_id = Uuid::new_v4();
+        let msg = ClientMessage::JumpToBottom { pane_id };
+
+        if let ClientMessage::JumpToBottom { pane_id: pid } = msg {
+            assert_eq!(pid, pane_id);
+        } else {
+            panic!("Wrong variant");
+        }
+    }
+
+    #[test]
+    fn test_server_message_viewport_updated() {
+        use crate::types::ViewportState;
+
+        let pane_id = Uuid::new_v4();
+        let state = ViewportState::pinned(50);
+
+        let msg = ServerMessage::ViewportUpdated {
+            pane_id,
+            state: state.clone(),
+        };
+
+        if let ServerMessage::ViewportUpdated {
+            pane_id: pid,
+            state: s,
+        } = msg
+        {
+            assert_eq!(pid, pane_id);
+            assert_eq!(s, state);
+        } else {
+            panic!("Wrong variant");
+        }
+    }
+
+    #[test]
+    fn test_server_message_viewport_updated_at_bottom() {
+        use crate::types::ViewportState;
+
+        let pane_id = Uuid::new_v4();
+        let state = ViewportState::new();
+
+        let msg = ServerMessage::ViewportUpdated { pane_id, state };
+
+        if let ServerMessage::ViewportUpdated { state: s, .. } = msg {
+            assert!(s.is_at_bottom());
+            assert!(!s.is_pinned);
+            assert_eq!(s.new_lines_since_pin, 0);
+        }
+    }
+
+    #[test]
+    fn test_server_message_viewport_updated_with_new_lines() {
+        use crate::types::ViewportState;
+
+        let pane_id = Uuid::new_v4();
+        let state = ViewportState {
+            offset_from_bottom: 100,
+            is_pinned: true,
+            new_lines_since_pin: 47,
+        };
+
+        let msg = ServerMessage::ViewportUpdated { pane_id, state };
+
+        if let ServerMessage::ViewportUpdated { state: s, .. } = msg {
+            assert_eq!(s.new_lines_since_pin, 47);
+        }
+    }
+
+    #[test]
+    fn test_viewport_messages_equality() {
+        use crate::types::ViewportState;
+
+        let pane_id = Uuid::new_v4();
+
+        let msg1 = ClientMessage::SetViewportOffset {
+            pane_id,
+            offset: 50,
+        };
+        let msg2 = ClientMessage::SetViewportOffset {
+            pane_id,
+            offset: 50,
+        };
+        let msg3 = ClientMessage::SetViewportOffset {
+            pane_id,
+            offset: 100,
+        };
+
+        assert_eq!(msg1, msg2);
+        assert_ne!(msg1, msg3);
+
+        let state = ViewportState::pinned(10);
+        let srv1 = ServerMessage::ViewportUpdated { pane_id, state };
+        let srv2 = ServerMessage::ViewportUpdated { pane_id, state };
+
+        assert_eq!(srv1, srv2);
     }
 }
