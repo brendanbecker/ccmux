@@ -74,7 +74,6 @@
 
 | Worktree | Branch | Status |
 |----------|--------|--------|
-| `ccmux-wt-feat-031` | feat-031-session-delete-keybind | ✅ Merged (cleanup needed) |
 | `ccmux-wt-feat-032` | feat-032-integrated-mcp-server | 🔄 In progress |
 | `ccmux-wt-feat-033` | feat-033-tmux-like-auto-start | 🔄 In progress |
 
