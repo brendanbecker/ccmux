@@ -31,7 +31,6 @@
 
 ### Known Issues
 - `kill -9` corrupts terminal (SIGKILL can't be caught - run `reset` to fix)
-- BUG-002: Flaky test (P2, doesn't affect functionality)
 - Legacy zombie sessions from before BUG-004 fix need manual cleanup (clear `~/.local/share/.ccmux/state/`)
 
 ## Wave 4: Integration Features
@@ -64,13 +63,12 @@
 | FEAT-029 | MCP Natural Language Control | P1 | ✅ Merged |
 | FEAT-030 | Sideband Pane Splitting | P1 | 🔄 In progress |
 | FEAT-031 | Session Delete Keybind (Ctrl+D) | P2 | 🔄 In progress |
+| FEAT-032 | Integrated MCP Server | P1 | 🔲 Work item created |
+| FEAT-033 | tmux-like Auto-Start | P1 | 🔲 Work item created |
 
-### FEAT-029 Scope (MCP Tools)
-- Fix `ccmux_create_pane` direction parameter (currently ignored)
-- Add `ccmux_create_session` tool
-- Add `ccmux_create_window` tool
-- Add `ccmux_list_sessions` tool
-- Add `ccmux_list_windows` tool
+### FEAT-032/033: UX Improvements
+- **FEAT-032**: MCP bridge connects to main daemon, Claude controls same sessions as user
+- **FEAT-033**: `ccmux` auto-starts server if not running (like tmux)
 
 ## Active Worktrees
 
