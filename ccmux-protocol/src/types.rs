@@ -108,6 +108,64 @@ impl Dimensions {
     }
 }
 
+/// Viewport state for scroll position tracking
+///
+/// Tracks the scroll position within a pane and whether the user has
+/// scrolled up (pinned) from the bottom. When pinned, new output is
+/// buffered without yanking the viewport, and a count of new lines
+/// is maintained for the "new content" indicator.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct ViewportState {
+    /// Lines offset from bottom (0 = at bottom, following new content)
+    pub offset_from_bottom: usize,
+    /// True if user has scrolled up from bottom
+    pub is_pinned: bool,
+    /// Number of new lines received while viewport is pinned
+    pub new_lines_since_pin: usize,
+}
+
+impl ViewportState {
+    /// Create a new viewport state at the bottom (following output)
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Create a pinned viewport state at the given offset
+    pub fn pinned(offset: usize) -> Self {
+        Self {
+            offset_from_bottom: offset,
+            is_pinned: true,
+            new_lines_since_pin: 0,
+        }
+    }
+
+    /// Check if viewport is at the bottom (following new content)
+    pub fn is_at_bottom(&self) -> bool {
+        self.offset_from_bottom == 0 && !self.is_pinned
+    }
+
+    /// Pin the viewport at the current offset (user scrolled up)
+    pub fn pin(&mut self, offset: usize) {
+        self.offset_from_bottom = offset;
+        self.is_pinned = true;
+        // Don't reset new_lines_since_pin - keep counting
+    }
+
+    /// Unpin and jump to bottom
+    pub fn jump_to_bottom(&mut self) {
+        self.offset_from_bottom = 0;
+        self.is_pinned = false;
+        self.new_lines_since_pin = 0;
+    }
+
+    /// Record new lines received while pinned
+    pub fn add_new_lines(&mut self, count: usize) {
+        if self.is_pinned {
+            self.new_lines_since_pin = self.new_lines_since_pin.saturating_add(count);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -804,5 +862,179 @@ mod tests {
         let serialized = bincode::serialize(&session).unwrap();
         let deserialized: SessionInfo = bincode::deserialize(&serialized).unwrap();
         assert_eq!(session, deserialized);
+    }
+
+    // ==================== ViewportState Tests ====================
+
+    #[test]
+    fn test_viewport_state_default() {
+        let state = ViewportState::default();
+
+        assert_eq!(state.offset_from_bottom, 0);
+        assert!(!state.is_pinned);
+        assert_eq!(state.new_lines_since_pin, 0);
+    }
+
+    #[test]
+    fn test_viewport_state_new() {
+        let state = ViewportState::new();
+
+        assert_eq!(state, ViewportState::default());
+        assert!(state.is_at_bottom());
+    }
+
+    #[test]
+    fn test_viewport_state_pinned() {
+        let state = ViewportState::pinned(50);
+
+        assert_eq!(state.offset_from_bottom, 50);
+        assert!(state.is_pinned);
+        assert_eq!(state.new_lines_since_pin, 0);
+        assert!(!state.is_at_bottom());
+    }
+
+    #[test]
+    fn test_viewport_state_is_at_bottom() {
+        // At bottom when offset is 0 and not pinned
+        let at_bottom = ViewportState::new();
+        assert!(at_bottom.is_at_bottom());
+
+        // Not at bottom when pinned (even with offset 0)
+        let pinned_at_zero = ViewportState {
+            offset_from_bottom: 0,
+            is_pinned: true,
+            new_lines_since_pin: 0,
+        };
+        assert!(!pinned_at_zero.is_at_bottom());
+
+        // Not at bottom when offset > 0
+        let scrolled_up = ViewportState::pinned(10);
+        assert!(!scrolled_up.is_at_bottom());
+    }
+
+    #[test]
+    fn test_viewport_state_pin() {
+        let mut state = ViewportState::new();
+
+        state.pin(100);
+        assert!(state.is_pinned);
+        assert_eq!(state.offset_from_bottom, 100);
+        assert!(!state.is_at_bottom());
+
+        // Pin again at different offset
+        state.pin(50);
+        assert_eq!(state.offset_from_bottom, 50);
+    }
+
+    #[test]
+    fn test_viewport_state_jump_to_bottom() {
+        let mut state = ViewportState::pinned(100);
+        state.new_lines_since_pin = 50;
+
+        state.jump_to_bottom();
+
+        assert_eq!(state.offset_from_bottom, 0);
+        assert!(!state.is_pinned);
+        assert_eq!(state.new_lines_since_pin, 0);
+        assert!(state.is_at_bottom());
+    }
+
+    #[test]
+    fn test_viewport_state_add_new_lines() {
+        let mut state = ViewportState::pinned(10);
+
+        state.add_new_lines(5);
+        assert_eq!(state.new_lines_since_pin, 5);
+
+        state.add_new_lines(10);
+        assert_eq!(state.new_lines_since_pin, 15);
+    }
+
+    #[test]
+    fn test_viewport_state_add_new_lines_not_pinned() {
+        let mut state = ViewportState::new();
+
+        // When not pinned, adding lines should not increment counter
+        state.add_new_lines(10);
+        assert_eq!(state.new_lines_since_pin, 0);
+    }
+
+    #[test]
+    fn test_viewport_state_add_new_lines_overflow() {
+        let mut state = ViewportState::pinned(10);
+        state.new_lines_since_pin = usize::MAX - 5;
+
+        // Should saturate instead of overflow
+        state.add_new_lines(10);
+        assert_eq!(state.new_lines_since_pin, usize::MAX);
+    }
+
+    #[test]
+    fn test_viewport_state_pin_preserves_new_lines() {
+        let mut state = ViewportState::pinned(10);
+        state.add_new_lines(20);
+
+        // Pinning again should preserve the line count
+        state.pin(50);
+        assert_eq!(state.new_lines_since_pin, 20);
+    }
+
+    #[test]
+    fn test_viewport_state_clone() {
+        let state = ViewportState {
+            offset_from_bottom: 42,
+            is_pinned: true,
+            new_lines_since_pin: 100,
+        };
+
+        let cloned = state.clone();
+        assert_eq!(state, cloned);
+    }
+
+    #[test]
+    fn test_viewport_state_copy() {
+        let state = ViewportState::pinned(10);
+        let copied = state; // Copy semantics
+
+        assert_eq!(state, copied);
+    }
+
+    #[test]
+    fn test_viewport_state_debug() {
+        let state = ViewportState::pinned(25);
+        let debug = format!("{:?}", state);
+
+        assert!(debug.contains("ViewportState"));
+        assert!(debug.contains("25"));
+        assert!(debug.contains("true"));
+    }
+
+    #[test]
+    fn test_viewport_state_equality() {
+        let state1 = ViewportState::pinned(10);
+        let state2 = ViewportState::pinned(10);
+        let state3 = ViewportState::pinned(20);
+
+        assert_eq!(state1, state2);
+        assert_ne!(state1, state3);
+    }
+
+    #[test]
+    fn test_viewport_state_serde() {
+        let states = [
+            ViewportState::new(),
+            ViewportState::pinned(100),
+            ViewportState {
+                offset_from_bottom: 50,
+                is_pinned: true,
+                new_lines_since_pin: 25,
+            },
+        ];
+
+        for state in states {
+            let serialized = bincode::serialize(&state).unwrap();
+            let deserialized: ViewportState = bincode::deserialize(&serialized).unwrap();
+            assert_eq!(state, deserialized);
+        }
     }
 }

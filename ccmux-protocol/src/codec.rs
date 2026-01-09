@@ -259,6 +259,13 @@ mod tests {
             ClientMessage::Detach,
             ClientMessage::Sync,
             ClientMessage::Ping,
+            ClientMessage::SetViewportOffset {
+                pane_id: Uuid::new_v4(),
+                offset: 100,
+            },
+            ClientMessage::JumpToBottom {
+                pane_id: Uuid::new_v4(),
+            },
         ];
 
         for msg in messages {
@@ -380,6 +387,10 @@ mod tests {
                 message: "Session not found".to_string(),
             },
             ServerMessage::Pong,
+            ServerMessage::ViewportUpdated {
+                pane_id,
+                state: ViewportState::pinned(50),
+            },
         ];
 
         for msg in messages {

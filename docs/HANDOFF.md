@@ -6,8 +6,8 @@
 
 **ccmux** is a Claude Code-aware terminal multiplexer in Rust. Development follows the [Context Engineering Methodology](./CONTEXT_ENGINEERING_METHODOLOGY.md).
 
-**Current Stage**: Stage 6 (Implementation) - Wave 3 Ready
-**Completed**: Waves 1-2 (6 of 14 features implemented)
+**Current Stage**: Stage 6 (Implementation) - Wave 1 Ready
+**Completed**: Wave 0 (6 of 20 features implemented)
 
 ## Implementation Progress
 
@@ -15,31 +15,35 @@
 
 | Wave | Features | Status |
 |------|----------|--------|
-| 1 | Protocol Layer, Utilities | ✅ Complete |
-| 2 | Connection, Session Mgmt, PTY Mgmt, Config | ✅ Complete |
-| 3 | Client UI, Terminal Parsing, Persistence | ⏳ Ready |
-| 4 | Client Input, Claude Detection | ⏸️ Pending |
-| 5 | Session Isolation | ⏸️ Pending |
-| 6 | MCP Server, Sideband Protocol | ⏸️ Pending |
+| 0 | Protocol, Utilities, Connection, Session, PTY, Config | ✅ Complete |
+| 1 | Pane Content, Scrollback, Viewport, Worktree, Response Channel, Logging, Client UI, Terminal Parsing, Persistence | ⏳ Ready |
+| 2 | Client Input, Claude Detection, Sideband Protocol | ⏸️ Blocked by Wave 1 |
+| 3 | MCP Server, Session Isolation | ⏸️ Blocked by Wave 2 |
 
 ### Feature Implementation Status
 
-| # | Feature | Crate | Status | Tests |
-|---|---------|-------|--------|-------|
-| 1 | Protocol Layer | ccmux-protocol | ✅ Done | 86 |
-| 2 | Utilities | ccmux-utils | ✅ Done | 108 |
-| 3 | Client UI | ccmux-client | ⏳ Wave 3 | - |
-| 4 | Client Input | ccmux-client | ⏸️ Wave 4 | - |
-| 5 | Client Connection | ccmux-client | ✅ Done | 31 |
-| 6 | Session Management | ccmux-server | ✅ Done | 88 |
-| 7 | PTY Management | ccmux-server | ✅ Done | 17 |
-| 8 | Terminal Parsing | ccmux-server | ⏳ Wave 3 | - |
-| 9 | Claude Detection | ccmux-server | ⏸️ Wave 4 | - |
-| 10 | Persistence | ccmux-server | ⏳ Wave 3 | - |
-| 11 | Configuration | ccmux-server | ✅ Done | 38 |
-| 12 | MCP Server | ccmux-server | ⏸️ Wave 6 | - |
-| 13 | Sideband Protocol | ccmux-server | ⏸️ Wave 6 | - |
-| 14 | Session Isolation | ccmux-server | ⏸️ Wave 5 | - |
+| ID | Feature | Component | Status | Tests | Priority |
+|----|---------|-----------|--------|-------|----------|
+| FEAT-001 | Pane Content Abstraction | session/pane | ⏳ Wave 1 | - | P1 |
+| FEAT-002 | Per-Session Scrollback Config | config | ⏳ Wave 1 | - | P1 |
+| FEAT-003 | Viewport Pinning | tui | ⏳ Wave 1 | - | P2 |
+| FEAT-004 | Worktree-Aware Orchestration | orchestration | ⏳ Wave 1 | - | P2 |
+| FEAT-005 | Response Channel | orchestration | ⏳ Wave 1 | - | P1 |
+| FEAT-006 | Per-Session Log Levels | logging | ⏳ Wave 1 | - | P2 |
+| FEAT-007 | Protocol Layer | ccmux-protocol | ✅ Done | 86 | P1 |
+| FEAT-008 | Utilities | ccmux-utils | ✅ Done | 108 | P1 |
+| FEAT-009 | Client UI | ccmux-client | ⏳ Wave 1 | - | P1 |
+| FEAT-010 | Client Input | ccmux-client | ⏸️ Wave 2 | - | P1 |
+| FEAT-011 | Client Connection | ccmux-client | ✅ Done | 31 | P1 |
+| FEAT-012 | Session Management | ccmux-server | ✅ Done | 88 | P1 |
+| FEAT-013 | PTY Management | ccmux-server | ✅ Done | 17 | P1 |
+| FEAT-014 | Terminal Parsing | ccmux-server | ⏳ Wave 1 | - | P1 |
+| FEAT-015 | Claude Detection | ccmux-server | ⏸️ Wave 2 | - | P1 |
+| FEAT-016 | Persistence | ccmux-server | ⏳ Wave 1 | - | P2 |
+| FEAT-017 | Configuration | ccmux-server | ✅ Done | 38 | P1 |
+| FEAT-018 | MCP Server | ccmux-server | ⏸️ Wave 3 | - | P2 |
+| FEAT-019 | Sideband Protocol | ccmux-server | ⏸️ Wave 2 | - | P2 |
+| FEAT-020 | Session Isolation | ccmux-server | ⏸️ Wave 3 | - | P1 |
 
 **Total Tests**: 384 passing
 
@@ -47,20 +51,43 @@
 
 This project uses **git worktrees** for parallel feature development:
 
-1. Create worktree per feature: `git worktree add -b feature/N-name ../ccmux-wt-name main`
+1. Create worktree per feature: `git worktree add -b feature/FEAT-XXX-name ../ccmux-wt-name main`
 2. Write `SESSION_PROMPT.md` in each worktree with implementation instructions
 3. Launch parallel Claude Code sessions, one per worktree
 4. Merge branches back to main after wave completion
 5. Run test-runner agent to validate and add tests
 6. Repeat for next wave
 
-## Wave 3 Features (Next)
+## Wave 1 Features (Next)
 
-| Feature | Crate | Key Dependencies |
-|---------|-------|------------------|
-| Client UI (3) | ccmux-client | ratatui, tui-term, connection |
-| Terminal Parsing (8) | ccmux-server | vt100, session |
-| Persistence (10) | ccmux-server | okaywal, bincode, session |
+All 9 features can be developed **in parallel**. Prioritize P1 features on the critical path.
+
+### Critical Path (P1)
+
+| ID | Feature | Component | Dependencies | Effort |
+|----|---------|-----------|--------------|--------|
+| FEAT-009 | Client UI | ccmux-client | FEAT-007, FEAT-011 | large |
+| FEAT-014 | Terminal Parsing | ccmux-server | FEAT-013 | medium |
+| FEAT-001 | Pane Content Abstraction | session/pane | none | large |
+| FEAT-002 | Per-Session Scrollback | config | none | medium |
+| FEAT-005 | Response Channel | orchestration | none | medium |
+
+### Additional (P2)
+
+| ID | Feature | Component | Dependencies | Effort |
+|----|---------|-----------|--------------|--------|
+| FEAT-016 | Persistence | ccmux-server | FEAT-012 | large |
+| FEAT-003 | Viewport Pinning | tui | none | medium |
+| FEAT-004 | Worktree Orchestration | orchestration | none | xl |
+| FEAT-006 | Per-Session Logging | logging | none | medium |
+
+## Critical Path
+
+```
+FEAT-013 (done) → FEAT-014 → FEAT-015 → FEAT-020
+```
+
+FEAT-014 and FEAT-015 are on the critical path—prioritize these to minimize total completion time.
 
 ## Completed Work
 
@@ -72,26 +99,22 @@ This project uses **git worktrees** for parallel feature development:
 
 ### Stage 6: Implementation
 
-**2026-01-08 - Wave 2 Complete**
-- Merged 4 feature branches:
-  - `feature/5-client-connection`: Unix socket client with async I/O
-  - `feature/6-session-mgmt`: Session/Window/Pane hierarchy
-  - `feature/7-pty-mgmt`: portable-pty integration
-  - `feature/11-config`: Hot-reload config with ArcSwap
-- Added 190 tests (194 → 384 total)
-- All tests passing, no clippy warnings
-
-**2026-01-08 - Wave 1 Complete**
-- Merged 2 feature branches:
-  - `feature/1-protocol-layer`: IPC messages and codec
-  - `feature/2-utilities`: Error types, logging, XDG paths
-- Added 177 tests (17 → 194 total)
+**2026-01-08 - Wave 0 Complete**
+- Merged 6 feature branches:
+  - `feature/FEAT-007-protocol`: IPC messages and codec (86 tests)
+  - `feature/FEAT-008-utilities`: Error types, logging, XDG paths (108 tests)
+  - `feature/FEAT-011-connection`: Unix socket client with async I/O (31 tests)
+  - `feature/FEAT-012-session`: Session/Window/Pane hierarchy (88 tests)
+  - `feature/FEAT-013-pty`: portable-pty integration (17 tests)
+  - `feature/FEAT-017-config`: Hot-reload config with ArcSwap (38 tests)
 - Initialized 4-crate workspace structure
+- All tests passing, no clippy warnings
 
 ## Key Documents
 
 | Document | Purpose |
 |----------|---------|
+| `WAVES.md` | Canonical wave plan with dependency graph |
 | `docs/architecture/ARCHITECTURE.md` | System overview |
 | `docs/architecture/CRATE_STRUCTURE.md` | Workspace layout |
 | `docs/FEATURE_HANDOFF.md` | Parallel task: featmgmt backfill |
@@ -107,5 +130,5 @@ This project uses **git worktrees** for parallel feature development:
 
 ## Note on Feature Management
 
-Features are tracked informally in this file. A parallel effort is backfilling
-the formal `feature-management/` system - see `docs/FEATURE_HANDOFF.md`.
+Features are tracked informally in this file. The canonical wave structure is in `WAVES.md`.
+A parallel effort is backfilling the formal `feature-management/` system - see `docs/FEATURE_HANDOFF.md`.
