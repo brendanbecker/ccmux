@@ -26,6 +26,7 @@ pub fn translate_key(key: &KeyEvent) -> Option<Vec<u8>> {
                 Some(vec![b'\t'])
             }
         }
+        KeyCode::BackTab => Some(b"\x1b[Z".to_vec()),
         KeyCode::Backspace => {
             if modifiers.contains(KeyModifiers::ALT) {
                 // Alt+Backspace - delete word

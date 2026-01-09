@@ -4,10 +4,10 @@
 **Last Updated**: 2026-01-09
 
 ## Summary Statistics
-- Total Bugs: 5
+- Total Bugs: 6
 - New: 2
 - In Progress: 0
-- Resolved: 2
+- Resolved: 3
 
 ## Bugs by Priority
 
@@ -32,7 +32,7 @@ FEAT-030 was marked as merged but is incomplete. `SidebandParser` and `CommandEx
 **Proposed Fix**:
 Integrate `SidebandParser` into `PtyOutputPoller` to filter output and execute commands before broadcasting to clients.
 
-### P1 - High Priority (2)
+### P1 - High Priority (3)
 
 #### BUG-004: Client hangs when reattaching to session with dead pane [RESOLVED]
 
@@ -68,6 +68,22 @@ Chicken-and-egg problem: Server creates panes at 80x24 default, client used serv
 
 **Resolution**:
 Modified `ccmux-client/src/ui/app.rs` to use client's terminal size when creating UI panes on attach, and send resize messages to server for all panes immediately after attach.
+
+#### BUG-007: Shift+Tab not passed through to PTY [RESOLVED]
+
+**Status**: Resolved
+**Filed**: 2026-01-09
+**Resolved**: 2026-01-09
+**Component**: ccmux-client
+
+**Description**:
+Shift+Tab keystrokes are silently dropped instead of being sent to the PTY. Programs like Claude Code that use Shift+Tab don't receive the keystroke.
+
+**Root Cause**:
+`ccmux-client/src/input/keys.rs` has no match arm for `KeyCode::BackTab`. Crossterm sends `KeyCode::BackTab` for Shift+Tab (not `KeyCode::Tab` with SHIFT modifier), so it falls through to `_ => None` and is dropped.
+
+**Resolution**:
+Added `KeyCode::BackTab => Some(b"\x1b[Z".to_vec())` to `keys.rs`.
 
 ### P2 - Medium Priority (1)
 
@@ -119,6 +135,8 @@ fn test_ensure_dir_nested() {
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-09 | BUG-007 | Resolved | Added KeyCode::BackTab handler |
+| 2026-01-09 | BUG-007 | Filed | Shift+Tab not passed through (missing BackTab case) |
 | 2026-01-09 | BUG-006 | Resolved | Client now uses terminal size on attach |
 | 2026-01-09 | BUG-006 | Filed | Viewport not sizing to terminal dimensions |
 | 2026-01-09 | BUG-005 | Filed | Sideband parsing not integrated into output flow |
