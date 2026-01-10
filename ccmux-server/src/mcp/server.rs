@@ -229,6 +229,35 @@ impl McpServer {
                 name: arguments["name"].as_str().map(String::from),
                 command: arguments["command"].as_str().map(String::from),
             },
+            "ccmux_rename_session" => ToolParams::RenameSession {
+                session: arguments["session"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'session' parameter".into()))?
+                    .to_string(),
+                name: arguments["name"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'name' parameter".into()))?
+                    .to_string(),
+            },
+            "ccmux_split_pane" => ToolParams::SplitPane {
+                pane_id: parse_uuid(arguments, "pane_id")?,
+                direction: arguments["direction"].as_str().map(String::from),
+                ratio: arguments["ratio"].as_f64(),
+                command: arguments["command"].as_str().map(String::from),
+                cwd: arguments["cwd"].as_str().map(String::from),
+                select: arguments["select"].as_bool().unwrap_or(false),
+            },
+            "ccmux_resize_pane" => ToolParams::ResizePane {
+                pane_id: parse_uuid(arguments, "pane_id")?,
+                delta: arguments["delta"]
+                    .as_f64()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'delta' parameter".into()))?,
+            },
+            "ccmux_create_layout" => ToolParams::CreateLayout {
+                session: arguments["session"].as_str().map(String::from),
+                window: arguments["window"].as_str().map(String::from),
+                layout: arguments["layout"].clone(),
+            },
             _ => unreachable!(), // Already validated above
         };
 
@@ -260,6 +289,25 @@ impl McpServer {
             ToolParams::CreateWindow { session, name, command } => {
                 ctx.create_window(session.as_deref(), name.as_deref(), command.as_deref())
             }
+            ToolParams::RenameSession { session, name } => {
+                ctx.rename_session(&session, &name)
+            }
+            ToolParams::SplitPane { pane_id, direction, ratio, command, cwd, select } => {
+                ctx.split_pane(
+                    pane_id,
+                    direction.as_deref(),
+                    ratio,
+                    command.as_deref(),
+                    cwd.as_deref(),
+                    select,
+                )
+            }
+            ToolParams::ResizePane { pane_id, delta } => {
+                ctx.resize_pane(pane_id, delta)
+            }
+            ToolParams::CreateLayout { session, window, layout } => {
+                ctx.create_layout(session.as_deref(), window.as_deref(), &layout)
+            }
         };
 
         // Convert Result to ToolResult
@@ -287,6 +335,10 @@ fn is_known_tool(name: &str) -> bool {
             | "ccmux_list_windows"
             | "ccmux_create_session"
             | "ccmux_create_window"
+            | "ccmux_rename_session"
+            | "ccmux_split_pane"
+            | "ccmux_resize_pane"
+            | "ccmux_create_layout"
     )
 }
 
@@ -312,6 +364,21 @@ enum ToolParams {
     ListWindows { session: Option<String> },
     CreateSession { name: Option<String> },
     CreateWindow { session: Option<String>, name: Option<String>, command: Option<String> },
+    RenameSession { session: String, name: String },
+    SplitPane {
+        pane_id: Uuid,
+        direction: Option<String>,
+        ratio: Option<f64>,
+        command: Option<String>,
+        cwd: Option<String>,
+        select: bool,
+    },
+    ResizePane { pane_id: Uuid, delta: f64 },
+    CreateLayout {
+        session: Option<String>,
+        window: Option<String>,
+        layout: serde_json::Value,
+    },
 }
 
 impl Default for McpServer {
