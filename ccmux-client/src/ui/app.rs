@@ -333,8 +333,27 @@ impl App {
 
             InputAction::FocusPane { x, y } => {
                 // Find pane at coordinates and focus it
-                // For now, just log - will be implemented with proper pane layout
-                tracing::debug!("Focus pane at ({}, {})", x, y);
+                let (cols, rows) = self.terminal_size;
+                let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
+
+                if let Some(ref layout) = self.layout {
+                    let pane_rects = layout.calculate_rects(pane_area);
+
+                    // Find which pane contains the click point
+                    if let Some((pane_id, _)) = pane_rects.iter().find(|(_, rect)| {
+                        x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height
+                    }) {
+                        // Focus this pane (same logic as ClientCommand::FocusPane)
+                        self.active_pane_id = Some(*pane_id);
+                        self.pane_manager.set_active(*pane_id);
+                        if let Some(ref mut layout) = self.layout {
+                            layout.set_active_pane(*pane_id);
+                        }
+                        self.connection
+                            .send(ClientMessage::SelectPane { pane_id: *pane_id })
+                            .await?;
+                    }
+                }
             }
 
             InputAction::ScrollUp { lines } => {
