@@ -6,9 +6,62 @@
 
 use ccmux_protocol::{ClaudeActivity, ClaudeState};
 use std::time::{Duration, Instant};
+use tracing::{debug, info, trace};
 
-/// Minimum time between state changes to prevent rapid flickering
-const DEFAULT_DEBOUNCE_MS: u64 = 100;
+use super::state::{ClaudeSessionInfo, ClaudeStateChange, DetectorConfig};
+
+/// Strip ANSI escape sequences from text for cleaner pattern matching
+fn strip_ansi(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            // ESC character - start of escape sequence
+            if let Some(&next) = chars.peek() {
+                if next == '[' {
+                    // CSI sequence: ESC [ ... final_byte
+                    chars.next(); // consume '['
+                    while let Some(&c) = chars.peek() {
+                        if c.is_ascii_alphabetic() || c == '@' || c == '`' || c == '~' {
+                            chars.next(); // consume final byte
+                            break;
+                        }
+                        chars.next();
+                    }
+                    continue;
+                } else if next == ']' {
+                    // OSC sequence: ESC ] ... (ST or BEL)
+                    chars.next(); // consume ']'
+                    while let Some(&c) = chars.peek() {
+                        if c == '\x07' || c == '\x1b' {
+                            // BEL or ESC (part of ST)
+                            if c == '\x1b' {
+                                chars.next();
+                                if let Some(&'\\') = chars.peek() {
+                                    chars.next(); // consume ST
+                                }
+                            } else {
+                                chars.next(); // consume BEL
+                            }
+                            break;
+                        }
+                        chars.next();
+                    }
+                    continue;
+                } else if next == '(' || next == ')' {
+                    // Charset selection: ESC ( or ESC )
+                    chars.next();
+                    chars.next(); // skip the charset designator
+                    continue;
+                }
+            }
+        }
+        result.push(c);
+    }
+
+    result
+}
 
 /// Detector for Claude Code state in a terminal pane
 #[derive(Debug)]
@@ -17,16 +70,18 @@ pub struct ClaudeDetector {
     is_claude: bool,
     /// Current detected activity state
     activity: ClaudeActivity,
-    /// Captured session ID (UUID format)
-    session_id: Option<String>,
-    /// Detected model name
-    model: Option<String>,
+    /// Session information
+    session_info: ClaudeSessionInfo,
     /// Last state change time (for debouncing)
     last_change: Instant,
-    /// Minimum time between state changes
-    debounce: Duration,
+    /// Configuration
+    config: DetectorConfig,
     /// Confidence level (0-100) in current detection
     confidence: u8,
+    /// Buffer for accumulating partial output
+    output_buffer: String,
+    /// Maximum buffer size before truncation
+    max_buffer_size: usize,
 }
 
 impl Default for ClaudeDetector {
@@ -36,25 +91,28 @@ impl Default for ClaudeDetector {
 }
 
 impl ClaudeDetector {
-    /// Create a new Claude detector
+    /// Create a new Claude detector with default configuration
     pub fn new() -> Self {
+        Self::with_config(DetectorConfig::default())
+    }
+
+    /// Create a detector with custom configuration
+    pub fn with_config(config: DetectorConfig) -> Self {
         Self {
             is_claude: false,
             activity: ClaudeActivity::Idle,
-            session_id: None,
-            model: None,
+            session_info: ClaudeSessionInfo::new(),
             last_change: Instant::now(),
-            debounce: Duration::from_millis(DEFAULT_DEBOUNCE_MS),
+            config,
             confidence: 0,
+            output_buffer: String::with_capacity(4096),
+            max_buffer_size: 8192,
         }
     }
 
-    /// Create a detector with custom debounce duration
+    /// Create a detector with custom debounce duration (convenience method)
     pub fn with_debounce(debounce_ms: u64) -> Self {
-        Self {
-            debounce: Duration::from_millis(debounce_ms),
-            ..Self::new()
-        }
+        Self::with_config(DetectorConfig::with_debounce(debounce_ms))
     }
 
     /// Check if Claude is detected in this pane
@@ -69,12 +127,12 @@ impl ClaudeDetector {
 
     /// Get detected session ID
     pub fn session_id(&self) -> Option<&str> {
-        self.session_id.as_deref()
+        self.session_info.session_id.as_deref()
     }
 
     /// Get detected model
     pub fn model(&self) -> Option<&str> {
-        self.model.as_deref()
+        self.session_info.model.as_deref()
     }
 
     /// Get detection confidence (0-100)
@@ -85,12 +143,7 @@ impl ClaudeDetector {
     /// Get current state as ClaudeState if Claude is detected
     pub fn state(&self) -> Option<ClaudeState> {
         if self.is_claude {
-            Some(ClaudeState {
-                session_id: self.session_id.clone(),
-                activity: self.activity.clone(),
-                model: self.model.clone(),
-                tokens_used: None, // Not detectable from PTY output
-            })
+            Some(self.session_info.to_claude_state(self.activity.clone()))
         } else {
             None
         }
@@ -105,48 +158,84 @@ impl ClaudeDetector {
         self.is_claude = true;
         self.confidence = 100;
         // Set last_change to past so subsequent analyze() isn't debounced
-        self.last_change = Instant::now() - self.debounce - Duration::from_millis(1);
+        self.last_change = Instant::now() - self.config.debounce_duration - Duration::from_millis(1);
+
+        if self.config.log_transitions {
+            info!("Claude Code marked as running in pane");
+        }
     }
 
     /// Reset detection state
     pub fn reset(&mut self) {
         self.is_claude = false;
         self.activity = ClaudeActivity::Idle;
-        self.session_id = None;
-        self.model = None;
+        self.session_info = ClaudeSessionInfo::new();
         self.confidence = 0;
         self.last_change = Instant::now();
+        self.output_buffer.clear();
+
+        if self.config.log_transitions {
+            debug!("Claude detector reset");
+        }
     }
 
     /// Analyze terminal output and detect Claude state changes
     ///
-    /// Returns `Some(ClaudeActivity)` if a state change occurred (respecting debounce),
+    /// Returns `Some(ClaudeStateChange)` if a state change occurred (respecting debounce),
     /// or `None` if no significant change was detected.
-    pub fn analyze(&mut self, text: &str) -> Option<ClaudeActivity> {
+    pub fn analyze(&mut self, text: &str) -> Option<ClaudeStateChange> {
+        // Strip ANSI sequences for cleaner pattern matching
+        let clean_text = strip_ansi(text);
+
+        // Append to buffer for multi-line pattern matching
+        self.output_buffer.push_str(&clean_text);
+        if self.output_buffer.len() > self.max_buffer_size {
+            // Keep only the last portion
+            let split_point = self.output_buffer.len() - self.max_buffer_size / 2;
+            self.output_buffer = self.output_buffer[split_point..].to_string();
+        }
+
         // Try to detect Claude presence first
         if !self.is_claude {
-            if self.detect_claude_presence(text) {
+            if self.detect_claude_presence(&clean_text) {
                 self.is_claude = true;
-                self.confidence = 80;
+                if self.config.log_transitions {
+                    info!(confidence = self.confidence, "Claude Code detected");
+                }
             } else {
                 return None;
             }
         }
 
         // Extract session ID if present
-        self.extract_session_id(text);
+        self.extract_session_id(&clean_text);
 
         // Extract model if present
-        self.extract_model(text);
+        self.extract_model(&clean_text);
 
         // Detect activity state
-        let new_activity = self.detect_activity(text);
+        let new_activity = self.detect_activity(&clean_text);
 
         // Apply debouncing for state changes
-        if new_activity != self.activity && self.last_change.elapsed() > self.debounce {
+        if new_activity != self.activity && self.last_change.elapsed() > self.config.debounce_duration
+        {
+            let previous = self.activity.clone();
             self.activity = new_activity.clone();
             self.last_change = Instant::now();
-            Some(new_activity)
+
+            let state = self.session_info.to_claude_state(new_activity.clone());
+            let change = ClaudeStateChange::new(previous.clone(), new_activity.clone(), state);
+
+            if self.config.log_transitions {
+                debug!(
+                    previous = ?previous,
+                    current = ?new_activity,
+                    description = %change.description,
+                    "Claude state changed"
+                );
+            }
+
+            Some(change)
         } else {
             None
         }
@@ -156,7 +245,7 @@ impl ClaudeDetector {
     ///
     /// This provides more reliable detection by examining the full screen
     /// rather than incremental output.
-    pub fn analyze_screen(&mut self, screen: &vt100::Screen) -> Option<ClaudeActivity> {
+    pub fn analyze_screen(&mut self, screen: &vt100::Screen) -> Option<ClaudeStateChange> {
         let content = screen.contents();
         self.analyze(&content)
     }
@@ -176,24 +265,37 @@ impl ClaudeDetector {
         // Strong indicators
         if text.contains("Claude Code") || text.contains("claude-code") {
             self.confidence = 95;
+            trace!("Detected Claude Code string");
             return true;
         }
 
         // Claude startup patterns
         if text.contains("Anthropic") && text.contains("Claude") {
             self.confidence = 90;
+            trace!("Detected Anthropic Claude");
             return true;
         }
 
         // Claude prompt pattern
         if Self::has_claude_prompt(text) {
             self.confidence = 75;
+            trace!("Detected Claude prompt pattern");
             return true;
         }
 
         // Spinner patterns typical of Claude
         if text.contains("⠋ Thinking") || text.contains("⠙ Thinking") {
             self.confidence = 85;
+            trace!("Detected Claude spinner");
+            return true;
+        }
+
+        // Check buffer for accumulated patterns
+        if self.output_buffer.contains("Claude Code")
+            || (self.output_buffer.contains("Anthropic") && self.output_buffer.contains("Claude"))
+        {
+            self.confidence = 80;
+            trace!("Detected Claude in buffer");
             return true;
         }
 
@@ -206,11 +308,13 @@ impl ClaudeDetector {
 
         // Permission/confirmation prompts - highest priority
         if Self::is_awaiting_confirmation(text) {
+            trace!("Activity: AwaitingConfirmation");
             return ClaudeActivity::AwaitingConfirmation;
         }
 
         // Tool execution markers
         if Self::is_tool_use(text) {
+            trace!("Activity: ToolUse");
             return ClaudeActivity::ToolUse;
         }
 
@@ -218,25 +322,30 @@ impl ClaudeDetector {
         // Carriage return is used for spinner animation
         if text.contains('\r') || self.has_spinner_in_last_lines(text) {
             if Self::is_thinking(text) {
+                trace!("Activity: Thinking (with spinner)");
                 return ClaudeActivity::Thinking;
             }
             if Self::is_coding(text) {
+                trace!("Activity: Coding (with spinner)");
                 return ClaudeActivity::Coding;
             }
         }
 
         // Thinking without spinner (status line or other indicators)
         if Self::is_thinking(text) {
+            trace!("Activity: Thinking");
             return ClaudeActivity::Thinking;
         }
 
         // Coding indicators
         if Self::is_coding(text) {
+            trace!("Activity: Coding");
             return ClaudeActivity::Coding;
         }
 
         // Prompt detection (idle state)
         if Self::has_claude_prompt(text) {
+            trace!("Activity: Idle (prompt detected)");
             return ClaudeActivity::Idle;
         }
 
@@ -250,6 +359,7 @@ impl ClaudeDetector {
             || text.contains("thinking")
             || text.contains("Processing")
             || text.contains("Analyzing")
+            || text.contains("Reading")
     }
 
     /// Check for coding state indicators
@@ -273,6 +383,9 @@ impl ClaudeDetector {
             || text.contains("Bash(")
             || text.contains("Glob(")
             || text.contains("Grep(")
+            || text.contains("Task(")
+            || text.contains("WebFetch(")
+            || text.contains("WebSearch(")
     }
 
     /// Check for confirmation prompt indicators
@@ -284,6 +397,7 @@ impl ClaudeDetector {
             || text.contains("Proceed?")
             || text.contains("Continue?")
             || text.contains("(y/n)")
+            || text.contains("Press Enter")
     }
 
     /// Check if text contains a Claude prompt
@@ -326,7 +440,10 @@ impl ClaudeDetector {
         // Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
         for word in text.split_whitespace() {
             if Self::is_uuid_like(word) {
-                self.session_id = Some(word.to_string());
+                self.session_info.set_session_id(word.to_string());
+                if self.config.log_transitions {
+                    debug!(session_id = word, "Extracted session ID");
+                }
                 return;
             }
         }
@@ -337,7 +454,10 @@ impl ClaudeDetector {
                 let after_colon = line[idx + 1..].trim();
                 let first_word = after_colon.split_whitespace().next().unwrap_or("");
                 if Self::is_uuid_like(first_word) {
-                    self.session_id = Some(first_word.to_string());
+                    self.session_info.set_session_id(first_word.to_string());
+                    if self.config.log_transitions {
+                        debug!(session_id = first_word, "Extracted session ID from colon");
+                    }
                     return;
                 }
             }
@@ -361,19 +481,24 @@ impl ClaudeDetector {
 
     /// Extract model name from text
     fn extract_model(&mut self, text: &str) {
-        // Look for common model patterns
+        // Look for common model patterns (newest first)
         const MODEL_PATTERNS: &[&str] = &[
+            "claude-opus-4-5",
+            "claude-sonnet-4-5",
+            "claude-opus-4",
+            "claude-sonnet-4",
+            "claude-3.5-sonnet",
             "claude-3-opus",
             "claude-3-sonnet",
             "claude-3-haiku",
-            "claude-3.5-sonnet",
-            "claude-opus-4",
-            "claude-sonnet-4",
         ];
 
         for pattern in MODEL_PATTERNS {
             if text.contains(pattern) {
-                self.model = Some(pattern.to_string());
+                self.session_info.set_model(pattern.to_string());
+                if self.config.log_transitions {
+                    debug!(model = pattern, "Detected model");
+                }
                 return;
             }
         }
@@ -383,8 +508,42 @@ impl ClaudeDetector {
             let line_lower = line.to_lowercase();
             if line_lower.contains("model:") || line_lower.contains("model =") {
                 if let Some(model) = line.split_whitespace().find(|w| w.starts_with("claude")) {
-                    self.model = Some(model.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '.').to_string());
+                    let clean_model = model
+                        .trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '.')
+                        .to_string();
+                    self.session_info.set_model(clean_model.clone());
+                    if self.config.log_transitions {
+                        debug!(model = %clean_model, "Detected model from prefix");
+                    }
                     return;
+                }
+            }
+        }
+    }
+
+    /// Extract token usage from text
+    ///
+    /// Note: Token usage is typically not visible in PTY output, but this
+    /// method looks for patterns that might indicate usage information.
+    /// Reserved for future use when token info becomes available.
+    #[allow(dead_code)]
+    fn extract_tokens(&mut self, text: &str) {
+        // Look for token patterns like "tokens: 1234" or "1234 tokens"
+        for line in text.lines() {
+            let line_lower = line.to_lowercase();
+            if line_lower.contains("token") {
+                // Try to extract a number near "token"
+                for word in line.split_whitespace() {
+                    if let Ok(num) = word.trim_matches(|c: char| !c.is_ascii_digit()).parse::<u64>()
+                    {
+                        if num > 0 {
+                            self.session_info.set_tokens(num);
+                            if self.config.log_transitions {
+                                debug!(tokens = num, "Detected token usage");
+                            }
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -416,7 +575,10 @@ mod tests {
     #[test]
     fn test_detector_with_debounce() {
         let detector = ClaudeDetector::with_debounce(500);
-        assert_eq!(detector.debounce, Duration::from_millis(500));
+        assert_eq!(
+            detector.config.debounce_duration,
+            Duration::from_millis(500)
+        );
     }
 
     #[test]
@@ -434,8 +596,8 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
         detector.activity = ClaudeActivity::Thinking;
-        detector.session_id = Some("test-id".to_string());
-        detector.model = Some("claude-3-opus".to_string());
+        detector.session_info.set_session_id("test-id".to_string());
+        detector.session_info.set_model("claude-3-opus".to_string());
 
         detector.reset();
 
@@ -515,8 +677,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("\r⠋ Thinking...");
-        assert_eq!(activity, Some(ClaudeActivity::Thinking));
+        let change = detector.analyze("\r⠋ Thinking...");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::Thinking);
     }
 
     #[test]
@@ -524,8 +687,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("\r⠋ Writing code...");
-        assert_eq!(activity, Some(ClaudeActivity::Coding));
+        let change = detector.analyze("\r⠋ Writing code...");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::Coding);
     }
 
     #[test]
@@ -533,8 +697,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("\r⠙ Channelling...");
-        assert_eq!(activity, Some(ClaudeActivity::Coding));
+        let change = detector.analyze("\r⠙ Channelling...");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::Coding);
     }
 
     #[test]
@@ -542,8 +707,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("Running: git status");
-        assert_eq!(activity, Some(ClaudeActivity::ToolUse));
+        let change = detector.analyze("Running: git status");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::ToolUse);
     }
 
     #[test]
@@ -551,8 +717,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("Executing: npm install");
-        assert_eq!(activity, Some(ClaudeActivity::ToolUse));
+        let change = detector.analyze("Executing: npm install");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::ToolUse);
     }
 
     #[test]
@@ -560,8 +727,19 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("Read(/path/to/file.rs)");
-        assert_eq!(activity, Some(ClaudeActivity::ToolUse));
+        let change = detector.analyze("Read(/path/to/file.rs)");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::ToolUse);
+    }
+
+    #[test]
+    fn test_detect_tool_use_task() {
+        let mut detector = ClaudeDetector::new();
+        detector.mark_as_claude();
+
+        let change = detector.analyze("Task(exploring codebase)");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::ToolUse);
     }
 
     #[test]
@@ -569,8 +747,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("Create file /tmp/test.rs? [Y/n]");
-        assert_eq!(activity, Some(ClaudeActivity::AwaitingConfirmation));
+        let change = detector.analyze("Create file /tmp/test.rs? [Y/n]");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::AwaitingConfirmation);
     }
 
     #[test]
@@ -578,8 +757,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("Delete all files? [y/N]");
-        assert_eq!(activity, Some(ClaudeActivity::AwaitingConfirmation));
+        let change = detector.analyze("Delete all files? [y/N]");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::AwaitingConfirmation);
     }
 
     #[test]
@@ -587,8 +767,9 @@ mod tests {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
 
-        let activity = detector.analyze("Run bash command? Allow?");
-        assert_eq!(activity, Some(ClaudeActivity::AwaitingConfirmation));
+        let change = detector.analyze("Run bash command? Allow?");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::AwaitingConfirmation);
     }
 
     #[test]
@@ -601,8 +782,9 @@ mod tests {
         // Wait for debounce
         std::thread::sleep(Duration::from_millis(150));
 
-        let activity = detector.analyze("Done!\n\n> ");
-        assert_eq!(activity, Some(ClaudeActivity::Idle));
+        let change = detector.analyze("Done!\n\n> ");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::Idle);
     }
 
     #[test]
@@ -613,8 +795,9 @@ mod tests {
 
         std::thread::sleep(Duration::from_millis(150));
 
-        let activity = detector.analyze("Complete!\n\n❯ ");
-        assert_eq!(activity, Some(ClaudeActivity::Idle));
+        let change = detector.analyze("Complete!\n\n❯ ");
+        assert!(change.is_some());
+        assert_eq!(change.unwrap().current, ClaudeActivity::Idle);
     }
 
     // ==================== Session ID Extraction Tests ====================
@@ -662,9 +845,7 @@ mod tests {
             "00000000-0000-0000-0000-000000000000"
         ));
         assert!(!ClaudeDetector::is_uuid_like("not-a-uuid"));
-        assert!(!ClaudeDetector::is_uuid_like(
-            "a1b2c3d4-e5f6-7890-abcd"
-        ));
+        assert!(!ClaudeDetector::is_uuid_like("a1b2c3d4-e5f6-7890-abcd"));
         assert!(!ClaudeDetector::is_uuid_like(
             "g1b2c3d4-e5f6-7890-abcd-ef1234567890"
         )); // 'g' not hex
@@ -690,6 +871,15 @@ mod tests {
         assert_eq!(detector.model(), Some("claude-3.5-sonnet"));
     }
 
+    #[test]
+    fn test_extract_model_opus_4_5() {
+        let mut detector = ClaudeDetector::new();
+        detector.mark_as_claude();
+
+        detector.analyze("Using claude-opus-4-5 model");
+        assert_eq!(detector.model(), Some("claude-opus-4-5"));
+    }
+
     // ==================== Debouncing Tests ====================
 
     #[test]
@@ -699,7 +889,8 @@ mod tests {
 
         // First change should work
         let result1 = detector.analyze("\r⠋ Thinking...");
-        assert_eq!(result1, Some(ClaudeActivity::Thinking));
+        assert!(result1.is_some());
+        assert_eq!(result1.unwrap().current, ClaudeActivity::Thinking);
 
         // Immediate change should be debounced
         let result2 = detector.analyze("> ");
@@ -721,7 +912,8 @@ mod tests {
         std::thread::sleep(Duration::from_millis(100));
 
         let result = detector.analyze("> ");
-        assert_eq!(result, Some(ClaudeActivity::Idle));
+        assert!(result.is_some());
+        assert_eq!(result.unwrap().current, ClaudeActivity::Idle);
     }
 
     // ==================== Priority Tests ====================
@@ -732,10 +924,11 @@ mod tests {
         detector.mark_as_claude();
 
         // Text contains both prompt and confirmation
-        let activity = detector.analyze("Execute command? [Y/n]\n> ");
+        let change = detector.analyze("Execute command? [Y/n]\n> ");
+        assert!(change.is_some());
 
         // Confirmation should take priority
-        assert_eq!(activity, Some(ClaudeActivity::AwaitingConfirmation));
+        assert_eq!(change.unwrap().current, ClaudeActivity::AwaitingConfirmation);
     }
 
     #[test]
@@ -744,10 +937,11 @@ mod tests {
         detector.mark_as_claude();
 
         // Text contains both thinking indicator and tool use
-        let activity = detector.analyze("Thinking... Running: test command");
+        let change = detector.analyze("Thinking... Running: test command");
+        assert!(change.is_some());
 
         // Tool use should take priority
-        assert_eq!(activity, Some(ClaudeActivity::ToolUse));
+        assert_eq!(change.unwrap().current, ClaudeActivity::ToolUse);
     }
 
     // ==================== Prompt Detection Tests ====================
@@ -780,15 +974,18 @@ mod tests {
     fn test_state_includes_session_and_model() {
         let mut detector = ClaudeDetector::new();
         detector.mark_as_claude();
-        detector.session_id = Some("test-session-id".to_string());
-        detector.model = Some("claude-3-opus".to_string());
+        detector
+            .session_info
+            .set_session_id("test-session-id".to_string());
+        detector
+            .session_info
+            .set_model("claude-3-opus".to_string());
         detector.activity = ClaudeActivity::Coding;
 
         let state = detector.state().unwrap();
         assert_eq!(state.session_id, Some("test-session-id".to_string()));
         assert_eq!(state.model, Some("claude-3-opus".to_string()));
         assert_eq!(state.activity, ClaudeActivity::Coding);
-        assert!(state.tokens_used.is_none()); // Not detectable from PTY
     }
 
     // ==================== Spinner Detection Tests ====================
@@ -800,6 +997,70 @@ mod tests {
         assert!(detector.has_spinner_in_last_lines("⠋ Loading...\nDone"));
         assert!(detector.has_spinner_in_last_lines("Start\n⠙ Processing"));
         assert!(!detector.has_spinner_in_last_lines("No spinners here"));
+    }
+
+    // ==================== ANSI Stripping Tests ====================
+
+    #[test]
+    fn test_strip_ansi_basic() {
+        let input = "\x1b[31mRed Text\x1b[0m";
+        let output = strip_ansi(input);
+        assert_eq!(output, "Red Text");
+    }
+
+    #[test]
+    fn test_strip_ansi_complex() {
+        let input = "\x1b[1;32mBold Green\x1b[0m Normal";
+        let output = strip_ansi(input);
+        assert_eq!(output, "Bold Green Normal");
+    }
+
+    #[test]
+    fn test_strip_ansi_osc() {
+        // OSC sequence for setting window title
+        let input = "\x1b]0;Window Title\x07Regular text";
+        let output = strip_ansi(input);
+        assert_eq!(output, "Regular text");
+    }
+
+    #[test]
+    fn test_strip_ansi_cursor_movement() {
+        let input = "\x1b[5;10HAt position";
+        let output = strip_ansi(input);
+        assert_eq!(output, "At position");
+    }
+
+    #[test]
+    fn test_strip_ansi_preserves_unicode() {
+        let input = "\x1b[32m⠋ Thinking...\x1b[0m";
+        let output = strip_ansi(input);
+        assert_eq!(output, "⠋ Thinking...");
+    }
+
+    // ==================== State Change Event Tests ====================
+
+    #[test]
+    fn test_state_change_event_returned() {
+        let mut detector = ClaudeDetector::new();
+        detector.mark_as_claude();
+
+        let change = detector.analyze("\r⠋ Thinking...");
+
+        assert!(change.is_some());
+        let change = change.unwrap();
+        assert_eq!(change.previous, ClaudeActivity::Idle);
+        assert_eq!(change.current, ClaudeActivity::Thinking);
+        assert!(change.timestamp > 0);
+    }
+
+    #[test]
+    fn test_state_change_is_significant() {
+        let mut detector = ClaudeDetector::new();
+        detector.mark_as_claude();
+
+        let change = detector.analyze("\r⠋ Thinking...");
+        assert!(change.is_some());
+        assert!(change.unwrap().is_significant());
     }
 
     // ==================== Debug Format Tests ====================
