@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-10
 
 ## Summary Statistics
-- Total Bugs: 10
-- New: 4
+- Total Bugs: 11
+- New: 5
 - In Progress: 0
 - Resolved: 5
 - Deprecated: 1
@@ -16,7 +16,28 @@
 
 *No open P0 bugs*
 
-### P1 - High Priority (4)
+### P1 - High Priority (5)
+
+#### BUG-014: Large output causes viewport/buffer overflow, making input unresponsive [NEW]
+
+**Status**: New
+**Filed**: 2026-01-10
+**Component**: terminal-buffer
+**Directory**: [BUG-014-large-output-buffer-overflow](BUG-014-large-output-buffer-overflow/)
+
+**Description**:
+When a Claude session generates large output (such as an extensive README diff), the viewport/scrollback/buffer cannot hold the full output. Input becomes completely unresponsive - the user cannot interact with the session. Detach (Ctrl+B d) works, but reattaching shows the same unresponsive state, indicating a persistent buffer capacity issue.
+
+**Symptoms**:
+- Input completely unresponsive after large output
+- Detach works but reattach shows same issue
+- Session itself is running (not crashed)
+
+**Suspected Root Cause**:
+Multiple potential causes: unbounded scrollback buffer, output flooding faster than client can consume, missing backpressure mechanism, event loop starvation, or server-side state bloat.
+
+**Impact**:
+Blocks user interaction entirely when working with Claude on tasks that generate large outputs. User must abandon the session.
 
 #### BUG-010: MCP pane creation broadcast not received by TUI [NEW]
 
@@ -227,6 +248,7 @@ Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-10 | BUG-014 | Filed | Large output causes buffer overflow, making input unresponsive |
 | 2026-01-10 | BUG-013 | Filed | Mouse scroll wheel not working for scrollback |
 | 2026-01-10 | BUG-012 | Deprecated | Shift+click works for native selection (by design) |
 | 2026-01-10 | BUG-011 | Filed | Large paste input crashes ccmux session |
