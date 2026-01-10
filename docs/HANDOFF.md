@@ -71,6 +71,7 @@
 | FEAT-031 | Session Delete Keybind (Ctrl+D) | P2 | ✅ Merged |
 | FEAT-032 | Integrated MCP Server | P1 | ✅ Merged |
 | FEAT-033 | tmux-like Auto-Start | P1 | ✅ Merged |
+| FEAT-017 | Hot-Reload Config | P1 | ✅ Complete |
 | FEAT-034 | Mouse Scroll Support | P2 | 📋 Planned |
 | FEAT-035 | Configurable Tab/Pane Switching | P2 | 📋 Planned |
 | FEAT-037 | tmux-Compatible Keybinds | P1 | ✅ Merged |
@@ -86,7 +87,6 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 | Worktree | Branch | Feature |
 |----------|--------|---------|
-| `ccmux-wt-feat-017` | `feat-017-hot-reload` | Wire up ConfigWatcher for live reloads |
 | `ccmux-wt-feat-034` | `feat-034-mouse-scroll` | Mouse scroll support |
 | `ccmux-wt-feat-035` | `feat-035-tab-switching` | Ctrl+PageUp/Down tab switching |
 
