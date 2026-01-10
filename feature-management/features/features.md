@@ -5,10 +5,10 @@
 
 ## Summary Statistics
 
-- **Total Features**: 39
-- **By Priority**: P0: 5, P1: 24, P2: 10, P3: 0
+- **Total Features**: 40
+- **By Priority**: P0: 5, P1: 25, P2: 10, P3: 0
 - **By Status**:
-  - New: 32
+  - New: 33
   - In Progress: 0
   - Completed: 6
   - Implemented: 1
@@ -26,7 +26,7 @@
 | FEAT-025 | Pane Output Rendering | ccmux-client | new | [Link](FEAT-025-pane-output-rendering/) |
 | FEAT-027 | Client Connection Registry | ccmux-server | new | [Link](FEAT-027-client-connection-registry/) |
 
-### P1 - High Priority (24)
+### P1 - High Priority (25)
 
 | ID | Title | Component | Status | Link |
 |----|-------|-----------|--------|------|
@@ -54,6 +54,7 @@
 | FEAT-038 | Split Pane Rendering - Layout Manager for Multi-Pane Display | ccmux-client | new | [Link](FEAT-038-split-pane-rendering/) |
 | FEAT-039 | MCP Pane Creation Broadcast - Sync TUI Clients on MCP Splits | ccmux-server | new | [Link](FEAT-039-mcp-pane-creation-broadcast/) |
 | FEAT-044 | Claude Session Persistence and Auto-Resume | ccmux-server | new | [Link](FEAT-044-claude-session-persistence-and-auto-resume/) |
+| FEAT-045 | MCP Declarative Layout Tools | ccmux-server (MCP) | new | [Link](FEAT-045-mcp-declarative-layout-tools/) |
 
 ### P2 - Medium Priority (10)
 
@@ -76,6 +77,7 @@
 
 ## Recent Activity
 
+- 2026-01-10: Created FEAT-045 - MCP Declarative Layout Tools (P1 High)
 - 2026-01-10: Created FEAT-044 - Claude Session Persistence and Auto-Resume (P1 High)
 - 2026-01-09: Created FEAT-039 - MCP Pane Creation Broadcast - Sync TUI Clients on MCP Splits (P1 High)
 - 2026-01-09: Created FEAT-038 - Split Pane Rendering - Layout Manager for Multi-Pane Display (P1 High)
@@ -131,6 +133,8 @@ See [WAVES.md](/WAVES.md) for the complete parallel development plan with depend
 
 **Note**: FEAT-044 (Claude Session Persistence) depends on FEAT-016 (Persistence) for WAL/checkpoint infrastructure.
 
+**Note**: FEAT-045 (MCP Declarative Layout Tools) depends on FEAT-029 (MCP base) and benefits from FEAT-039 (MCP broadcast) for client sync.
+
 ## Planned Feature Areas
 
 Based on the project vision, features will likely include:
@@ -168,6 +172,7 @@ Based on the project vision, features will likely include:
 - **Session-aware MCP Commands with Window/Pane Naming (FEAT-036)** - Better defaults and organization
 - **MCP Pane Creation Broadcast (FEAT-039)** - Keep TUI clients in sync with MCP operations
 - **Claude Session Persistence and Auto-Resume (FEAT-044)** - Preserve AI conversation context across restarts
+- **MCP Declarative Layout Tools (FEAT-045)** - Create complex layouts via natural language
 
 ### Session Management
 - Session persistence and recovery
