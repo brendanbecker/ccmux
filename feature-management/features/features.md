@@ -5,10 +5,10 @@
 
 ## Summary Statistics
 
-- **Total Features**: 35
-- **By Priority**: P0: 5, P1: 20, P2: 10, P3: 0
+- **Total Features**: 36
+- **By Priority**: P0: 5, P1: 21, P2: 10, P3: 0
 - **By Status**:
-  - New: 28
+  - New: 29
   - In Progress: 0
   - Completed: 6
   - Implemented: 1
@@ -26,7 +26,7 @@
 | FEAT-025 | Pane Output Rendering | ccmux-client | new | [Link](FEAT-025-pane-output-rendering/) |
 | FEAT-027 | Client Connection Registry | ccmux-server | new | [Link](FEAT-027-client-connection-registry/) |
 
-### P1 - High Priority (20)
+### P1 - High Priority (21)
 
 | ID | Title | Component | Status | Link |
 |----|-------|-----------|--------|------|
@@ -50,6 +50,7 @@
 | FEAT-030 | Sideband Pane Splitting | ccmux-server | new | [Link](FEAT-030-sideband-pane-splitting/) |
 | FEAT-032 | Integrated MCP Server | ccmux-server | new | [Link](FEAT-032-integrated-mcp-server/) |
 | FEAT-033 | tmux-like Auto-Start Behavior | ccmux-client | new | [Link](FEAT-033-tmux-like-auto-start-behavior/) |
+| FEAT-036 | Session-aware MCP Commands with Window/Pane Naming | ccmux-server (MCP) | new | [Link](FEAT-036-session-aware-mcp-commands-with-naming/) |
 
 ### P2 - Medium Priority (10)
 
@@ -72,6 +73,7 @@
 
 ## Recent Activity
 
+- 2026-01-09: Created FEAT-036 - Session-aware MCP Commands with Window/Pane Naming (P1 High)
 - 2026-01-09: Created FEAT-035 - Configurable Tab/Pane Switching (P2 Medium)
 - 2026-01-09: Created FEAT-034 - Mouse Scroll Support (P2 Medium)
 - 2026-01-09: Created FEAT-033 - tmux-like Auto-Start Behavior (P1 High)
@@ -154,6 +156,7 @@ Based on the project vision, features will likely include:
 - **MCP Natural Language Terminal Control (FEAT-029)** - Implemented
 - **Sideband Pane Splitting (FEAT-030)**
 - **Integrated MCP Server (FEAT-032)** - Shared session state with TUI
+- **Session-aware MCP Commands with Window/Pane Naming (FEAT-036)** - Better defaults and organization
 
 ### Session Management
 - Session persistence and recovery

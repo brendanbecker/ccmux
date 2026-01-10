@@ -210,22 +210,46 @@ impl InputHandler {
             }
         }
 
-        // Handle command key
+        // Handle command key (tmux-compatible bindings)
         match key.code {
-            // Pane creation/management
-            KeyCode::Char('c') => InputAction::Command(ClientCommand::CreatePane),
-            KeyCode::Char('x') => InputAction::Command(ClientCommand::ClosePane),
-
-            // Pane navigation
-            KeyCode::Char('n') => InputAction::Command(ClientCommand::NextPane),
-            KeyCode::Char('p') => InputAction::Command(ClientCommand::PreviousPane),
-            KeyCode::Char('h') | KeyCode::Left => InputAction::Command(ClientCommand::PaneLeft),
-            KeyCode::Char('j') | KeyCode::Down => InputAction::Command(ClientCommand::PaneDown),
-            KeyCode::Char('k') | KeyCode::Up => InputAction::Command(ClientCommand::PaneUp),
-            KeyCode::Char('l') | KeyCode::Right => InputAction::Command(ClientCommand::PaneRight),
-
-            // Window management
+            // Window management (tmux defaults)
+            KeyCode::Char('c') => InputAction::Command(ClientCommand::CreateWindow),
+            KeyCode::Char('&') => InputAction::Command(ClientCommand::CloseWindow),
+            KeyCode::Char('n') => InputAction::Command(ClientCommand::NextWindow),
+            KeyCode::Char('p') => InputAction::Command(ClientCommand::PreviousWindow),
             KeyCode::Char('w') => InputAction::Command(ClientCommand::ListWindows),
+            KeyCode::Char('0') => InputAction::Command(ClientCommand::SelectWindow(0)),
+            KeyCode::Char('1') => InputAction::Command(ClientCommand::SelectWindow(1)),
+            KeyCode::Char('2') => InputAction::Command(ClientCommand::SelectWindow(2)),
+            KeyCode::Char('3') => InputAction::Command(ClientCommand::SelectWindow(3)),
+            KeyCode::Char('4') => InputAction::Command(ClientCommand::SelectWindow(4)),
+            KeyCode::Char('5') => InputAction::Command(ClientCommand::SelectWindow(5)),
+            KeyCode::Char('6') => InputAction::Command(ClientCommand::SelectWindow(6)),
+            KeyCode::Char('7') => InputAction::Command(ClientCommand::SelectWindow(7)),
+            KeyCode::Char('8') => InputAction::Command(ClientCommand::SelectWindow(8)),
+            KeyCode::Char('9') => InputAction::Command(ClientCommand::SelectWindow(9)),
+
+            // Pane management (tmux defaults)
+            KeyCode::Char('x') => InputAction::Command(ClientCommand::ClosePane),
+            KeyCode::Char('%') => InputAction::Command(ClientCommand::SplitVertical),
+            KeyCode::Char('"') => InputAction::Command(ClientCommand::SplitHorizontal),
+
+            // Pane navigation (tmux defaults)
+            KeyCode::Char('o') => InputAction::Command(ClientCommand::NextPane),
+            KeyCode::Char(';') => InputAction::Command(ClientCommand::PreviousPane),
+            KeyCode::Left => InputAction::Command(ClientCommand::PaneLeft),
+            KeyCode::Down => InputAction::Command(ClientCommand::PaneDown),
+            KeyCode::Up => InputAction::Command(ClientCommand::PaneUp),
+            KeyCode::Right => InputAction::Command(ClientCommand::PaneRight),
+
+            // Pane navigation (vim-style extension, common in tmux configs)
+            KeyCode::Char('h') => InputAction::Command(ClientCommand::PaneLeft),
+            KeyCode::Char('j') => InputAction::Command(ClientCommand::PaneDown),
+            KeyCode::Char('k') => InputAction::Command(ClientCommand::PaneUp),
+            KeyCode::Char('l') => InputAction::Command(ClientCommand::PaneRight),
+
+            // Zoom/fullscreen pane
+            KeyCode::Char('z') => InputAction::Command(ClientCommand::ToggleZoom),
 
             // Session management
             KeyCode::Char('d') => InputAction::Detach,
@@ -242,13 +266,6 @@ impl InputHandler {
                 self.scroll_offset = 0;
                 InputAction::Command(ClientCommand::EnterCopyMode)
             }
-
-            // Split panes
-            KeyCode::Char('%') => InputAction::Command(ClientCommand::SplitVertical),
-            KeyCode::Char('"') => InputAction::Command(ClientCommand::SplitHorizontal),
-
-            // Zoom/fullscreen pane
-            KeyCode::Char('z') => InputAction::Command(ClientCommand::ToggleZoom),
 
             // Help
             KeyCode::Char('?') => InputAction::Command(ClientCommand::ShowHelp),
@@ -379,11 +396,11 @@ mod tests {
         handler.handle_key(prefix);
         assert_eq!(handler.mode(), InputMode::PrefixPending);
 
-        // Press 'c' for create pane
+        // Press 'c' for create window (tmux default)
         let c_key = KeyEvent::new(KeyCode::Char('c'), KeyModifiers::empty());
         let result = handler.handle_key(c_key);
 
-        assert_eq!(result, InputAction::Command(ClientCommand::CreatePane));
+        assert_eq!(result, InputAction::Command(ClientCommand::CreateWindow));
         assert_eq!(handler.mode(), InputMode::Normal);
     }
 
