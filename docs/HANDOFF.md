@@ -30,10 +30,14 @@
 - Return to session selection when last pane closes
 - Comprehensive modifier key support (Shift+Tab, Alt+key, Ctrl+Arrow, etc.)
 - New panes inherit server's working directory
-- **Integrated MCP bridge**: Claude controls same sessions as TUI user (11 tools)
+- **Integrated MCP bridge**: Claude controls same sessions as TUI user (12 tools)
 - **Sideband pane splitting**: Claude can spawn panes via `<ccmux:spawn>` tags
 - **Mouse scroll**: Scroll through terminal scrollback history
 - **Quick keybinds**: Ctrl+PageUp/Down for windows, Ctrl+Shift+PageUp/Down for panes
+- **MCP read_pane works**: PTY output routed to scrollback (BUG-016 fix)
+- **Claude detection**: ClaudeDetector now receives PTY output (FEAT-015 unblocked)
+- **Session rename**: `ccmux_rename_session` MCP tool (FEAT-043)
+- **Large paste handling**: Graceful chunking prevents crashes (BUG-011 fix)
 
 ### Known Issues
 - `kill -9` corrupts terminal (SIGKILL can't be caught - run `reset` to fix)
@@ -65,14 +69,16 @@
 | BUG-006 | Viewport not sizing to terminal | P1 | ✅ Fixed |
 | BUG-007 | Shift+Tab not passed through | P1 | ✅ Fixed |
 | BUG-008 | Pane/window creation no PTY | P0 | ✅ Fixed |
-| BUG-009 | Flaky persistence tests | P2 | 🔍 Investigating |
-| BUG-010 | MCP pane broadcast not received by TUI | P1 | 🔍 Investigating |
-| BUG-011 | Large paste crashes session | P2 | 📋 New |
+| BUG-009 | Flaky persistence tests | P2 | ✅ Fixed |
+| BUG-010 | MCP pane broadcast not received by TUI | P1 | ✅ Fixed |
+| BUG-011 | Large paste crashes session | P2 | ✅ Fixed |
 | BUG-012 | Text selection not working in TUI | P2 | ❌ Deprecated (Shift+click works) |
 | BUG-013 | Mouse scroll wheel not working | P2 | 📋 New |
 | BUG-014 | Large output buffer overflow | P2 | 📋 New |
 | BUG-015 | Layout not recalculated on pane close | P2 | 📋 New |
-| BUG-016 | PTY output not routed to pane state (breaks Claude detection + MCP read_pane) | P1 | 📋 New |
+| BUG-016 | PTY output not routed to pane state (breaks Claude detection + MCP read_pane) | P1 | ✅ Fixed |
+| BUG-017 | MCP send_input doesn't handle Enter key | P1 | 📋 New |
+| BUG-018 | TUI pane interaction failure (can't see input bar) | P1 | 🔍 Needs investigation |
 
 ## Parallel Execution Plan
 
@@ -320,14 +326,14 @@ With 3-way parallelism: **10-16 hours wall time** for all items.
 | FEAT-040 | MCP Pane Reliability Improvements | P1 | ✅ Merged |
 | FEAT-041 | MCP Session/Window Targeting | P1 | ✅ Merged |
 | FEAT-042 | MCP Debug Logging | P1 | ✅ Merged |
-| FEAT-043 | MCP Session Rename Tool | P2 | 📋 Planned |
+| FEAT-043 | MCP Session Rename Tool | P2 | ✅ Merged |
 | FEAT-044 | Claude Session Persistence & Auto-Resume | P1 | 📋 Planned |
 | FEAT-045 | MCP Declarative Layout Tools | P2 | 📋 Planned |
 
 ### Open Features (blocked/in-progress)
 | ID | Feature | Notes |
 |----|---------|-------|
-| FEAT-015 | Claude Detection from PTY Output | Blocked by BUG-016 (detector exists but never called) |
+| FEAT-015 | Claude Detection from PTY Output | ✅ Unblocked - BUG-016 fixed, verify detection works |
 
 ### Backlog Features (future enhancements)
 | ID | Feature | Notes |
@@ -353,17 +359,52 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 ## Active Worktrees
 
-| Worktree | Branch | Purpose |
-|----------|--------|---------|
-| `ccmux-bug-010` | `bug-010-mcp-pane-broadcast` | BUG-010 investigation |
-| `ccmux-bug-011` | `bug-011-large-paste-crash` | BUG-011: Large paste crash |
-| `ccmux-bug-013` | `bug-013-mouse-scroll` | BUG-013: Mouse scroll fix |
-| `ccmux-feat-043` | `feat-043-session-rename` | FEAT-043: Session rename tool |
-| `ccmux-wt-bug-009` | `bug-009-flaky-persistence-tests` | BUG-009 investigation |
+| Worktree | Branch | Status | Next Task |
+|----------|--------|--------|-----------|
+| `ccmux-stream-a` | `stream-a-critical-path` | ✅ BUG-016 done | Rebase, reassign to FEAT-044 or BUG-017 |
+| `ccmux-bug-013` | `bug-013-mouse-scroll` | 🔄 In progress | Check if complete next session |
+| `ccmux-bug-010` | `bug-010-mcp-pane-broadcast` | ✅ Merged | Can be removed |
+| `ccmux-bug-011` | `bug-011-large-paste-crash` | ✅ Merged | Can be removed |
+| `ccmux-feat-043` | `feat-043-session-rename` | ✅ Merged | Can be removed |
+| `ccmux-wt-bug-009` | `bug-009-flaky-persistence-tests` | ✅ Merged | Can be removed |
 
-### BUG-010 Investigation Status
+### Next Session Checklist
+- [ ] Check if BUG-013 (mouse scroll) is complete in `ccmux-bug-013` worktree
+- [ ] Rebase `ccmux-stream-a` and assign to next P1 task (FEAT-044 or BUG-017)
+- [ ] Clean up merged worktrees (bug-010, bug-011, feat-043, wt-bug-009)
+- [ ] Rebuild server with all fixes and test `read_pane` works (BUG-016 fix)
 
-MCP pane creation broadcast not reaching TUI. FEAT-041 and FEAT-042 now merged - ready to debug with comprehensive logging.
+## Session Log (2026-01-10) - Parallel Execution & Major Bug Fixes
+
+### Work Completed This Session
+1. **Feature-management cleanup** - Moved 40+ completed bugs/features to `completed/` folder
+2. **BUG-016 fixed** - PTY output now routed to pane state (enables scrollback + Claude detection)
+3. **BUG-009 fixed** - Flaky persistence tests resolved
+4. **BUG-010 fixed** - MCP pane broadcast now reaches TUI
+5. **BUG-011 fixed** - Large paste handled gracefully
+6. **FEAT-043 merged** - MCP session rename tool (`ccmux_rename_session`)
+7. **BUG-017 filed** - MCP `send_input` doesn't handle Enter key (discovered during dogfooding)
+8. **Parallel execution plan** - Created 6-stream parallelization strategy in HANDOFF.md
+9. **Worktree setup** - Created `ccmux-stream-a` for critical path work
+
+### Dogfooding ccmux
+- Used ccmux MCP tools to spawn Claude in worktree and send it tasks
+- Discovered BUG-016 (can't read pane output) and BUG-017 (can't send Enter) in the process
+- Successfully orchestrated bug fix via ccmux despite the irony
+
+### Commits Merged
+- `af36339` - chore: reorganize feature-management, add BUG-016, update HANDOFF
+- BUG-009: 2 commits (flaky persistence fix)
+- BUG-016: 2 commits (PTY output routing)
+- FEAT-043: 1 commit (session rename MCP tool)
+- BUG-011: 1 commit (large paste handling)
+- BUG-010: 1 commit (MCP broadcast fix)
+
+### Key Discoveries
+- BUG-016 was blocking FEAT-015 (Claude detection) - now unblocked
+- MCP orchestration works but needs BUG-017 fixed for full automation
+
+---
 
 ## Session Log (2026-01-10) - Split Direction & Active Session Fixes
 

@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-10
 
 ## Summary Statistics
-- Total Bugs: 13
-- New: 7
+- Total Bugs: 15
+- New: 9
 - In Progress: 0
 - Resolved: 5
 - Deprecated: 1
@@ -40,6 +40,49 @@ PtyOutputPoller::flush() only broadcasts to clients via registry.broadcast_to_se
 
 **Impact**:
 Core MCP functionality broken. read_pane always returns empty. Claude detection non-functional, breaking orchestration features.
+
+#### BUG-018: TUI pane interaction failure - can't see input bar or interact with pane [NEW]
+
+**Status**: Needs Investigation
+**Filed**: 2026-01-10
+**Component**: ccmux-client
+**Directory**: [BUG-018-tui-pane-interaction-failure](BUG-018-tui-pane-interaction-failure/)
+
+**Description**:
+In the ccmux TUI, the user cannot see the text input bar and cannot interact with a pane that visually shows Claude Code output. The pane shows Claude conversation with purple/magenta theme but the Claude Code input prompt ("> ") is not visible at the bottom and keyboard input doesn't reach the pane.
+
+**Symptoms**:
+- Visual: Pane shows Claude conversation output
+- Missing input: Claude Code input prompt not visible
+- No interaction: Keyboard input doesn't reach pane
+- MCP diagnostics show `is_claude: false`, empty `read_pane`
+
+**Suspected Root Cause**:
+Multiple potential causes: focus issue (pane not focused), scroll position (view scrolled up, input bar below visible area), Claude process state (exited/hung), layout/resize bug (dimensions wrong), or related to BUG-015 (layout not recalculated).
+
+**Impact**:
+Blocks user interaction with Claude sessions in TUI.
+
+#### BUG-017: MCP send_input doesn't handle Enter key [NEW]
+
+**Status**: New
+**Filed**: 2026-01-10
+**Component**: ccmux-server/mcp
+**Directory**: [BUG-017-mcp-send-input-no-enter-key](BUG-017-mcp-send-input-no-enter-key/)
+
+**Description**:
+The MCP `ccmux_send_input` tool doesn't properly handle sending Enter key to submit commands. When sending text via MCP, the Enter key is not appended/translated, so commands are typed but not executed.
+
+**Symptoms**:
+- Text sent via MCP appears in pane
+- Command is not executed (no Enter sent)
+- User must manually press Enter or find workaround
+
+**Suspected Root Cause**:
+The `send_input` tool takes text but doesn't interpret `\n` as Enter key sequence or provide a way to send control characters.
+
+**Impact**:
+MCP automation cannot execute commands, only type them. Blocks full MCP orchestration capability.
 
 #### BUG-014: Large output causes viewport/buffer overflow, making input unresponsive [NEW]
 
@@ -292,6 +335,8 @@ Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-10 | BUG-018 | Filed | TUI pane interaction failure - can't see input bar or interact with pane |
+| 2026-01-10 | BUG-017 | Filed | MCP send_input doesn't handle Enter key |
 | 2026-01-10 | BUG-016 | Filed | PTY output not routed to pane state - breaks Claude detection and MCP read_pane |
 | 2026-01-10 | BUG-015 | Filed | Layout doesn't recalculate when panes are closed |
 | 2026-01-10 | BUG-014 | Filed | Large output causes buffer overflow, making input unresponsive |
