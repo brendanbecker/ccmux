@@ -162,6 +162,58 @@ impl HandlerContext {
         }
     }
 
+    /// Handle SelectWindow message - update active window in session
+    pub async fn handle_select_window(&self, window_id: Uuid) -> HandlerResult {
+        debug!("SelectWindow {} request from {}", window_id, self.client_id);
+
+        let mut session_manager = self.session_manager.write().await;
+
+        // Find the session containing this window
+        let session_id = session_manager
+            .list_sessions()
+            .iter()
+            .find_map(|s| s.windows().find(|w| w.id() == window_id).map(|_| s.id()));
+
+        match session_id {
+            Some(session_id) => {
+                if let Some(session) = session_manager.get_session_mut(session_id) {
+                    session.set_active_window(window_id);
+                    debug!("Window {} selected as active", window_id);
+                    return HandlerResult::NoResponse;
+                }
+                HandlerContext::error(ErrorCode::InternalError, "Session disappeared")
+            }
+            None => {
+                debug!("Window {} not found for SelectWindow", window_id);
+                HandlerContext::error(
+                    ErrorCode::WindowNotFound,
+                    format!("Window {} not found", window_id),
+                )
+            }
+        }
+    }
+
+    /// Handle SelectSession message - update active session
+    pub async fn handle_select_session(&self, session_id: Uuid) -> HandlerResult {
+        debug!("SelectSession {} request from {}", session_id, self.client_id);
+
+        let mut session_manager = self.session_manager.write().await;
+
+        // Verify session exists
+        if session_manager.get_session(session_id).is_none() {
+            debug!("Session {} not found for SelectSession", session_id);
+            return HandlerContext::error(
+                ErrorCode::SessionNotFound,
+                format!("Session {} not found", session_id),
+            );
+        }
+
+        // Set as active session
+        session_manager.set_active_session(session_id);
+        debug!("Session {} selected as active", session_id);
+        HandlerResult::NoResponse
+    }
+
     /// Handle ClosePane message - kill PTY and cleanup
     pub async fn handle_close_pane(&self, pane_id: Uuid) -> HandlerResult {
         info!("ClosePane {} request from {}", pane_id, self.client_id);

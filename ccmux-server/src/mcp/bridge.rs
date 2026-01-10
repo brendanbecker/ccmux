@@ -341,7 +341,8 @@ impl McpBridge {
                 let direction = arguments["direction"].as_str().map(String::from);
                 let command = arguments["command"].as_str().map(String::from);
                 let cwd = arguments["cwd"].as_str().map(String::from);
-                self.tool_create_pane(session, window, direction, command, cwd)
+                let select = arguments["select"].as_bool().unwrap_or(false);
+                self.tool_create_pane(session, window, direction, command, cwd, select)
                     .await
             }
             "ccmux_send_input" => {
@@ -359,6 +360,14 @@ impl McpBridge {
             "ccmux_focus_pane" => {
                 let pane_id = parse_uuid(arguments, "pane_id")?;
                 self.tool_focus_pane(pane_id).await
+            }
+            "ccmux_select_window" => {
+                let window_id = parse_uuid(arguments, "window_id")?;
+                self.tool_select_window(window_id).await
+            }
+            "ccmux_select_session" => {
+                let session_id = parse_uuid(arguments, "session_id")?;
+                self.tool_select_session(session_id).await
             }
             "ccmux_rename_session" => {
                 let session = arguments["session"]
@@ -620,6 +629,7 @@ impl McpBridge {
         direction: Option<String>,
         command: Option<String>,
         cwd: Option<String>,
+        select: bool,
     ) -> Result<ToolResult, McpError> {
         // Map terminal multiplexer convention to layout direction:
         // - "vertical" = vertical split LINE = panes side-by-side = Horizontal layout
@@ -635,6 +645,7 @@ impl McpBridge {
             direction: split_direction,
             command,
             cwd,
+            select,
         })
         .await?;
 
@@ -717,6 +728,36 @@ impl McpBridge {
         let result = serde_json::json!({
             "pane_id": pane_id.to_string(),
             "status": "focused"
+        });
+
+        let json = serde_json::to_string_pretty(&result)
+            .map_err(|e| McpError::Internal(e.to_string()))?;
+        Ok(ToolResult::text(json))
+    }
+
+    async fn tool_select_window(&mut self, window_id: Uuid) -> Result<ToolResult, McpError> {
+        self.send_to_daemon(ClientMessage::SelectWindow { window_id })
+            .await?;
+
+        // SelectWindow doesn't have a dedicated response in current protocol
+        let result = serde_json::json!({
+            "window_id": window_id.to_string(),
+            "status": "selected"
+        });
+
+        let json = serde_json::to_string_pretty(&result)
+            .map_err(|e| McpError::Internal(e.to_string()))?;
+        Ok(ToolResult::text(json))
+    }
+
+    async fn tool_select_session(&mut self, session_id: Uuid) -> Result<ToolResult, McpError> {
+        self.send_to_daemon(ClientMessage::SelectSession { session_id })
+            .await?;
+
+        // SelectSession doesn't have a dedicated response in current protocol
+        let result = serde_json::json!({
+            "session_id": session_id.to_string(),
+            "status": "selected"
         });
 
         let json = serde_json::to_string_pretty(&result)
