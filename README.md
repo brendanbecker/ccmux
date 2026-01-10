@@ -2,118 +2,140 @@
 
 **Claude Code-aware terminal multiplexer**
 
-## Status
+A terminal multiplexer built in Rust that understands Claude Code. Unlike tmux, ccmux knows when Claude is thinking, waiting, or ready for input—and can be controlled by Claude itself via MCP.
 
-Early development, spec-driven. Currently in Stage 5 (Implementation Planning) of the [Context Engineering Methodology](https://github.com/brendanbecker/featmgmt/blob/master/CONTEXT_ENGINEERING_METHODOLOGY.md). Architecture documentation is complete.
+## Features
 
-## The Problem
+### Working Now
+- **tmux-like experience**: Prefix keybinds (Ctrl+b), sessions, windows, panes
+- **Auto-start**: Just run `ccmux`, server starts automatically if not running
+- **Session persistence**: Sessions survive server restarts
+- **MCP integration**: Claude can control ccmux via 11 MCP tools
+- **Sideband commands**: Claude can spawn panes via `<ccmux:spawn>` tags in output
+- **Claude detection**: Tracks Claude state (thinking, waiting, tool use)
+- **Configurable**: Hot-reload config, customizable keybinds and default commands
 
-tmux doesn't know what's running inside it.
+### Keybinds
 
-When you run Claude Code in a tmux pane, tmux sees it as just another process spewing bytes. It has no idea whether Claude is:
-- Thinking deeply about a complex problem
-- Waiting for your input
-- Done and ready for the next task
-- About to spawn a sub-agent
-- Crashed and needs recovery
+**Session Selection** (on startup):
+| Key | Action |
+|-----|--------|
+| `n` | Create new session |
+| `Ctrl+D` | Delete selected session |
+| `Enter` | Attach to session |
+| `j/k` or arrows | Navigate |
+| `q` | Quit |
 
-This blindness means you can't build intelligent workflows. You can't automatically split a pane when Claude spawns a sub-agent. You can't get notifications when Claude finishes a long task. You can't recover a crashed Claude session with `--resume` because tmux doesn't know there's a session to resume.
+**Prefix Mode** (Ctrl+b, then...):
+| Key | Action |
+|-----|--------|
+| `c` | Create window |
+| `%` | Split vertical |
+| `"` | Split horizontal |
+| `n/p` | Next/prev window |
+| `o` | Next pane |
+| `h/j/k/l` | Vim-style pane navigation |
+| `z` | Zoom pane (fullscreen) |
+| `d` | Detach |
+| `s` | Session picker |
+| `x` | Close pane |
+| `&` | Close window |
 
-## The Vision
+**Quick Navigation** (no prefix):
+| Key | Action |
+|-----|--------|
+| `Ctrl+PageUp/Down` | Switch windows |
+| `Ctrl+Shift+PageUp/Down` | Switch panes |
 
-ccmux is a terminal multiplexer that understands Claude Code.
+## Installation
 
-**Claude-aware session management:**
-- Detect Claude Code state (thinking, waiting, complete, crashed)
-- Visual indicators for Claude's current activity
-- Automatic crash recovery with `claude --resume`
-- Session tree visualization for orchestrated agent hierarchies
+```bash
+# Build
+cargo build --release
 
-**Intelligent pane orchestration:**
-- Claude can request new panes via structured output (e.g., `<ccmux:spawn>`)
-- Parent sessions notified of child completion
-- Recursion depth limits to prevent runaway spawns
-- Optional: Claude can read from sibling panes
+# Run (auto-starts server)
+./target/release/ccmux
 
-**Crash resilience:**
-- Continuous session state persistence
-- Survive terminal crashes, SSH disconnects, system reboots
-- Resume exactly where you left off
+# Run with custom command
+./target/release/ccmux bash
+./target/release/ccmux claude --resume
+```
 
-**Modern terminal multiplexer features:**
-- Multiple panes with flexible layouts
-- Hot-reload configuration
-- Keyboard-driven navigation (vim-style)
-- Scrollback and copy mode
+## Configuration
+
+Config file: `~/.config/ccmux/config.toml`
+
+```toml
+[general]
+# Auto-launch Claude in every new session
+default_command = "claude"
+```
+
+## MCP Integration
+
+Claude Code can control ccmux sessions via MCP. Add to `~/.claude/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ccmux": {
+      "command": "/path/to/ccmux-server",
+      "args": ["mcp-bridge"]
+    }
+  }
+}
+```
+
+**Available MCP Tools**:
+- `ccmux_list_sessions`, `ccmux_create_session`
+- `ccmux_list_windows`, `ccmux_create_window`
+- `ccmux_list_panes`, `ccmux_create_pane`, `ccmux_close_pane`, `ccmux_focus_pane`
+- `ccmux_read_pane`, `ccmux_send_input`, `ccmux_get_status`
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         ccmux                               │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────┐ │
-│  │   PTY Manager   │  │  State Parser   │  │   Renderer  │ │
-│  │  (portable-pty) │  │ (Claude detect) │  │  (ratatui)  │ │
-│  └────────┬────────┘  └────────┬────────┘  └──────┬──────┘ │
-│           │                    │                   │        │
-│           ▼                    ▼                   ▼        │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │              Session State Manager                      ││
-│  │  - Pane tree structure                                  ││
-│  │  - Claude session metadata                              ││
-│  │  - Crash recovery checkpoints                           ││
-│  └─────────────────────────────────────────────────────────┘│
-│                              │                              │
-│                              ▼                              │
-│  ┌─────────────────────────────────────────────────────────┐│
-│  │              Persistent State (JSON)                    ││
-│  │              ~/.ccmux/sessions/                         ││
-│  └─────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────┘
-```
-
-## Project Structure
-
-```
 ccmux/
-├── Cargo.toml
-├── README.md
-├── docs/
-│   ├── research/              # Deep research outputs
-│   ├── ARCHITECTURE.md        # Generated after research
-│   ├── PROJECT_SUMMARY.md     # Generated after research
-│   └── DEEP_RESEARCH_PROMPT.md
-├── feature-management/
-│   ├── features/
-│   └── bugs/
-├── src/
-│   └── main.rs                # Placeholder
-└── .ccmux/                    # Example runtime state
-    ├── settings.default.json
-    └── sessions/
+├── ccmux-client/     # TUI client (ratatui + crossterm)
+├── ccmux-server/     # Daemon with PTY management + MCP bridge
+├── ccmux-protocol/   # Message types and codec (bincode)
+├── ccmux-session/    # Session/window/pane hierarchy
+├── ccmux-utils/      # Shared utilities
+└── ccmux-persistence/# WAL-based crash recovery
 ```
+
+**Communication**:
+- Client ↔ Server: Unix socket with bincode-serialized messages
+- MCP Bridge: Connects to same daemon, translates JSON-RPC to internal commands
 
 ## Development
 
 ```bash
 # Build
-cargo build
+cargo build --release
 
-# Run (currently just prints status)
-cargo run
+# Run tests (1,200+ tests)
+cargo test --workspace
 
-# Test
-cargo test
+# Run server manually
+./target/release/ccmux-server
+
+# Run client
+./target/release/ccmux
 ```
+
+## Known Issues
+
+- `kill -9` on server corrupts terminal (run `reset` to fix)
+- Mouse scroll not working (BUG-013)
+- Large paste can crash session (BUG-011)
 
 ## Prior Art
 
 - **tmux** - The standard, but process-unaware
 - **Zellij** - Modern Rust multiplexer with plugins
 - **Wezterm** - GPU-accelerated terminal with mux mode
-- **Alacritty** - Fast terminal (not a mux, but `alacritty_terminal` crate is useful)
 
 ## License
 
-This project is licensed under the MIT License. See [LICENSE.md](LICENSE.md) for details.
+MIT License. See [LICENSE.md](LICENSE.md) for details.
