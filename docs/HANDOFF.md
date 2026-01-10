@@ -362,24 +362,23 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 ## Active Worktrees
 
-| Worktree | Branch | Items | Status | Commit |
-|----------|--------|-------|--------|--------|
-| `ccmux-stream-a-reattach` | stream-a-reattach | BUG-018, BUG-020 | ✅ Ready to merge | `8f53895` |
-| `ccmux-stream-b-layout` | stream-b-layout | BUG-015 | ✅ Ready to merge | `ffd4d5a` |
-| `ccmux-stream-c-buffer` | stream-c-buffer | BUG-014 | ✅ Ready to merge | `c5aec64` |
-| `ccmux-stream-d-claude` | stream-d-claude | FEAT-044 | ✅ Ready to merge | `f1adb24` |
-| `ccmux-stream-e-mcp` | stream-e-mcp | FEAT-046 ✅, FEAT-045 📋 | 🔄 In progress | `aa76f8c` |
+| Worktree | Branch | Items | Status |
+|----------|--------|-------|--------|
+| `ccmux-stream-e-mcp` | stream-e-mcp | FEAT-045 | 📋 In progress |
 
-All worktrees branched from `33b5984` (2026-01-10).
+Rebased off main `336ccd0` (2026-01-10).
+
+### Recently Merged (2026-01-10)
+- ✅ BUG-014: Large output buffer overflow (stream-c)
+- ✅ BUG-015: Layout not recalculated on pane close (stream-b)
+- ✅ BUG-018/020: Session reattach - client has no PTY (stream-a)
+- ✅ FEAT-044: Claude session persistence & auto-resume (stream-d)
+- ✅ FEAT-046: MCP focus/select control (stream-e)
 
 ### Next Session Checklist
-- [ ] Merge stream-a (BUG-018/020 fix)
-- [ ] Merge stream-b (BUG-015 fix)
-- [ ] Merge stream-c (BUG-014 fix)
-- [ ] Merge stream-d (FEAT-044)
-- [ ] Merge stream-e after FEAT-045 complete (or merge FEAT-046 now)
-- [ ] Clean up worktrees after merge
-- [ ] Rebuild and test all fixes together
+- [ ] Complete FEAT-045 (MCP declarative layout tools) in stream-e
+- [ ] Merge stream-e when complete
+- [ ] Rebuild and comprehensive test
 - [x] Rebuild server with all fixes and test `read_pane` works (BUG-016 fix)
 
 ## Session Log (2026-01-10) - BUG-019 Fix: UTF-8 Panic in Claude Detector
