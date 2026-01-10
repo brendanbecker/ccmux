@@ -31,6 +31,10 @@ pub enum McpError {
     #[error("Pane not found: {0}")]
     PaneNotFound(String),
 
+    /// Window not found
+    #[error("Window not found: {0}")]
+    WindowNotFound(String),
+
     /// Session not found
     #[error("Session not found: {0}")]
     SessionNotFound(String),
@@ -84,6 +88,9 @@ impl From<McpError> for JsonRpcError {
             }
             McpError::PaneNotFound(id) => {
                 JsonRpcError::new(JsonRpcError::INVALID_PARAMS, format!("Pane not found: {}", id))
+            }
+            McpError::WindowNotFound(id) => {
+                JsonRpcError::new(JsonRpcError::INVALID_PARAMS, format!("Window not found: {}", id))
             }
             McpError::SessionNotFound(name) => {
                 JsonRpcError::new(JsonRpcError::INVALID_PARAMS, format!("Session not found: {}", name))

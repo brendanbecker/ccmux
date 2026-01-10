@@ -42,8 +42,19 @@ impl<'a> ToolContext<'a> {
                 }
             }
 
+            // Get the active window for this session to determine focused pane
+            let active_window_id = session.active_window_id();
+
             for window in session.windows() {
+                // Get the active pane in this window
+                let active_pane_id = window.active_pane_id();
+                // A pane is focused if it's the active pane in the active window
+                let is_active_window = Some(window.id()) == active_window_id;
+
                 for pane in window.panes() {
+                    // Pane is focused if it's the active pane in the active window
+                    let is_focused = is_active_window && Some(pane.id()) == active_pane_id;
+
                     let info = serde_json::json!({
                         "id": pane.id().to_string(),
                         "session": session.name(),
@@ -68,6 +79,7 @@ impl<'a> ToolContext<'a> {
                             PaneState::Claude(_) => "claude",
                             PaneState::Exited { .. } => "exited",
                         },
+                        "is_focused": is_focused,
                     });
                     panes.push(info);
                 }
@@ -105,6 +117,7 @@ impl<'a> ToolContext<'a> {
     /// When session is provided (UUID or name), the pane is created in that session.
     /// When window is provided (UUID or name), the pane is created in that window.
     /// If not specified, uses the first available session/window.
+    /// If select is true, the new pane will be focused after creation.
     pub fn create_pane(
         &mut self,
         session_filter: Option<&str>,
@@ -112,6 +125,7 @@ impl<'a> ToolContext<'a> {
         direction: Option<&str>,
         command: Option<&str>,
         cwd: Option<&str>,
+        select: bool,
     ) -> Result<String, McpError> {
         // Parse direction (included in response for client-side layout hints)
         let direction_str = match direction {
@@ -186,6 +200,11 @@ impl<'a> ToolContext<'a> {
             .ok_or_else(|| McpError::Internal("Pane disappeared".into()))?;
         pane.init_parser();
 
+        // If select is true, focus the new pane
+        if select {
+            window.set_active_pane(pane_id);
+        }
+
         // Spawn PTY
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
         let cmd = command.unwrap_or(&shell);
@@ -219,6 +238,15 @@ impl<'a> ToolContext<'a> {
         self.pty_manager
             .spawn(pane_id, config)
             .map_err(|e| McpError::Pty(e.to_string()))?;
+
+        // If select is true, also set the window as active
+        if select {
+            let session = self
+                .session_manager
+                .get_session_mut(session_id)
+                .ok_or_else(|| McpError::Internal("Session disappeared".into()))?;
+            session.set_active_window(window_id);
+        }
 
         let mut result = serde_json::json!({
             "pane_id": pane_id.to_string(),
@@ -606,6 +634,57 @@ impl<'a> ToolContext<'a> {
 
         serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
     }
+
+    /// Select/focus a window (make it the active window in its session)
+    pub fn select_window(&mut self, window_id: Uuid) -> Result<String, McpError> {
+        // Find the session containing this window
+        let (session_id, _session_name) = self
+            .session_manager
+            .list_sessions()
+            .iter()
+            .find_map(|s| {
+                s.windows()
+                    .find(|w| w.id() == window_id)
+                    .map(|_| (s.id(), s.name().to_string()))
+            })
+            .ok_or_else(|| McpError::WindowNotFound(format!("{}", window_id)))?;
+
+        // Set as active window
+        let session = self
+            .session_manager
+            .get_session_mut(session_id)
+            .ok_or_else(|| McpError::Internal("Session disappeared".into()))?;
+        session.set_active_window(window_id);
+
+        let result = serde_json::json!({
+            "window_id": window_id.to_string(),
+            "session_id": session_id.to_string(),
+            "status": "selected"
+        });
+
+        serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
+    }
+
+    /// Select/focus a session (make it the active session)
+    pub fn select_session(&mut self, session_id: Uuid) -> Result<String, McpError> {
+        // Verify session exists
+        let session = self
+            .session_manager
+            .get_session(session_id)
+            .ok_or_else(|| McpError::SessionNotFound(format!("{}", session_id)))?;
+        let session_name = session.name().to_string();
+
+        // Set as active session
+        self.session_manager.set_active_session(session_id);
+
+        let result = serde_json::json!({
+            "session_id": session_id.to_string(),
+            "session_name": session_name,
+            "status": "selected"
+        });
+
+        serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
+    }
 }
 
 #[cfg(test)]
@@ -913,7 +992,7 @@ mod tests {
         session_manager.create_session("test").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_pane(None, None, Some("horizontal"), None, None).unwrap();
+        let result = ctx.create_pane(None, None, Some("horizontal"), None, None, false).unwrap();
 
         assert!(result.contains("\"direction\": \"horizontal\""));
     }
@@ -926,7 +1005,7 @@ mod tests {
         session_manager.create_session("test").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_pane(None, None, None, None, None).unwrap();
+        let result = ctx.create_pane(None, None, None, None, None, false).unwrap();
 
         assert!(result.contains("\"direction\": \"vertical\""));
     }
@@ -940,7 +1019,7 @@ mod tests {
         session_manager.create_session("session2").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_pane(Some("session2"), None, None, None, None).unwrap();
+        let result = ctx.create_pane(Some("session2"), None, None, None, None, false).unwrap();
 
         assert!(result.contains("session2"));
         assert!(result.contains("session_id"));
@@ -954,7 +1033,7 @@ mod tests {
         session_manager.create_session("existing").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_pane(Some("nonexistent"), None, None, None, None);
+        let result = ctx.create_pane(Some("nonexistent"), None, None, None, None, false);
 
         assert!(result.is_err());
     }
@@ -971,7 +1050,7 @@ mod tests {
         session.create_window(Some("window2".to_string()));
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_pane(None, Some("window2"), None, None, None).unwrap();
+        let result = ctx.create_pane(None, Some("window2"), None, None, None, false).unwrap();
 
         assert!(result.contains("pane_id"));
         assert!(result.contains("window_id"));
@@ -985,7 +1064,7 @@ mod tests {
         session_manager.create_session("test").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_pane(None, Some("nonexistent"), None, None, None);
+        let result = ctx.create_pane(None, Some("nonexistent"), None, None, None, false);
 
         assert!(result.is_err());
     }
@@ -998,7 +1077,7 @@ mod tests {
         session_manager.create_session("test").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_pane(None, None, None, None, None).unwrap();
+        let result = ctx.create_pane(None, None, None, None, None, false).unwrap();
 
         assert!(result.contains("session_id"));
         assert!(result.contains("pane_id"));

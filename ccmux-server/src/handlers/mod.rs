@@ -124,6 +124,10 @@ impl HandlerContext {
 
             ClientMessage::SelectPane { pane_id } => self.handle_select_pane(pane_id).await,
 
+            ClientMessage::SelectWindow { window_id } => self.handle_select_window(window_id).await,
+
+            ClientMessage::SelectSession { session_id } => self.handle_select_session(session_id).await,
+
             ClientMessage::ClosePane { pane_id } => self.handle_close_pane(pane_id).await,
 
             ClientMessage::Resize {
@@ -176,6 +180,7 @@ impl HandlerContext {
                 direction,
                 command,
                 cwd,
+                select,
             } => {
                 self.handle_create_pane_with_options(
                     session_filter,
@@ -183,6 +188,7 @@ impl HandlerContext {
                     direction,
                     command,
                     cwd,
+                    select,
                 )
                 .await
             }

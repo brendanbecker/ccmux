@@ -1770,6 +1770,7 @@ mod tests {
             direction: ccmux_protocol::SplitDirection::Vertical,
             command: None,
             cwd: None,
+            select: false,
         };
         Encoder::encode(&mut mcp_codec, create_pane_msg, &mut buf).unwrap();
         mcp_client_stream.write_all(&buf).await.unwrap();

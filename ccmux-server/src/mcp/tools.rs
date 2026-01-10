@@ -64,6 +64,11 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                     "cwd": {
                         "type": "string",
                         "description": "Working directory for the new pane"
+                    },
+                    "select": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "If true, focus the new pane after creation (default: false, keeps current focus)"
                     }
                 }
             }),
@@ -131,6 +136,34 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                     }
                 },
                 "required": ["pane_id"]
+            }),
+        },
+        Tool {
+            name: "ccmux_select_window".into(),
+            description: "Switch to a specific window (make it the active window)".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "window_id": {
+                        "type": "string",
+                        "description": "UUID of the window to select"
+                    }
+                },
+                "required": ["window_id"]
+            }),
+        },
+        Tool {
+            name: "ccmux_select_session".into(),
+            description: "Switch to a specific session (make it the active session)".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session_id": {
+                        "type": "string",
+                        "description": "UUID of the session to select"
+                    }
+                },
+                "required": ["session_id"]
             }),
         },
         Tool {

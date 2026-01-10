@@ -38,12 +38,23 @@ impl HandlerContext {
                 }
             }
 
+            // Get the active window for this session to determine focused pane
+            let active_window_id = session.active_window_id();
+
             for window in session.windows() {
+                // Get the active pane in this window
+                let active_pane_id = window.active_pane_id();
+                // A pane is focused if it's the active pane in the active window
+                let is_active_window = Some(window.id()) == active_window_id;
+
                 for pane in window.panes() {
                     let claude_state = match pane.state() {
                         PaneState::Claude(cs) => Some(cs.clone()),
                         _ => None,
                     };
+
+                    // Pane is focused if it's the active pane in the active window
+                    let is_focused = is_active_window && Some(pane.id()) == active_pane_id;
 
                     panes.push(PaneListEntry {
                         id: pane.id(),
@@ -58,6 +69,7 @@ impl HandlerContext {
                         state: pane.state().clone(),
                         is_claude: pane.is_claude(),
                         claude_state,
+                        is_focused,
                     });
                 }
             }
@@ -205,6 +217,7 @@ impl HandlerContext {
         direction: SplitDirection,
         command: Option<String>,
         cwd: Option<String>,
+        select: bool,
     ) -> HandlerResult {
         debug!(
             client_id = %self.client_id,
@@ -213,6 +226,7 @@ impl HandlerContext {
             direction = ?direction,
             command = ?command,
             cwd = ?cwd,
+            select = select,
             "handle_create_pane_with_options called"
         );
         info!(
@@ -337,8 +351,25 @@ impl HandlerContext {
         };
         pane.init_parser();
 
+        // If select is true, focus the new pane (set as active pane in window and window as active)
+        if select {
+            window.set_active_pane(pane_id);
+            debug!(pane_id = %pane_id, "Pane focused after creation (select=true)");
+        }
+
         // Drop session_manager lock before spawning PTY
-        drop(session_manager);
+        // Note: If select is true, we also need to set the window as active
+        let select_window_id = if select { Some(window_id) } else { None };
+        std::mem::drop(session_manager);
+
+        // Re-acquire lock to set active window if needed
+        if let Some(wid) = select_window_id {
+            let mut sm = self.session_manager.write().await;
+            if let Some(session) = sm.get_session_mut(session_id) {
+                session.set_active_window(wid);
+            }
+            std::mem::drop(sm);
+        }
 
         // Spawn PTY
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
@@ -884,7 +915,7 @@ mod tests {
 
         // No sessions exist, should create default
         let result = ctx
-            .handle_create_pane_with_options(None, None, SplitDirection::Vertical, None, None)
+            .handle_create_pane_with_options(None, None, SplitDirection::Vertical, None, None, false)
             .await;
 
         match result {
@@ -970,7 +1001,7 @@ mod tests {
 
         // MCP creates a pane (uses first session since no filter provided)
         let result = mcp_ctx
-            .handle_create_pane_with_options(None, None, SplitDirection::Vertical, None, None)
+            .handle_create_pane_with_options(None, None, SplitDirection::Vertical, None, None, false)
             .await;
 
         // Extract the broadcast info from the result
@@ -1079,6 +1110,7 @@ mod tests {
                 SplitDirection::Vertical,
                 None,
                 None,
+                false,
             )
             .await;
 

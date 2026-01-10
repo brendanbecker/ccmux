@@ -112,6 +112,12 @@ pub enum ClientMessage {
     /// Select/focus pane
     SelectPane { pane_id: Uuid },
 
+    /// Select/focus window (make it the active window in its session)
+    SelectWindow { window_id: Uuid },
+
+    /// Select/focus session (make it the active session)
+    SelectSession { session_id: Uuid },
+
     /// Detach from session (keep session running)
     Detach,
 
@@ -179,6 +185,8 @@ pub enum ClientMessage {
         command: Option<String>,
         /// Working directory
         cwd: Option<String>,
+        /// If true, focus the new pane after creation (default: false)
+        select: bool,
     },
 
     /// Create a new session with options (for MCP bridge)
@@ -369,6 +377,8 @@ pub struct PaneListEntry {
     pub state: PaneState,
     pub is_claude: bool,
     pub claude_state: Option<ClaudeState>,
+    /// Whether this pane is currently focused (active pane in active window)
+    pub is_focused: bool,
 }
 
 /// Error codes for protocol errors

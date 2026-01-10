@@ -192,6 +192,7 @@ impl McpServer {
                 direction: arguments["direction"].as_str().map(String::from),
                 command: arguments["command"].as_str().map(String::from),
                 cwd: arguments["cwd"].as_str().map(String::from),
+                select: arguments["select"].as_bool().unwrap_or(false),
             },
             "ccmux_send_input" => ToolParams::SendInput {
                 pane_id: parse_uuid(arguments, "pane_id")?,
@@ -209,6 +210,12 @@ impl McpServer {
             },
             "ccmux_focus_pane" => ToolParams::FocusPane {
                 pane_id: parse_uuid(arguments, "pane_id")?,
+            },
+            "ccmux_select_window" => ToolParams::SelectWindow {
+                window_id: parse_uuid(arguments, "window_id")?,
+            },
+            "ccmux_select_session" => ToolParams::SelectSession {
+                session_id: parse_uuid(arguments, "session_id")?,
             },
             "ccmux_list_sessions" => ToolParams::ListSessions,
             "ccmux_list_windows" => ToolParams::ListWindows {
@@ -231,19 +238,22 @@ impl McpServer {
         let result = match params {
             ToolParams::ListPanes { session } => ctx.list_panes(session.as_deref()),
             ToolParams::ReadPane { pane_id, lines } => ctx.read_pane(pane_id, lines),
-            ToolParams::CreatePane { session, window, direction, command, cwd } => {
+            ToolParams::CreatePane { session, window, direction, command, cwd, select } => {
                 ctx.create_pane(
                     session.as_deref(),
                     window.as_deref(),
                     direction.as_deref(),
                     command.as_deref(),
                     cwd.as_deref(),
+                    select,
                 )
             }
             ToolParams::SendInput { pane_id, input, submit } => ctx.send_input(pane_id, &input, submit),
             ToolParams::GetStatus { pane_id } => ctx.get_status(pane_id),
             ToolParams::ClosePane { pane_id } => ctx.close_pane(pane_id),
             ToolParams::FocusPane { pane_id } => ctx.focus_pane(pane_id),
+            ToolParams::SelectWindow { window_id } => ctx.select_window(window_id),
+            ToolParams::SelectSession { session_id } => ctx.select_session(session_id),
             ToolParams::ListSessions => ctx.list_sessions(),
             ToolParams::ListWindows { session } => ctx.list_windows(session.as_deref()),
             ToolParams::CreateSession { name } => ctx.create_session(name.as_deref()),
@@ -271,6 +281,8 @@ fn is_known_tool(name: &str) -> bool {
             | "ccmux_get_status"
             | "ccmux_close_pane"
             | "ccmux_focus_pane"
+            | "ccmux_select_window"
+            | "ccmux_select_session"
             | "ccmux_list_sessions"
             | "ccmux_list_windows"
             | "ccmux_create_session"
@@ -288,11 +300,14 @@ enum ToolParams {
         direction: Option<String>,
         command: Option<String>,
         cwd: Option<String>,
+        select: bool,
     },
     SendInput { pane_id: Uuid, input: String, submit: bool },
     GetStatus { pane_id: Uuid },
     ClosePane { pane_id: Uuid },
     FocusPane { pane_id: Uuid },
+    SelectWindow { window_id: Uuid },
+    SelectSession { session_id: Uuid },
     ListSessions,
     ListWindows { session: Option<String> },
     CreateSession { name: Option<String> },
