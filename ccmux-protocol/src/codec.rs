@@ -365,6 +365,7 @@ mod tests {
                     title: None,
                     cwd: None,
                 },
+                direction: crate::types::SplitDirection::Horizontal,
             },
             ServerMessage::Output {
                 pane_id,

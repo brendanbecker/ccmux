@@ -14,6 +14,15 @@ pub enum SplitDirection {
     Vertical,
 }
 
+impl From<SplitDirection> for ccmux_protocol::SplitDirection {
+    fn from(dir: SplitDirection) -> Self {
+        match dir {
+            SplitDirection::Horizontal => ccmux_protocol::SplitDirection::Horizontal,
+            SplitDirection::Vertical => ccmux_protocol::SplitDirection::Vertical,
+        }
+    }
+}
+
 /// Sideband command from Claude
 #[derive(Debug, Clone, PartialEq)]
 pub enum SidebandCommand {

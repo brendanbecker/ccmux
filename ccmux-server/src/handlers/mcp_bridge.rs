@@ -402,7 +402,7 @@ impl HandlerContext {
                 direction: direction_str.to_string(),
             },
             session_id,
-            broadcast: ServerMessage::PaneCreated { pane: pane_info },
+            broadcast: ServerMessage::PaneCreated { pane: pane_info, direction },
         }
     }
 
@@ -890,13 +890,14 @@ mod tests {
                     direction,
                     ..
                 },
-                broadcast: ServerMessage::PaneCreated { pane },
+                broadcast: ServerMessage::PaneCreated { pane, direction: broadcast_dir },
                 ..
             } => {
                 assert_eq!(session_name, "default");
                 assert_eq!(direction, "vertical");
-                // Verify broadcast contains pane info
+                // Verify broadcast contains pane info and direction
                 assert!(pane.id != Uuid::nil());
+                assert_eq!(broadcast_dir, SplitDirection::Vertical);
             }
             _ => panic!("Expected PaneCreatedWithDetails response with broadcast"),
         }
@@ -997,7 +998,7 @@ mod tests {
         assert!(received.is_ok(), "TUI should have received the broadcast");
 
         match received.unwrap() {
-            ServerMessage::PaneCreated { pane } => {
+            ServerMessage::PaneCreated { pane, direction: _ } => {
                 // The new pane should have a valid ID
                 assert_ne!(pane.id, Uuid::nil());
             }

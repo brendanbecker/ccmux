@@ -119,9 +119,10 @@ impl HandlerContext {
         HandlerResult::ResponseWithBroadcast {
             response: ServerMessage::PaneCreated {
                 pane: pane_info.clone(),
+                direction,
             },
             session_id,
-            broadcast: ServerMessage::PaneCreated { pane: pane_info },
+            broadcast: ServerMessage::PaneCreated { pane: pane_info, direction },
         }
     }
 
@@ -313,11 +314,12 @@ mod tests {
 
         match result {
             HandlerResult::ResponseWithBroadcast {
-                response: ServerMessage::PaneCreated { pane },
+                response: ServerMessage::PaneCreated { pane, direction },
                 ..
             } => {
                 assert_eq!(pane.window_id, window_id);
                 assert_eq!(pane.index, 0);
+                assert_eq!(direction, SplitDirection::Horizontal);
             }
             _ => panic!("Expected PaneCreated response with broadcast"),
         }
@@ -334,9 +336,11 @@ mod tests {
 
         match result {
             HandlerResult::ResponseWithBroadcast {
-                response: ServerMessage::PaneCreated { .. },
+                response: ServerMessage::PaneCreated { direction, .. },
                 ..
-            } => {}
+            } => {
+                assert_eq!(direction, SplitDirection::Vertical);
+            }
             _ => panic!("Expected PaneCreated response"),
         }
     }

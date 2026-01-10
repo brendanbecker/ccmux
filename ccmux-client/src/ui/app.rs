@@ -883,19 +883,18 @@ impl App {
             ServerMessage::WindowCreated { window } => {
                 self.windows.insert(window.id, window);
             }
-            ServerMessage::PaneCreated { pane } => {
+            ServerMessage::PaneCreated { pane, direction } => {
                 tracing::info!(
                     pane_id = %pane.id,
                     window_id = %pane.window_id,
                     pane_index = pane.index,
+                    ?direction,
                     "Handling PaneCreated broadcast from server"
                 );
 
-                // Get the split direction from pending or default to vertical
-                let direction = self
-                    .pending_split_direction
-                    .take()
-                    .unwrap_or(SplitDirection::Vertical);
+                // Use direction from the message (set by MCP or TUI command)
+                // Clear pending_split_direction if it was set by TUI
+                let _ = self.pending_split_direction.take();
                 let layout_direction = LayoutSplitDirection::from(direction);
 
                 // Add new pane to layout

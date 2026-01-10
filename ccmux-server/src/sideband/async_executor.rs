@@ -218,6 +218,7 @@ impl AsyncCommandExecutor {
         // Step 4: Broadcast PaneCreated to connected clients
         let msg = ServerMessage::PaneCreated {
             pane: pane_info.clone(),
+            direction: direction.into(),
         };
         let delivered = self.registry.try_broadcast_to_session(session_id, msg);
         debug!(

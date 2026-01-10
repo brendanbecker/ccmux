@@ -224,7 +224,11 @@ pub enum ServerMessage {
     WindowCreated { window: WindowInfo },
 
     /// Pane created
-    PaneCreated { pane: PaneInfo },
+    PaneCreated {
+        pane: PaneInfo,
+        /// Split direction for layout (how to arrange this pane relative to others)
+        direction: SplitDirection,
+    },
 
     /// Pane output data
     Output { pane_id: Uuid, data: Vec<u8> },
@@ -697,11 +701,15 @@ mod tests {
             cwd: Some("/home/user".to_string()),
         };
 
-        let msg = ServerMessage::PaneCreated { pane: pane.clone() };
+        let msg = ServerMessage::PaneCreated {
+            pane: pane.clone(),
+            direction: SplitDirection::Horizontal,
+        };
 
-        if let ServerMessage::PaneCreated { pane: p } = msg {
+        if let ServerMessage::PaneCreated { pane: p, direction } = msg {
             assert_eq!(p.title, Some("bash".to_string()));
             assert_eq!(p.cwd, Some("/home/user".to_string()));
+            assert_eq!(direction, SplitDirection::Horizontal);
         }
     }
 

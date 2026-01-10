@@ -119,7 +119,35 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 MCP pane creation broadcast not reaching TUI. FEAT-041 and FEAT-042 now merged - ready to debug with comprehensive logging.
 
-## Session Log (2026-01-10)
+## Session Log (2026-01-10) - Split Direction & Active Session Fixes
+
+### Work Completed This Session
+1. **Split direction fix** - "vertical" now correctly creates side-by-side panes (was inverted)
+2. **Active session tracking** - MCP pane creation now uses the session you're viewing (not oldest)
+3. **PaneCreated broadcast direction** - Added direction field so TUI applies correct layout
+4. **FEAT-045** created - MCP declarative layout tools (complex layouts, custom ratios)
+5. **BUG-014** created - Large output buffer overflow
+
+### Technical Changes
+- `ccmux-protocol/src/messages.rs` - Added `direction: SplitDirection` to `PaneCreated` message
+- `ccmux-server/src/session/manager.rs` - Added active session tracking (`active_session_id`, `set_active_session()`)
+- `ccmux-server/src/handlers/session.rs` - Set active session when TUI attaches
+- `ccmux-server/src/handlers/mcp_bridge.rs` - Use active session, include direction in broadcast
+- `ccmux-server/src/mcp/bridge.rs` - Fixed direction mapping (vertical = side-by-side)
+- `ccmux-client/src/ui/app.rs` - Use direction from broadcast message
+
+### Commits Made
+- `d4aeb08` - feat: track active session for MCP commands
+- `d598133` - fix: correct split direction mapping for terminal conventions
+- `8e81b31` - docs: add FEAT-045 MCP declarative layout tools
+
+### Next Steps
+- Test split direction fix after server restart
+- Implement FEAT-045 for sophisticated layout control
+
+---
+
+## Session Log (2026-01-10) - Earlier
 
 ### Work Completed This Session
 1. **FEAT-041** merged - MCP session/window targeting for `ccmux_create_pane`

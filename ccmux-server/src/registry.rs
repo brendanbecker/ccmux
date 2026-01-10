@@ -1184,7 +1184,10 @@ mod tests {
             cwd: None,
             state: ccmux_protocol::PaneState::Normal,
         };
-        let broadcast_msg = ServerMessage::PaneCreated { pane: pane_info };
+        let broadcast_msg = ServerMessage::PaneCreated {
+            pane: pane_info,
+            direction: ccmux_protocol::SplitDirection::Vertical,
+        };
 
         let count = registry
             .broadcast_to_session_except(session_id, mcp_client_id, broadcast_msg.clone())
@@ -1197,7 +1200,7 @@ mod tests {
         let received = tui_rx.try_recv();
         assert!(received.is_ok(), "TUI should receive the broadcast");
         match received.unwrap() {
-            ServerMessage::PaneCreated { pane } => {
+            ServerMessage::PaneCreated { pane, direction: _ } => {
                 assert_eq!(pane.index, 1);
             }
             _ => panic!("Expected PaneCreated message"),
