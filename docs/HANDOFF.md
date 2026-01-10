@@ -21,6 +21,7 @@
 - Create new sessions with `n` key, delete with `Ctrl+D`
 - Sessions auto-create default window/pane/PTY
 - **Configurable default command**: Set `default_command = "claude"` in config to auto-launch Claude in new sessions
+- **CLI command override**: `ccmux claude --resume` runs custom command instead of default
 - Full terminal I/O (shell prompt, commands, output)
 - PTY output broadcasting to connected clients
 - Session persistence and recovery (sessions survive server restart)
@@ -134,6 +135,11 @@ cargo build --release
 
 # Run (auto-starts server if needed, like tmux)
 ./target/release/ccmux
+
+# Run with custom command (overrides default_command from config)
+./target/release/ccmux bash
+./target/release/ccmux claude --resume
+./target/release/ccmux python -m http.server
 
 # Run MCP bridge for Claude Code integration
 ./target/release/ccmux-server mcp-bridge
