@@ -342,8 +342,12 @@ impl HandlerContext {
 
         // Spawn PTY
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-        let cmd = command.as_deref().unwrap_or(&shell);
-        let mut config = PtyConfig::command(cmd);
+        let mut config = if let Some(ref cmd) = command {
+            // Wrap user command in shell to handle arguments and shell syntax
+            PtyConfig::command("sh").with_arg("-c").with_arg(cmd)
+        } else {
+            PtyConfig::command(&shell)
+        };
         if let Some(ref cwd) = cwd {
             config = config.with_cwd(cwd);
         }
