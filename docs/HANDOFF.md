@@ -31,6 +31,8 @@
 - New panes inherit server's working directory
 - **Integrated MCP bridge**: Claude controls same sessions as TUI user (11 tools)
 - **Sideband pane splitting**: Claude can spawn panes via `<ccmux:spawn>` tags
+- **Mouse scroll**: Scroll through terminal scrollback history
+- **Quick keybinds**: Ctrl+PageUp/Down for windows, Ctrl+Shift+PageUp/Down for panes
 
 ### Known Issues
 - `kill -9` corrupts terminal (SIGKILL can't be caught - run `reset` to fix)
@@ -73,10 +75,14 @@
 | FEAT-032 | Integrated MCP Server | P1 | ✅ Merged |
 | FEAT-033 | tmux-like Auto-Start | P1 | ✅ Merged |
 | FEAT-017 | Hot-Reload Config | P1 | ✅ Complete |
-| FEAT-034 | Mouse Scroll Support | P2 | 📋 Planned |
-| FEAT-035 | Configurable Tab/Pane Switching | P2 | 📋 Planned |
+| FEAT-034 | Mouse Scroll Support | P2 | ✅ Merged |
+| FEAT-035 | Configurable Tab/Pane Switching | P2 | ✅ Merged |
 | FEAT-037 | tmux-Compatible Keybinds | P1 | ✅ Merged |
 | FEAT-038 | Split Pane Rendering | P1 | 🚧 In Progress |
+
+### FEAT-034/035: Navigation Improvements
+- **FEAT-034**: Mouse scroll navigates terminal scrollback with visual offset indicator
+- **FEAT-035**: Configurable quick keybinds without prefix (Ctrl+PageUp/Down for windows, Ctrl+Shift for panes)
 
 ### FEAT-037: tmux-Compatible Keybinds
 All prefix keybinds now match tmux defaults for muscle-memory compatibility.
@@ -89,8 +95,6 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 | Worktree | Branch | Feature |
 |----------|--------|---------|
-| `ccmux-wt-feat-034` | `feat-034-mouse-scroll` | Mouse scroll support |
-| `ccmux-wt-feat-035` | `feat-035-tab-switching` | Ctrl+PageUp/Down tab switching |
 | `ccmux-wt-feat-038` | `feat-038-split-pane-rendering` | Split pane UI rendering |
 
 ## Session Log (2026-01-09) - Continued
