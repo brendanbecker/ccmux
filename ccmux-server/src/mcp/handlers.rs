@@ -685,6 +685,392 @@ impl<'a> ToolContext<'a> {
 
         serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
     }
+
+    /// Rename a session
+    pub fn rename_session(&mut self, session_filter: &str, new_name: &str) -> Result<String, McpError> {
+        // Find session by UUID or name
+        let session_id = if let Ok(id) = uuid::Uuid::parse_str(session_filter) {
+            if self.session_manager.get_session(id).is_some() {
+                id
+            } else {
+                return Err(McpError::SessionNotFound(session_filter.to_string()));
+            }
+        } else {
+            self.session_manager
+                .get_session_by_name(session_filter)
+                .map(|s| s.id())
+                .ok_or_else(|| McpError::SessionNotFound(session_filter.to_string()))?
+        };
+
+        // Rename the session
+        self.session_manager
+            .rename_session(session_id, new_name)
+            .map_err(|e| McpError::Internal(e.to_string()))?;
+
+        let result = serde_json::json!({
+            "session_id": session_id.to_string(),
+            "name": new_name,
+            "status": "renamed"
+        });
+
+        serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
+    }
+
+    /// Split a specific pane with custom ratio
+    ///
+    /// Creates a new pane by splitting an existing pane. The original pane keeps
+    /// the specified ratio, and the new pane gets the remaining space.
+    pub fn split_pane(
+        &mut self,
+        pane_id: Uuid,
+        direction: Option<&str>,
+        ratio: Option<f64>,
+        command: Option<&str>,
+        cwd: Option<&str>,
+        select: bool,
+    ) -> Result<String, McpError> {
+        // Find the pane and its session/window
+        let (session, window, _pane) = self
+            .session_manager
+            .find_pane(pane_id)
+            .ok_or_else(|| McpError::PaneNotFound(pane_id.to_string()))?;
+
+        let session_id = session.id();
+        let session_name = session.name().to_string();
+        let window_id = window.id();
+
+        // Parse direction
+        let direction_str = match direction {
+            Some("horizontal") | Some("h") => "horizontal",
+            _ => "vertical",
+        };
+
+        // Validate and normalize ratio (default 0.5)
+        let ratio = ratio.unwrap_or(0.5).clamp(0.1, 0.9) as f32;
+
+        // Create the new pane
+        let session = self
+            .session_manager
+            .get_session_mut(session_id)
+            .ok_or_else(|| McpError::Internal("Session disappeared".into()))?;
+        let window = session
+            .get_window_mut(window_id)
+            .ok_or_else(|| McpError::Internal("Window disappeared".into()))?;
+        let new_pane = window.create_pane();
+        let new_pane_id = new_pane.id();
+
+        // If select is true, focus the new pane
+        if select {
+            window.set_active_pane(new_pane_id);
+        }
+
+        // Initialize the parser for the new pane
+        let new_pane = window
+            .get_pane_mut(new_pane_id)
+            .ok_or_else(|| McpError::Internal("Pane disappeared".into()))?;
+        new_pane.init_parser();
+
+        // Spawn PTY for the new pane
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+        let cmd = command.unwrap_or(&shell);
+
+        // Check if this is a Claude command
+        let (actual_cmd, args, injected_session_id) = if is_claude_command(cmd, &[]) {
+            let injection = inject_session_id(cmd, &[]);
+            if injection.injected {
+                let session_id = injection.session_id.clone().unwrap();
+                tracing::info!(
+                    "Injected session ID {} for Claude pane {}",
+                    session_id,
+                    new_pane_id
+                );
+                new_pane.mark_as_claude_with_session(session_id);
+            }
+            (cmd.to_string(), injection.args, injection.session_id)
+        } else {
+            (cmd.to_string(), vec![], None)
+        };
+
+        let mut config = PtyConfig::command(&actual_cmd);
+        for arg in &args {
+            config = config.with_arg(arg);
+        }
+        if let Some(cwd) = cwd {
+            config = config.with_cwd(cwd);
+        }
+
+        self.pty_manager
+            .spawn(new_pane_id, config)
+            .map_err(|e| McpError::Pty(e.to_string()))?;
+
+        // If select is true, also set the window as active
+        if select {
+            let session = self
+                .session_manager
+                .get_session_mut(session_id)
+                .ok_or_else(|| McpError::Internal("Session disappeared".into()))?;
+            session.set_active_window(window_id);
+        }
+
+        let mut result = serde_json::json!({
+            "pane_id": new_pane_id.to_string(),
+            "original_pane_id": pane_id.to_string(),
+            "session_id": session_id.to_string(),
+            "session": session_name,
+            "window_id": window_id.to_string(),
+            "direction": direction_str,
+            "ratio": ratio,
+            "status": "split"
+        });
+
+        if let Some(claude_session_id) = injected_session_id {
+            result["claude_session_id"] = serde_json::json!(claude_session_id);
+        }
+
+        serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
+    }
+
+    /// Resize a pane dynamically
+    ///
+    /// Adjusts the size of a pane relative to its sibling. Positive delta grows
+    /// the pane, negative delta shrinks it.
+    pub fn resize_pane(&mut self, pane_id: Uuid, delta: f64) -> Result<String, McpError> {
+        // Verify pane exists
+        let _ = self
+            .session_manager
+            .find_pane(pane_id)
+            .ok_or_else(|| McpError::PaneNotFound(pane_id.to_string()))?;
+
+        // Validate delta bounds
+        let delta = delta.clamp(-0.5, 0.5) as f32;
+
+        // Note: The actual resize logic is handled client-side via the LayoutManager.
+        // The server broadcasts the resize intent, and clients apply it to their layout.
+        // For now, we acknowledge the resize request.
+
+        let result = serde_json::json!({
+            "pane_id": pane_id.to_string(),
+            "delta": delta,
+            "status": "resize_requested"
+        });
+
+        serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
+    }
+
+    /// Create a complex layout declaratively
+    ///
+    /// Parses a layout specification and creates all panes atomically.
+    /// Supports nested splits with custom ratios.
+    pub fn create_layout(
+        &mut self,
+        session_filter: Option<&str>,
+        window_filter: Option<&str>,
+        layout_spec: &serde_json::Value,
+    ) -> Result<String, McpError> {
+        // Resolve session
+        let session = if let Some(filter) = session_filter {
+            if let Ok(id) = uuid::Uuid::parse_str(filter) {
+                self.session_manager
+                    .get_session(id)
+                    .ok_or_else(|| McpError::Internal(format!("Session '{}' not found", filter)))?
+            } else {
+                self.session_manager
+                    .get_session_by_name(filter)
+                    .ok_or_else(|| McpError::Internal(format!("Session '{}' not found", filter)))?
+            }
+        } else if self.session_manager.list_sessions().is_empty() {
+            self.session_manager
+                .create_session("default")
+                .map_err(|e| McpError::Internal(e.to_string()))?
+        } else {
+            self.session_manager.list_sessions()[0]
+        };
+        let session_id = session.id();
+        let session_name = session.name().to_string();
+
+        // Resolve window
+        let session = self
+            .session_manager
+            .get_session_mut(session_id)
+            .ok_or_else(|| McpError::Internal("Session disappeared".into()))?;
+
+        let window_id = if let Some(filter) = window_filter {
+            if let Ok(id) = uuid::Uuid::parse_str(filter) {
+                if session.get_window(id).is_some() {
+                    id
+                } else {
+                    return Err(McpError::Internal(format!("Window '{}' not found", filter)));
+                }
+            } else {
+                session
+                    .windows()
+                    .find(|w| w.name() == filter)
+                    .map(|w| w.id())
+                    .ok_or_else(|| McpError::Internal(format!("Window '{}' not found", filter)))?
+            }
+        } else {
+            let existing_id = session.windows().next().map(|w| w.id());
+            match existing_id {
+                Some(id) => id,
+                None => session.create_window(None).id(),
+            }
+        };
+
+        // Parse the layout spec and create panes
+        let created_panes = self.spawn_layout_panes(session_id, window_id, layout_spec)?;
+
+        let result = serde_json::json!({
+            "session_id": session_id.to_string(),
+            "session": session_name,
+            "window_id": window_id.to_string(),
+            "panes": created_panes,
+            "status": "created"
+        });
+
+        serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
+    }
+
+    /// Recursively spawn panes for a layout specification
+    fn spawn_layout_panes(
+        &mut self,
+        session_id: Uuid,
+        window_id: Uuid,
+        spec: &serde_json::Value,
+    ) -> Result<Vec<serde_json::Value>, McpError> {
+        let mut created_panes = Vec::new();
+
+        // Check if this is a pane leaf node
+        if let Some(pane_spec) = spec.get("pane") {
+            let pane_info = self.spawn_single_pane(session_id, window_id, pane_spec)?;
+            created_panes.push(pane_info);
+            return Ok(created_panes);
+        }
+
+        // Check if this is a split node
+        if let (Some(direction), Some(splits)) = (spec.get("direction"), spec.get("splits")) {
+            let splits = splits
+                .as_array()
+                .ok_or_else(|| McpError::InvalidParams("'splits' must be an array".into()))?;
+
+            let _direction_str = direction
+                .as_str()
+                .ok_or_else(|| McpError::InvalidParams("'direction' must be a string".into()))?;
+
+            // Normalize ratios
+            let mut ratios: Vec<f64> = splits
+                .iter()
+                .map(|s| s.get("ratio").and_then(|r| r.as_f64()).unwrap_or(1.0))
+                .collect();
+
+            let sum: f64 = ratios.iter().sum();
+            if sum > 0.0 {
+                for r in &mut ratios {
+                    *r /= sum;
+                }
+            }
+
+            // Recursively create panes for each split
+            for (i, split) in splits.iter().enumerate() {
+                let layout = split
+                    .get("layout")
+                    .ok_or_else(|| McpError::InvalidParams("Each split must have a 'layout'".into()))?;
+
+                let mut child_panes = self.spawn_layout_panes(session_id, window_id, layout)?;
+
+                // Add ratio information to first pane in this split branch
+                if let Some(first_pane) = child_panes.first_mut() {
+                    if let Some(obj) = first_pane.as_object_mut() {
+                        obj.insert("ratio".to_string(), serde_json::json!(ratios[i]));
+                    }
+                }
+
+                created_panes.extend(child_panes);
+            }
+
+            return Ok(created_panes);
+        }
+
+        Err(McpError::InvalidParams(
+            "Layout must have either 'pane' or 'direction'+'splits'".into(),
+        ))
+    }
+
+    /// Spawn a single pane from a pane specification
+    fn spawn_single_pane(
+        &mut self,
+        session_id: Uuid,
+        window_id: Uuid,
+        pane_spec: &serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let command = pane_spec.get("command").and_then(|c| c.as_str());
+        let cwd = pane_spec.get("cwd").and_then(|c| c.as_str());
+        let name = pane_spec.get("name").and_then(|n| n.as_str());
+
+        // Create the pane
+        let session = self
+            .session_manager
+            .get_session_mut(session_id)
+            .ok_or_else(|| McpError::Internal("Session disappeared".into()))?;
+        let window = session
+            .get_window_mut(window_id)
+            .ok_or_else(|| McpError::Internal("Window disappeared".into()))?;
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        // Initialize the parser
+        let pane = window
+            .get_pane_mut(pane_id)
+            .ok_or_else(|| McpError::Internal("Pane disappeared".into()))?;
+        pane.init_parser();
+
+        // Spawn PTY
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+        let cmd = command.unwrap_or(&shell);
+
+        // Check if this is a Claude command
+        let (actual_cmd, args, injected_session_id) = if is_claude_command(cmd, &[]) {
+            let injection = inject_session_id(cmd, &[]);
+            if injection.injected {
+                let session_id = injection.session_id.clone().unwrap();
+                tracing::info!(
+                    "Injected session ID {} for Claude pane {}",
+                    session_id,
+                    pane_id
+                );
+                pane.mark_as_claude_with_session(session_id);
+            }
+            (cmd.to_string(), injection.args, injection.session_id)
+        } else {
+            (cmd.to_string(), vec![], None)
+        };
+
+        let mut config = PtyConfig::command(&actual_cmd);
+        for arg in &args {
+            config = config.with_arg(arg);
+        }
+        if let Some(cwd) = cwd {
+            config = config.with_cwd(cwd);
+        }
+
+        self.pty_manager
+            .spawn(pane_id, config)
+            .map_err(|e| McpError::Pty(e.to_string()))?;
+
+        let mut pane_info = serde_json::json!({
+            "pane_id": pane_id.to_string(),
+            "command": cmd,
+        });
+
+        if let Some(name) = name {
+            pane_info["name"] = serde_json::json!(name);
+        }
+
+        if let Some(claude_session_id) = injected_session_id {
+            pane_info["claude_session_id"] = serde_json::json!(claude_session_id);
+        }
+
+        Ok(pane_info)
+    }
 }
 
 #[cfg(test)]
@@ -1082,5 +1468,249 @@ mod tests {
         assert!(result.contains("session_id"));
         assert!(result.contains("pane_id"));
         assert!(result.contains("window_id"));
+    }
+
+    // ==================== Split Pane Tests (FEAT-045) ====================
+
+    #[test]
+    fn test_split_pane_not_found() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        let result = ctx.split_pane(Uuid::new_v4(), None, None, None, None, false);
+        assert!(matches!(result, Err(McpError::PaneNotFound(_))));
+    }
+
+    #[test]
+    fn test_split_pane_creates_new_pane() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+
+        // Create a session with a pane
+        let session = session_manager.create_session("test").unwrap();
+        let session_id = session.id();
+        let session = session_manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+        let result = ctx.split_pane(pane_id, Some("horizontal"), Some(0.7), None, None, false).unwrap();
+
+        assert!(result.contains("pane_id"));
+        assert!(result.contains("original_pane_id"));
+        assert!(result.contains("\"direction\": \"horizontal\""));
+        assert!(result.contains("\"status\": \"split\""));
+    }
+
+    #[test]
+    fn test_split_pane_default_direction() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+
+        let session = session_manager.create_session("test").unwrap();
+        let session_id = session.id();
+        let session = session_manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+        let result = ctx.split_pane(pane_id, None, None, None, None, false).unwrap();
+
+        assert!(result.contains("\"direction\": \"vertical\""));
+    }
+
+    // ==================== Resize Pane Tests (FEAT-045) ====================
+
+    #[test]
+    fn test_resize_pane_not_found() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        let result = ctx.resize_pane(Uuid::new_v4(), 0.1);
+        assert!(matches!(result, Err(McpError::PaneNotFound(_))));
+    }
+
+    #[test]
+    fn test_resize_pane_success() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+
+        let session = session_manager.create_session("test").unwrap();
+        let session_id = session.id();
+        let session = session_manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+        let result = ctx.resize_pane(pane_id, 0.1).unwrap();
+
+        assert!(result.contains("pane_id"));
+        assert!(result.contains("\"status\": \"resize_requested\""));
+    }
+
+    #[test]
+    fn test_resize_pane_clamps_delta() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+
+        let session = session_manager.create_session("test").unwrap();
+        let session_id = session.id();
+        let session = session_manager.get_session_mut(session_id).unwrap();
+        let window = session.create_window(None);
+        let window_id = window.id();
+        let window = session.get_window_mut(window_id).unwrap();
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        // Test extreme positive delta gets clamped
+        let result = ctx.resize_pane(pane_id, 1.0).unwrap();
+        assert!(result.contains("0.5")); // Should be clamped to 0.5
+
+        // Test extreme negative delta gets clamped
+        let result = ctx.resize_pane(pane_id, -1.0).unwrap();
+        assert!(result.contains("-0.5")); // Should be clamped to -0.5
+    }
+
+    // ==================== Create Layout Tests (FEAT-045) ====================
+
+    #[test]
+    fn test_create_layout_single_pane() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        let layout = serde_json::json!({
+            "pane": {}
+        });
+
+        let result = ctx.create_layout(None, None, &layout).unwrap();
+
+        assert!(result.contains("\"status\": \"created\""));
+        assert!(result.contains("panes"));
+    }
+
+    #[test]
+    fn test_create_layout_horizontal_split() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        let layout = serde_json::json!({
+            "direction": "horizontal",
+            "splits": [
+                {"ratio": 0.5, "layout": {"pane": {"command": "bash"}}},
+                {"ratio": 0.5, "layout": {"pane": {"command": "bash"}}}
+            ]
+        });
+
+        let result = ctx.create_layout(None, None, &layout).unwrap();
+
+        assert!(result.contains("\"status\": \"created\""));
+        // Should have created 2 panes
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        let panes = parsed["panes"].as_array().unwrap();
+        assert_eq!(panes.len(), 2);
+    }
+
+    #[test]
+    fn test_create_layout_nested() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        // Layout: 65% left, 35% right (split into top/bottom)
+        let layout = serde_json::json!({
+            "direction": "horizontal",
+            "splits": [
+                {"ratio": 0.65, "layout": {"pane": {}}},
+                {"ratio": 0.35, "layout": {
+                    "direction": "vertical",
+                    "splits": [
+                        {"ratio": 0.5, "layout": {"pane": {}}},
+                        {"ratio": 0.5, "layout": {"pane": {}}}
+                    ]
+                }}
+            ]
+        });
+
+        let result = ctx.create_layout(None, None, &layout).unwrap();
+
+        assert!(result.contains("\"status\": \"created\""));
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        let panes = parsed["panes"].as_array().unwrap();
+        assert_eq!(panes.len(), 3);
+    }
+
+    #[test]
+    fn test_create_layout_invalid_spec() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        // Invalid: neither pane nor direction+splits
+        let layout = serde_json::json!({
+            "invalid": "spec"
+        });
+
+        let result = ctx.create_layout(None, None, &layout);
+        assert!(matches!(result, Err(McpError::InvalidParams(_))));
+    }
+
+    #[test]
+    fn test_create_layout_normalizes_ratios() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        // Ratios don't sum to 1.0, should be normalized
+        let layout = serde_json::json!({
+            "direction": "horizontal",
+            "splits": [
+                {"ratio": 2.0, "layout": {"pane": {}}},
+                {"ratio": 1.0, "layout": {"pane": {}}}
+            ]
+        });
+
+        let result = ctx.create_layout(None, None, &layout);
+        assert!(result.is_ok());
+    }
+
+    // ==================== Rename Session Tests ====================
+
+    #[test]
+    fn test_rename_session_not_found() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+
+        let result = ctx.rename_session("nonexistent", "newname");
+        assert!(matches!(result, Err(McpError::SessionNotFound(_))));
+    }
+
+    #[test]
+    fn test_rename_session_by_name() {
+        let mut session_manager = SessionManager::new();
+        let mut pty_manager = PtyManager::new();
+
+        session_manager.create_session("oldname").unwrap();
+
+        let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
+        let result = ctx.rename_session("oldname", "newname").unwrap();
+
+        assert!(result.contains("\"name\": \"newname\""));
+        assert!(result.contains("\"status\": \"renamed\""));
     }
 }

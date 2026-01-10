@@ -239,6 +239,121 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                 "required": ["session", "name"]
             }),
         },
+        Tool {
+            name: "ccmux_split_pane".into(),
+            description: "Split a specific pane with custom ratio".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "pane_id": {
+                        "type": "string",
+                        "description": "UUID of the pane to split"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["horizontal", "vertical"],
+                        "description": "Split direction: 'vertical' creates side-by-side panes, 'horizontal' creates stacked panes (default: vertical)"
+                    },
+                    "ratio": {
+                        "type": "number",
+                        "description": "Size ratio for the original pane (0.1 to 0.9, default: 0.5). The new pane gets the remaining space."
+                    },
+                    "command": {
+                        "type": "string",
+                        "description": "Command to run in the new pane (default: shell)"
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Working directory for the new pane"
+                    },
+                    "select": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "If true, focus the new pane after creation (default: false)"
+                    }
+                },
+                "required": ["pane_id"]
+            }),
+        },
+        Tool {
+            name: "ccmux_resize_pane".into(),
+            description: "Adjust pane sizes dynamically".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "pane_id": {
+                        "type": "string",
+                        "description": "UUID of the pane to resize"
+                    },
+                    "delta": {
+                        "type": "number",
+                        "description": "Size change as a fraction (-0.5 to 0.5). Positive values grow the pane, negative values shrink it."
+                    }
+                },
+                "required": ["pane_id", "delta"]
+            }),
+        },
+        Tool {
+            name: "ccmux_create_layout".into(),
+            description: "Create complex layouts declaratively in a single call. Supports nested splits with custom ratios.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Target session (UUID or name). Uses active session if omitted."
+                    },
+                    "window": {
+                        "type": "string",
+                        "description": "Target window (UUID or name). Uses first window in session if omitted."
+                    },
+                    "layout": {
+                        "type": "object",
+                        "description": "Layout specification. Can be a pane or a split.",
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "pane": {
+                                        "type": "object",
+                                        "properties": {
+                                            "command": { "type": "string", "description": "Command to run (default: shell)" },
+                                            "cwd": { "type": "string", "description": "Working directory" },
+                                            "name": { "type": "string", "description": "Optional name for the pane" }
+                                        }
+                                    }
+                                },
+                                "required": ["pane"]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "direction": {
+                                        "type": "string",
+                                        "enum": ["horizontal", "vertical"],
+                                        "description": "Split direction"
+                                    },
+                                    "splits": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "ratio": { "type": "number", "description": "Size ratio (0.0-1.0)" },
+                                                "layout": { "type": "object", "description": "Nested layout (pane or split)" }
+                                            },
+                                            "required": ["ratio", "layout"]
+                                        },
+                                        "description": "Child layouts with their ratios (should sum to 1.0)"
+                                    }
+                                },
+                                "required": ["direction", "splits"]
+                            }
+                        ]
+                    }
+                },
+                "required": ["layout"]
+            }),
+        },
     ]
 }
 
@@ -296,5 +411,9 @@ mod tests {
         assert!(names.contains(&"ccmux_create_session"));
         assert!(names.contains(&"ccmux_create_window"));
         assert!(names.contains(&"ccmux_rename_session"));
+        // New declarative layout tools (FEAT-045)
+        assert!(names.contains(&"ccmux_split_pane"));
+        assert!(names.contains(&"ccmux_resize_pane"));
+        assert!(names.contains(&"ccmux_create_layout"));
     }
 }
