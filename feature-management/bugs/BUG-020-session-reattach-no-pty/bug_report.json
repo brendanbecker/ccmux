@@ -1,0 +1,34 @@
+{
+  "bug_id": "BUG-020",
+  "title": "Session reattach from session manager creates client without PTY",
+  "component": "ccmux-server",
+  "severity": "high",
+  "priority": "P1",
+  "status": "new",
+  "reported_date": "2026-01-10",
+  "updated_date": "2026-01-10",
+  "assigned_to": null,
+  "tags": ["session-management", "pty", "client", "attachment"],
+  "affected_versions": ["0.1.0"],
+  "environment": "Linux terminal (WSL2)",
+  "reproducibility": "always",
+  "description": "When a user selects an existing session from the session manager/session selection UI, it creates an additional client connection to the session but the client doesn't get a PTY. The user cannot interact with the terminal - they see the pane but can't type or see output.",
+  "steps_to_reproduce": [
+    "Start ccmux and create a session",
+    "Detach from the session (Ctrl+B d) or open session manager",
+    "From the session manager UI, select the existing session to reattach",
+    "Observe that the client appears to connect (additional client registered)",
+    "Attempt to interact with the terminal pane"
+  ],
+  "expected_behavior": "Selecting a session from the session manager should attach the client to the existing PTY. The user should be able to interact with the terminal immediately, seeing output and typing input.",
+  "actual_behavior": "Client connects and shows the pane visually, but no PTY is assigned/visible to the new client. User cannot interact with the terminal pane - no input accepted, no output visible.",
+  "evidence": [
+    {
+      "type": "output",
+      "location": "inline",
+      "description": "Discovered during testing of BUG-019 fix. Session appears connected but PTY is not accessible to the reattached client."
+    }
+  ],
+  "root_cause": "To be determined. May be related to how session attachment handles PTY reader cloning or output poller registration. The attach handler may not be properly connecting the new client to the existing PTY output stream.",
+  "impact": "Session reattachment via session manager is broken. Users cannot reconnect to existing sessions through the UI, only through direct attach commands. This defeats the purpose of the session manager feature."
+}
