@@ -358,6 +358,11 @@ impl LayoutManager {
         &self.root
     }
 
+    /// Get the root layout node mutably
+    pub fn root_mut(&mut self) -> &mut LayoutNode {
+        &mut self.root
+    }
+
     /// Get the active pane ID
     pub fn active_pane_id(&self) -> Option<Uuid> {
         self.active_pane_id

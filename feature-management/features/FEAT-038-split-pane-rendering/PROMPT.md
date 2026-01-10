@@ -5,7 +5,7 @@
 **Type**: new_feature
 **Estimated Effort**: large
 **Business Value**: high
-**Status**: new
+**Status**: implemented
 
 ## Overview
 
@@ -229,53 +229,53 @@ impl From<ccmux_protocol::SplitDirection> for SplitDirection {
 ## Implementation Tasks
 
 ### Section 1: LayoutManager Integration
-- [ ] Add `layout: LayoutManager` field to App struct
-- [ ] Initialize layout with first pane in `Attached` handler
-- [ ] Add `pending_split_direction: Option<SplitDirection>` field
-- [ ] Store direction when handling split commands
-- [ ] Update layout when PaneCreated is received
-- [ ] Handle pane removal in layout
+- [x] Add `layout: LayoutManager` field to App struct
+- [x] Initialize layout with first pane in `Attached` handler
+- [x] Add `pending_split_direction: Option<SplitDirection>` field
+- [x] Store direction when handling split commands
+- [x] Update layout when PaneCreated is received
+- [x] Handle pane removal in layout
 
 ### Section 2: Multi-Pane Rendering
-- [ ] Update `draw_attached()` to use `layout.calculate_rects()`
-- [ ] Render all panes from the rect list
-- [ ] Add border rendering around each pane
-- [ ] Implement active pane highlighting (different border color)
-- [ ] Ensure proper clipping to pane boundaries
+- [x] Update `draw_attached()` to use `layout.calculate_rects()`
+- [x] Render all panes from the rect list
+- [x] Add border rendering around each pane
+- [x] Implement active pane highlighting (different border color)
+- [x] Ensure proper clipping to pane boundaries
 
 ### Section 3: Resize Handling
-- [ ] Calculate inner dimensions (accounting for borders)
-- [ ] Resize terminal emulators when layout changes
-- [ ] Send resize messages to server for each pane
-- [ ] Handle terminal resize event for all panes
+- [x] Calculate inner dimensions (accounting for borders)
+- [x] Resize terminal emulators when layout changes
+- [x] Send resize messages to server for each pane
+- [x] Handle terminal resize event for all panes
 
 ### Section 4: Pane Navigation Integration
-- [ ] Use `layout.next_pane()` for `NextPane` command
-- [ ] Use `layout.prev_pane()` for `PreviousPane` command
-- [ ] Sync `active_pane_id` with `layout.active_pane_id()`
-- [ ] Visual feedback when switching panes
+- [x] Use `layout.next_pane()` for `NextPane` command
+- [x] Use `layout.prev_pane()` for `PreviousPane` command
+- [x] Sync `active_pane_id` with `layout.active_pane_id()`
+- [x] Visual feedback when switching panes
 
 ### Section 5: Testing
-- [ ] Test single pane rendering (no regression)
-- [ ] Test vertical split creates side-by-side panes
-- [ ] Test horizontal split creates stacked panes
-- [ ] Test nested splits (split a split)
-- [ ] Test pane closure collapses layout
-- [ ] Test resize distributes space correctly
-- [ ] Test active pane indicator updates on switch
+- [x] Test single pane rendering (no regression)
+- [x] Test vertical split creates side-by-side panes
+- [x] Test horizontal split creates stacked panes
+- [x] Test nested splits (split a split)
+- [x] Test pane closure collapses layout
+- [x] Test resize distributes space correctly
+- [x] Test active pane indicator updates on switch
 
 ## Acceptance Criteria
 
-- [ ] When user presses `Ctrl+B %`, screen splits vertically showing both panes
-- [ ] When user presses `Ctrl+B "`, screen splits horizontally showing both panes
-- [ ] Active pane has a highlighted border (e.g., cyan)
-- [ ] Inactive panes have a dim border (e.g., dark gray)
-- [ ] `Ctrl+B o` switches focus and updates border highlighting
-- [ ] Pane titles/indices shown in borders
-- [ ] Closing a pane causes sibling to expand
-- [ ] Terminal resize updates all pane sizes proportionally
-- [ ] No regressions in single-pane functionality
-- [ ] All tests passing
+- [x] When user presses `Ctrl+B %`, screen splits vertically showing both panes
+- [x] When user presses `Ctrl+B "`, screen splits horizontally showing both panes
+- [x] Active pane has a highlighted border (e.g., cyan)
+- [x] Inactive panes have a dim border (e.g., dark gray)
+- [x] `Ctrl+B o` switches focus and updates border highlighting
+- [x] Pane titles/indices shown in borders
+- [x] Closing a pane causes sibling to expand
+- [x] Terminal resize updates all pane sizes proportionally
+- [x] No regressions in single-pane functionality
+- [x] All tests passing
 
 ## Dependencies
 

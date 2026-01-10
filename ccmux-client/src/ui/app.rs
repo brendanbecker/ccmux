@@ -24,7 +24,8 @@ use crate::connection::Connection;
 use crate::input::{ClientCommand, InputAction, InputHandler, InputMode};
 
 use super::event::{AppEvent, EventHandler, InputEvent};
-use super::pane::{render_pane, PaneManager};
+use super::layout::{LayoutManager, SplitDirection as LayoutSplitDirection};
+use super::pane::{render_pane, FocusState, PaneManager};
 use super::terminal::Terminal;
 
 /// Application state
@@ -74,6 +75,10 @@ pub struct App {
     status_message: Option<String>,
     /// UI pane manager for terminal rendering
     pane_manager: PaneManager,
+    /// Layout manager for pane arrangement
+    layout: Option<LayoutManager>,
+    /// Pending split direction for next pane creation
+    pending_split_direction: Option<SplitDirection>,
 }
 
 impl App {
@@ -97,6 +102,8 @@ impl App {
             tick_count: 0,
             status_message: None,
             pane_manager: PaneManager::new(),
+            layout: None,
+            pending_split_direction: None,
         })
     }
 
@@ -120,6 +127,8 @@ impl App {
             tick_count: 0,
             status_message: None,
             pane_manager: PaneManager::new(),
+            layout: None,
+            pending_split_direction: None,
         })
     }
 
@@ -205,25 +214,46 @@ impl App {
             AppEvent::Server(msg) => self.handle_server_message(msg).await?,
             AppEvent::Resize { cols, rows } => {
                 self.terminal_size = (cols, rows);
-                // Calculate inner pane size (accounting for borders and status bar)
-                // 2 for borders on each side, 1 for status bar
-                let pane_rows = rows.saturating_sub(3);
-                let pane_cols = cols.saturating_sub(2);
 
-                // Resize all UI panes
-                for pane_id in self.pane_manager.pane_ids() {
-                    self.pane_manager.resize_pane(pane_id, pane_rows, pane_cols);
-                }
+                // Update layout and resize all panes
+                if self.state == AppState::Attached {
+                    // Calculate pane area (minus status bar)
+                    let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
 
-                // Notify server of resize if attached
-                if let Some(pane_id) = self.active_pane_id {
-                    self.connection
-                        .send(ClientMessage::Resize {
-                            pane_id,
-                            cols: pane_cols,
-                            rows: pane_rows,
-                        })
-                        .await?;
+                    if let Some(ref layout) = self.layout {
+                        let pane_rects = layout.calculate_rects(pane_area);
+
+                        // Resize each pane and notify server
+                        for (pane_id, rect) in &pane_rects {
+                            // Account for border (1 cell on each side)
+                            let inner_width = rect.width.saturating_sub(2);
+                            let inner_height = rect.height.saturating_sub(2);
+
+                            // Resize UI pane
+                            self.pane_manager.resize_pane(*pane_id, inner_height, inner_width);
+
+                            // Notify server of resize for each pane
+                            self.connection
+                                .send(ClientMessage::Resize {
+                                    pane_id: *pane_id,
+                                    cols: inner_width,
+                                    rows: inner_height,
+                                })
+                                .await?;
+                        }
+                    } else if let Some(pane_id) = self.active_pane_id {
+                        // Fallback: single pane, no layout
+                        let pane_rows = rows.saturating_sub(3);
+                        let pane_cols = cols.saturating_sub(2);
+                        self.pane_manager.resize_pane(pane_id, pane_rows, pane_cols);
+                        self.connection
+                            .send(ClientMessage::Resize {
+                                pane_id,
+                                cols: pane_cols,
+                                rows: pane_rows,
+                            })
+                            .await?;
+                    }
                 }
             }
             AppEvent::Tick => {
@@ -348,16 +378,36 @@ impl App {
 
             InputAction::Resize { cols, rows } => {
                 self.terminal_size = (cols, rows);
-                // Calculate inner pane size (accounting for borders and status bar)
-                let pane_rows = rows.saturating_sub(3);
-                let pane_cols = cols.saturating_sub(2);
 
-                // Resize all UI panes
-                for id in self.pane_manager.pane_ids() {
-                    self.pane_manager.resize_pane(id, pane_rows, pane_cols);
-                }
+                // Calculate pane area (minus status bar)
+                let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
 
-                if let Some(pane_id) = self.active_pane_id {
+                if let Some(ref layout) = self.layout {
+                    let pane_rects = layout.calculate_rects(pane_area);
+
+                    // Resize each pane and notify server
+                    for (pane_id, rect) in &pane_rects {
+                        // Account for border (1 cell on each side)
+                        let inner_width = rect.width.saturating_sub(2);
+                        let inner_height = rect.height.saturating_sub(2);
+
+                        // Resize UI pane
+                        self.pane_manager.resize_pane(*pane_id, inner_height, inner_width);
+
+                        // Notify server of resize
+                        self.connection
+                            .send(ClientMessage::Resize {
+                                pane_id: *pane_id,
+                                cols: inner_width,
+                                rows: inner_height,
+                            })
+                            .await?;
+                    }
+                } else if let Some(pane_id) = self.active_pane_id {
+                    // Fallback: single pane, no layout
+                    let pane_rows = rows.saturating_sub(3);
+                    let pane_cols = cols.saturating_sub(2);
+                    self.pane_manager.resize_pane(pane_id, pane_rows, pane_cols);
                     self.connection
                         .send(ClientMessage::Resize {
                             pane_id,
@@ -376,6 +426,8 @@ impl App {
                 self.panes.clear();
                 self.pane_manager = PaneManager::new();
                 self.active_pane_id = None;
+                self.layout = None;
+                self.pending_split_direction = None;
                 self.status_message = Some("Detached from session".to_string());
                 self.connection.send(ClientMessage::ListSessions).await?;
             }
@@ -411,6 +463,8 @@ impl App {
 
             ClientCommand::SplitVertical => {
                 if let Some(window) = self.windows.values().next() {
+                    // Store direction for layout update when PaneCreated is received
+                    self.pending_split_direction = Some(SplitDirection::Vertical);
                     self.connection
                         .send(ClientMessage::CreatePane {
                             window_id: window.id,
@@ -422,6 +476,8 @@ impl App {
 
             ClientCommand::SplitHorizontal => {
                 if let Some(window) = self.windows.values().next() {
+                    // Store direction for layout update when PaneCreated is received
+                    self.pending_split_direction = Some(SplitDirection::Horizontal);
                     self.connection
                         .send(ClientMessage::CreatePane {
                             window_id: window.id,
@@ -432,11 +488,29 @@ impl App {
             }
 
             ClientCommand::NextPane => {
-                self.cycle_pane(1);
+                // Use layout manager for navigation if available
+                if let Some(ref mut layout) = self.layout {
+                    layout.next_pane();
+                    if let Some(new_active) = layout.active_pane_id() {
+                        self.active_pane_id = Some(new_active);
+                        self.pane_manager.set_active(new_active);
+                    }
+                } else {
+                    self.cycle_pane(1);
+                }
             }
 
             ClientCommand::PreviousPane => {
-                self.cycle_pane(-1);
+                // Use layout manager for navigation if available
+                if let Some(ref mut layout) = self.layout {
+                    layout.prev_pane();
+                    if let Some(new_active) = layout.active_pane_id() {
+                        self.active_pane_id = Some(new_active);
+                        self.pane_manager.set_active(new_active);
+                    }
+                } else {
+                    self.cycle_pane(-1);
+                }
             }
 
             ClientCommand::PaneLeft
@@ -450,10 +524,15 @@ impl App {
 
             ClientCommand::FocusPane(index) => {
                 if let Some(pane) = self.panes.values().find(|p| p.index == index) {
-                    self.active_pane_id = Some(pane.id);
-                    self.pane_manager.set_active(pane.id);
+                    let pane_id = pane.id;
+                    self.active_pane_id = Some(pane_id);
+                    self.pane_manager.set_active(pane_id);
+                    // Sync with layout manager
+                    if let Some(ref mut layout) = self.layout {
+                        layout.set_active_pane(pane_id);
+                    }
                     self.connection
-                        .send(ClientMessage::SelectPane { pane_id: pane.id })
+                        .send(ClientMessage::SelectPane { pane_id })
                         .await?;
                 }
             }
@@ -556,6 +635,10 @@ impl App {
         let new_pane_id = pane_ids[new_index];
         self.active_pane_id = Some(new_pane_id);
         self.pane_manager.set_active(new_pane_id);
+        // Sync with layout manager
+        if let Some(ref mut layout) = self.layout {
+            layout.set_active_pane(new_pane_id);
+        }
     }
 
     /// Cycle through windows by offset (positive = forward, negative = backward)
@@ -713,6 +796,24 @@ impl App {
                 let pane_rows = term_rows.saturating_sub(3); // Account for borders and status bar
                 let pane_cols = term_cols.saturating_sub(2); // Account for side borders
 
+                // Initialize layout manager with panes
+                // For now, when reattaching, we create a simple layout with existing panes
+                // (a more complete solution would persist layout in the server)
+                let pane_ids: Vec<Uuid> = self.panes.keys().copied().collect();
+                if let Some(&first_pane_id) = pane_ids.first() {
+                    let mut layout_manager = LayoutManager::new(first_pane_id);
+                    // Add remaining panes as vertical splits (simple layout for reattach)
+                    for &pane_id in pane_ids.iter().skip(1) {
+                        layout_manager.root_mut().add_pane(
+                            first_pane_id,
+                            pane_id,
+                            LayoutSplitDirection::Vertical,
+                        );
+                    }
+                    layout_manager.set_active_pane(self.active_pane_id.unwrap_or(first_pane_id));
+                    self.layout = Some(layout_manager);
+                }
+
                 // Create UI panes with CLIENT's terminal dimensions
                 for pane_info in self.panes.values() {
                     self.pane_manager.add_pane(pane_info.id, pane_rows, pane_cols);
@@ -734,7 +835,7 @@ impl App {
                         .await?;
                 }
 
-                // Set active UI pane
+                // Set active UI pane with focus state
                 if let Some(active_id) = self.active_pane_id {
                     self.pane_manager.set_active(active_id);
                 }
@@ -743,6 +844,27 @@ impl App {
                 self.windows.insert(window.id, window);
             }
             ServerMessage::PaneCreated { pane } => {
+                // Get the split direction from pending or default to vertical
+                let direction = self
+                    .pending_split_direction
+                    .take()
+                    .unwrap_or(SplitDirection::Vertical);
+                let layout_direction = LayoutSplitDirection::from(direction);
+
+                // Add new pane to layout
+                if let Some(ref mut layout) = self.layout {
+                    // Split the active pane to add the new one
+                    if let Some(active_id) = self.active_pane_id {
+                        layout.root_mut().add_pane(active_id, pane.id, layout_direction);
+                    } else {
+                        // No active pane - this is the first pane, initialize layout
+                        *layout = LayoutManager::new(pane.id);
+                    }
+                } else {
+                    // Layout not initialized - create with this pane
+                    self.layout = Some(LayoutManager::new(pane.id));
+                }
+
                 // Create UI pane for terminal rendering
                 self.pane_manager.add_pane(pane.id, pane.rows, pane.cols);
                 if let Some(ui_pane) = self.pane_manager.get_mut(pane.id) {
@@ -750,7 +872,14 @@ impl App {
                     ui_pane.set_cwd(pane.cwd.clone());
                     ui_pane.set_pane_state(pane.state.clone());
                 }
-                self.panes.insert(pane.id, pane);
+                self.panes.insert(pane.id, pane.clone());
+
+                // Switch focus to the new pane
+                self.active_pane_id = Some(pane.id);
+                self.pane_manager.set_active(pane.id);
+                if let Some(ref mut layout) = self.layout {
+                    layout.set_active_pane(pane.id);
+                }
             }
             ServerMessage::Output { pane_id, data } => {
                 // Process output through the UI pane's terminal emulator
@@ -774,11 +903,27 @@ impl App {
             ServerMessage::PaneClosed { pane_id, .. } => {
                 self.panes.remove(&pane_id);
                 self.pane_manager.remove_pane(pane_id);
+
+                // Remove from layout
+                if let Some(ref mut layout) = self.layout {
+                    layout.remove_pane(pane_id);
+                }
+
                 if self.active_pane_id == Some(pane_id) {
-                    self.active_pane_id = self.panes.keys().next().copied();
-                    // Update active UI pane
-                    if let Some(new_active) = self.active_pane_id {
-                        self.pane_manager.set_active(new_active);
+                    // Get new active pane from layout or fallback to panes
+                    let new_active = self
+                        .layout
+                        .as_ref()
+                        .and_then(|l| l.active_pane_id())
+                        .or_else(|| self.panes.keys().next().copied());
+
+                    self.active_pane_id = new_active;
+                    // Update active UI pane and layout
+                    if let Some(id) = new_active {
+                        self.pane_manager.set_active(id);
+                        if let Some(ref mut layout) = self.layout {
+                            layout.set_active_pane(id);
+                        }
                     }
                 }
                 // If no panes left, go back to session selection
@@ -786,6 +931,7 @@ impl App {
                     self.session = None;
                     self.windows.clear();
                     self.active_pane_id = None;
+                    self.layout = None;
                     self.state = AppState::SessionSelect;
                     self.status_message = Some("Session has no active panes".to_string());
                 }
@@ -799,6 +945,8 @@ impl App {
                 self.panes.clear();
                 self.pane_manager = PaneManager::new();
                 self.active_pane_id = None;
+                self.layout = None;
+                self.pending_split_direction = None;
                 self.state = AppState::SessionSelect;
                 self.status_message = Some("Session ended".to_string());
                 // Refresh session list
@@ -849,6 +997,11 @@ impl App {
 
     /// Draw the UI
     fn draw(&mut self, terminal: &mut Terminal) -> Result<()> {
+        // For attached state, update pane layout before drawing
+        if self.state == AppState::Attached {
+            self.update_pane_layout(terminal.size()?);
+        }
+
         terminal.terminal_mut().draw(|frame| {
             let area = frame.area();
 
@@ -861,6 +1014,37 @@ impl App {
             }
         })?;
         Ok(())
+    }
+
+    /// Update pane layout and sizes based on current terminal size
+    fn update_pane_layout(&mut self, terminal_size: (u16, u16)) {
+        let (term_cols, term_rows) = terminal_size;
+
+        // Calculate pane area (minus status bar)
+        let pane_area = Rect::new(0, 0, term_cols, term_rows.saturating_sub(1));
+
+        if let Some(ref layout) = self.layout {
+            let pane_rects = layout.calculate_rects(pane_area);
+
+            for (pane_id, rect) in &pane_rects {
+                // Account for border (1 cell on each side)
+                let inner_width = rect.width.saturating_sub(2);
+                let inner_height = rect.height.saturating_sub(2);
+
+                // Resize the UI pane to match the calculated layout
+                self.pane_manager.resize_pane(*pane_id, inner_height, inner_width);
+
+                // Update focus state
+                let is_active = Some(*pane_id) == self.active_pane_id;
+                if let Some(ui_pane) = self.pane_manager.get_mut(*pane_id) {
+                    ui_pane.set_focus_state(if is_active {
+                        FocusState::Focused
+                    } else {
+                        FocusState::Unfocused
+                    });
+                }
+            }
+        }
     }
 
     /// Draw disconnected state
@@ -962,12 +1146,30 @@ impl App {
         // Main pane area
         let pane_area = chunks[0];
 
-        // Render the active pane using tui-term
-        if let Some(pane_id) = self.active_pane_id {
+        // Render all panes using layout manager
+        if let Some(ref layout) = self.layout {
+            let pane_rects = layout.calculate_rects(pane_area);
+
+            // Render each pane
+            for (pane_id, rect) in &pane_rects {
+                if let Some(ui_pane) = self.pane_manager.get(*pane_id) {
+                    render_pane(ui_pane, *rect, frame.buffer_mut(), self.tick_count);
+                } else {
+                    // Fallback if UI pane not found
+                    let pane_block = Block::default()
+                        .borders(Borders::ALL)
+                        .title("Pane (no terminal)")
+                        .border_style(Style::default().fg(Color::Red));
+                    let pane_widget = Paragraph::new("Terminal not initialized")
+                        .block(pane_block);
+                    frame.render_widget(pane_widget, *rect);
+                }
+            }
+        } else if let Some(pane_id) = self.active_pane_id {
+            // Fallback: no layout, render single active pane
             if let Some(ui_pane) = self.pane_manager.get(pane_id) {
                 render_pane(ui_pane, pane_area, frame.buffer_mut(), self.tick_count);
             } else {
-                // Fallback if UI pane not found
                 let pane_block = Block::default()
                     .borders(Borders::ALL)
                     .title("Pane (no terminal)")
