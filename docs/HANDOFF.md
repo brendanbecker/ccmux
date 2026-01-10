@@ -73,7 +73,7 @@
 | BUG-010 | MCP pane broadcast not received by TUI | P1 | ✅ Fixed |
 | BUG-011 | Large paste crashes session | P2 | ✅ Fixed |
 | BUG-012 | Text selection not working in TUI | P2 | ❌ Deprecated (Shift+click works) |
-| BUG-013 | Mouse scroll wheel not working | P2 | 📋 New |
+| BUG-013 | Mouse scroll wheel not working | P2 | ✅ Fixed |
 | BUG-014 | Large output buffer overflow | P2 | 📋 New |
 | BUG-015 | Layout not recalculated on pane close | P2 | 📋 New |
 | BUG-016 | PTY output not routed to pane state (breaks Claude detection + MCP read_pane) | P1 | ✅ Fixed |
@@ -363,16 +363,16 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 | Worktree | Branch | Status | Next Task |
 |----------|--------|--------|-----------|
 | `ccmux-stream-a` | `stream-a-critical-path` | ✅ BUG-016 done | Rebase, reassign to FEAT-044 or BUG-017 |
-| `ccmux-bug-013` | `bug-013-mouse-scroll` | 🔄 In progress | Check if complete next session |
+| `ccmux-bug-013` | `bug-013-mouse-scroll` | ✅ Merged | Can be removed |
 | `ccmux-bug-010` | `bug-010-mcp-pane-broadcast` | ✅ Merged | Can be removed |
 | `ccmux-bug-011` | `bug-011-large-paste-crash` | ✅ Merged | Can be removed |
 | `ccmux-feat-043` | `feat-043-session-rename` | ✅ Merged | Can be removed |
 | `ccmux-wt-bug-009` | `bug-009-flaky-persistence-tests` | ✅ Merged | Can be removed |
 
 ### Next Session Checklist
-- [ ] Check if BUG-013 (mouse scroll) is complete in `ccmux-bug-013` worktree
+- [x] Check if BUG-013 (mouse scroll) is complete in `ccmux-bug-013` worktree
 - [ ] Rebase `ccmux-stream-a` and assign to next P1 task (FEAT-044 or BUG-017)
-- [ ] Clean up merged worktrees (bug-010, bug-011, feat-043, wt-bug-009)
+- [ ] Clean up merged worktrees (bug-010, bug-011, bug-013, feat-043, wt-bug-009)
 - [ ] Rebuild server with all fixes and test `read_pane` works (BUG-016 fix)
 
 ## Session Log (2026-01-10) - Parallel Execution & Major Bug Fixes
