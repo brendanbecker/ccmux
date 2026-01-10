@@ -67,7 +67,7 @@
 | BUG-008 | Pane/window creation no PTY | P0 | ✅ Fixed |
 | BUG-010 | MCP pane broadcast not received by TUI | P1 | 🔍 Investigating |
 | BUG-011 | Large paste crashes session | P2 | 📋 New |
-| BUG-012 | Text selection not working in TUI | P2 | 📋 New |
+| BUG-012 | Text selection not working in TUI | P2 | ❌ Deprecated (Shift+click works) |
 | BUG-013 | Mouse scroll wheel not working | P2 | 📋 New |
 
 ## Post-MVP Features
@@ -110,6 +110,9 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 | Worktree | Branch | Purpose |
 |----------|--------|---------|
 | `ccmux-bug-010` | `bug-010-mcp-pane-broadcast` | BUG-010 investigation |
+| `ccmux-bug-011` | `bug-011-large-paste-crash` | BUG-011: Large paste crash |
+| `ccmux-bug-013` | `bug-013-mouse-scroll` | BUG-013: Mouse scroll fix |
+| `ccmux-feat-043` | `feat-043-session-rename` | FEAT-043: Session rename tool |
 | `ccmux-wt-bug-009` | `bug-009-flaky-persistence-tests` | BUG-009 investigation |
 
 ### BUG-010 Investigation Status
