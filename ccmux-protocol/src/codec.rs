@@ -229,6 +229,7 @@ mod tests {
             ClientMessage::ListSessions,
             ClientMessage::CreateSession {
                 name: "test".to_string(),
+                command: None,
             },
             ClientMessage::AttachSession {
                 session_id: Uuid::new_v4(),

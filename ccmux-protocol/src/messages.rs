@@ -79,7 +79,11 @@ pub enum ClientMessage {
     ListSessions,
 
     /// Create a new session
-    CreateSession { name: String },
+    CreateSession {
+        name: String,
+        /// Optional command to run instead of default_command from config
+        command: Option<String>,
+    },
 
     /// Attach to existing session
     AttachSession { session_id: Uuid },
@@ -397,9 +401,22 @@ mod tests {
     fn test_client_message_create_session() {
         let msg = ClientMessage::CreateSession {
             name: "test-session".to_string(),
+            command: None,
         };
-        if let ClientMessage::CreateSession { name } = &msg {
+        if let ClientMessage::CreateSession { name, command } = &msg {
             assert_eq!(name, "test-session");
+            assert!(command.is_none());
+        } else {
+            panic!("Wrong variant");
+        }
+
+        let msg_with_cmd = ClientMessage::CreateSession {
+            name: "test".to_string(),
+            command: Some("claude --resume".to_string()),
+        };
+        if let ClientMessage::CreateSession { name, command } = &msg_with_cmd {
+            assert_eq!(name, "test");
+            assert_eq!(command.as_deref(), Some("claude --resume"));
         } else {
             panic!("Wrong variant");
         }

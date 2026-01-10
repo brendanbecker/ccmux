@@ -55,6 +55,22 @@ impl PtyConfig {
         }
     }
 
+    /// Create config from a command string with arguments (e.g., "claude --resume")
+    ///
+    /// Parses the string by splitting on whitespace. For more complex argument
+    /// parsing (quoted strings, etc.), use `command()` with `with_arg()` instead.
+    pub fn from_command_string(cmd_str: &str) -> Self {
+        let parts: Vec<&str> = cmd_str.split_whitespace().collect();
+        if parts.is_empty() {
+            return Self::shell();
+        }
+        let mut config = Self::command(parts[0]);
+        for arg in parts.iter().skip(1) {
+            config = config.with_arg(*arg);
+        }
+        config
+    }
+
     /// Set working directory
     pub fn with_cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
         self.cwd = Some(cwd.into());
@@ -143,6 +159,41 @@ mod tests {
         let config = PtyConfig::command("vim");
         assert_eq!(config.command, "vim");
         assert_eq!(config.size, (80, 24)); // Default size preserved
+    }
+
+    #[test]
+    fn test_from_command_string_simple() {
+        let config = PtyConfig::from_command_string("bash");
+        assert_eq!(config.command, "bash");
+        assert!(config.args.is_empty());
+    }
+
+    #[test]
+    fn test_from_command_string_with_args() {
+        let config = PtyConfig::from_command_string("claude --resume");
+        assert_eq!(config.command, "claude");
+        assert_eq!(config.args, vec!["--resume"]);
+    }
+
+    #[test]
+    fn test_from_command_string_multiple_args() {
+        let config = PtyConfig::from_command_string("python -m pytest -v");
+        assert_eq!(config.command, "python");
+        assert_eq!(config.args, vec!["-m", "pytest", "-v"]);
+    }
+
+    #[test]
+    fn test_from_command_string_empty() {
+        let config = PtyConfig::from_command_string("");
+        // Should fall back to shell
+        assert!(!config.command.is_empty());
+    }
+
+    #[test]
+    fn test_from_command_string_whitespace_only() {
+        let config = PtyConfig::from_command_string("   ");
+        // Should fall back to shell
+        assert!(!config.command.is_empty());
     }
 
     #[test]

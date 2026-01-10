@@ -79,6 +79,8 @@ pub struct App {
     layout: Option<LayoutManager>,
     /// Pending split direction for next pane creation
     pending_split_direction: Option<SplitDirection>,
+    /// Custom command to run in new sessions (from CLI args)
+    session_command: Option<String>,
 }
 
 impl App {
@@ -104,6 +106,7 @@ impl App {
             pane_manager: PaneManager::new(),
             layout: None,
             pending_split_direction: None,
+            session_command: None,
         })
     }
 
@@ -129,7 +132,13 @@ impl App {
             pane_manager: PaneManager::new(),
             layout: None,
             pending_split_direction: None,
+            session_command: None,
         })
+    }
+
+    /// Set the command to run in new sessions
+    pub fn set_session_command(&mut self, command: Option<String>) {
+        self.session_command = command;
     }
 
     /// Get current application state
@@ -546,7 +555,10 @@ impl App {
                 let session_name =
                     name.unwrap_or_else(|| format!("session-{}", Uuid::new_v4().as_simple()));
                 self.connection
-                    .send(ClientMessage::CreateSession { name: session_name })
+                    .send(ClientMessage::CreateSession {
+                        name: session_name,
+                        command: self.session_command.clone(),
+                    })
                     .await?;
             }
 
@@ -725,6 +737,7 @@ impl App {
                 self.connection
                     .send(ClientMessage::CreateSession {
                         name: format!("session-{}", Uuid::new_v4().as_simple()),
+                        command: self.session_command.clone(),
                     })
                     .await?;
             }
@@ -879,6 +892,29 @@ impl App {
                 self.pane_manager.set_active(pane.id);
                 if let Some(ref mut layout) = self.layout {
                     layout.set_active_pane(pane.id);
+                }
+
+                // Resize all panes after layout change
+                let (cols, rows) = self.terminal_size;
+                let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
+
+                if let Some(ref layout) = self.layout {
+                    let pane_rects = layout.calculate_rects(pane_area);
+
+                    for (pane_id, rect) in &pane_rects {
+                        let inner_width = rect.width.saturating_sub(2);
+                        let inner_height = rect.height.saturating_sub(2);
+
+                        self.pane_manager.resize_pane(*pane_id, inner_height, inner_width);
+
+                        self.connection
+                            .send(ClientMessage::Resize {
+                                pane_id: *pane_id,
+                                cols: inner_width,
+                                rows: inner_height,
+                            })
+                            .await?;
+                    }
                 }
             }
             ServerMessage::Output { pane_id, data } => {

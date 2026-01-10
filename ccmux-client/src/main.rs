@@ -78,14 +78,17 @@ async fn run_app(args: Args) -> Result<()> {
     let quick_bindings = load_quick_bindings();
 
     // Create and run the app with optional custom socket path
-    let mut app = if let Some(socket) = args.socket {
-        App::with_socket_path(socket)?
+    let mut app = if let Some(ref socket) = args.socket {
+        App::with_socket_path(socket.clone())?
     } else {
         App::new()?
     };
 
     // Apply loaded keybindings
     app.set_quick_bindings(quick_bindings);
+
+    // Set session command from CLI args (overrides default_command in config)
+    app.set_session_command(args.command_string());
 
     app.run().await
 }

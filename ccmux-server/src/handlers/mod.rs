@@ -96,7 +96,9 @@ impl HandlerContext {
             // Session handlers
             ClientMessage::ListSessions => self.handle_list_sessions().await,
 
-            ClientMessage::CreateSession { name } => self.handle_create_session(name).await,
+            ClientMessage::CreateSession { name, command } => {
+                self.handle_create_session(name, command).await
+            }
 
             ClientMessage::AttachSession { session_id } => {
                 self.handle_attach_session(session_id).await

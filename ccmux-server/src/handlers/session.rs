@@ -30,10 +30,16 @@ impl HandlerContext {
     ///
     /// Creates a session with a default window and pane, including PTY spawn.
     /// This ensures new sessions are immediately usable with a shell.
-    pub async fn handle_create_session(&self, name: String) -> HandlerResult {
+    ///
+    /// If `command` is provided, it overrides `default_command` from config.
+    pub async fn handle_create_session(
+        &self,
+        name: String,
+        command: Option<String>,
+    ) -> HandlerResult {
         info!(
-            "CreateSession '{}' request from {}",
-            name, self.client_id
+            "CreateSession '{}' request from {} (command: {:?})",
+            name, self.client_id, command
         );
 
         let mut session_manager = self.session_manager.write().await;
@@ -70,10 +76,15 @@ impl HandlerContext {
                 {
                     let mut pty_manager = self.pty_manager.write().await;
 
-                    // Use default_command from config if set, otherwise shell
-                    let mut pty_config = if let Some(ref cmd) = self.config.general.default_command {
-                        PtyConfig::command(cmd).with_size(cols, rows)
+                    // Priority: CLI command > config default_command > shell
+                    let mut pty_config = if let Some(ref cmd) = command {
+                        // CLI argument provided - parse command string with args
+                        PtyConfig::from_command_string(cmd).with_size(cols, rows)
+                    } else if let Some(ref cmd) = self.config.general.default_command {
+                        // Use default_command from config
+                        PtyConfig::from_command_string(cmd).with_size(cols, rows)
                     } else {
+                        // Fall back to shell
                         PtyConfig::shell().with_size(cols, rows)
                     };
 
@@ -420,7 +431,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_create_session_success() {
         let ctx = create_test_context();
-        let result = ctx.handle_create_session("new-session".to_string()).await;
+        let result = ctx.handle_create_session("new-session".to_string(), None).await;
 
         match result {
             HandlerResult::Response(ServerMessage::SessionCreated { session }) => {
@@ -446,7 +457,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_create_session_spawns_pty() {
         let ctx = create_test_context();
-        ctx.handle_create_session("test-session".to_string()).await;
+        ctx.handle_create_session("test-session".to_string(), None).await;
 
         // Find the pane ID
         let pane_id = {
@@ -470,10 +481,10 @@ mod tests {
         let ctx = create_test_context();
 
         // Create first session
-        ctx.handle_create_session("test".to_string()).await;
+        ctx.handle_create_session("test".to_string(), None).await;
 
         // Try to create duplicate
-        let result = ctx.handle_create_session("test".to_string()).await;
+        let result = ctx.handle_create_session("test".to_string(), None).await;
 
         match result {
             HandlerResult::Response(ServerMessage::Error { code, .. }) => {

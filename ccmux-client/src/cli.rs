@@ -29,6 +29,13 @@ pub struct Args {
     /// Override the default Unix socket path for connecting to the server.
     #[arg(long, short = 'S')]
     pub socket: Option<PathBuf>,
+
+    /// Command to run in new sessions (overrides default_command from config)
+    ///
+    /// Example: ccmux claude --resume
+    /// Example: ccmux bash
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    pub command: Vec<String>,
 }
 
 impl Args {
@@ -40,6 +47,15 @@ impl Args {
     /// Check if auto-start is enabled
     pub fn auto_start_enabled(&self) -> bool {
         !self.no_auto_start
+    }
+
+    /// Get the command string if provided
+    pub fn command_string(&self) -> Option<String> {
+        if self.command.is_empty() {
+            None
+        } else {
+            Some(self.command.join(" "))
+        }
     }
 }
 
@@ -54,6 +70,8 @@ mod tests {
         assert!(args.auto_start_enabled());
         assert_eq!(args.server_timeout, 2000);
         assert!(args.socket.is_none());
+        assert!(args.command.is_empty());
+        assert!(args.command_string().is_none());
     }
 
     #[test]
@@ -91,5 +109,44 @@ mod tests {
         assert!(args.no_auto_start);
         assert_eq!(args.server_timeout, 3000);
         assert_eq!(args.socket, Some(PathBuf::from("/run/ccmux.sock")));
+    }
+
+    #[test]
+    fn test_command_simple() {
+        let args = Args::parse_from(["ccmux", "bash"]);
+        assert_eq!(args.command, vec!["bash"]);
+        assert_eq!(args.command_string(), Some("bash".to_string()));
+    }
+
+    #[test]
+    fn test_command_with_args() {
+        let args = Args::parse_from(["ccmux", "claude", "--resume"]);
+        assert_eq!(args.command, vec!["claude", "--resume"]);
+        assert_eq!(args.command_string(), Some("claude --resume".to_string()));
+    }
+
+    #[test]
+    fn test_command_with_quoted_args() {
+        let args = Args::parse_from(["ccmux", "claude", "do the thing"]);
+        assert_eq!(args.command, vec!["claude", "do the thing"]);
+        assert_eq!(
+            args.command_string(),
+            Some("claude do the thing".to_string())
+        );
+    }
+
+    #[test]
+    fn test_flags_before_command() {
+        let args = Args::parse_from([
+            "ccmux",
+            "--no-auto-start",
+            "-S",
+            "/tmp/sock",
+            "claude",
+            "--resume",
+        ]);
+        assert!(args.no_auto_start);
+        assert_eq!(args.socket, Some(PathBuf::from("/tmp/sock")));
+        assert_eq!(args.command_string(), Some("claude --resume".to_string()));
     }
 }
