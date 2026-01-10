@@ -73,6 +73,10 @@
 | FEAT-033 | tmux-like Auto-Start | P1 | ✅ Merged |
 | FEAT-034 | Mouse Scroll Support | P2 | 📋 Planned |
 | FEAT-035 | Configurable Tab/Pane Switching | P2 | 📋 Planned |
+| FEAT-037 | tmux-Compatible Keybinds | P1 | ✅ Merged |
+
+### FEAT-037: tmux-Compatible Keybinds
+All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 ### FEAT-032/033: UX Improvements
 - **FEAT-032**: MCP bridge connects to main daemon, Claude controls same sessions as user
@@ -80,7 +84,11 @@
 
 ## Active Worktrees
 
-None - all features merged.
+| Worktree | Branch | Feature |
+|----------|--------|---------|
+| `ccmux-wt-feat-017` | `feat-017-hot-reload` | Wire up ConfigWatcher for live reloads |
+| `ccmux-wt-feat-034` | `feat-034-mouse-scroll` | Mouse scroll support |
+| `ccmux-wt-feat-035` | `feat-035-tab-switching` | Ctrl+PageUp/Down tab switching |
 
 ## Session Log (2026-01-09) - Continued
 
@@ -122,18 +130,47 @@ cargo build --release
 # Run (auto-starts server if needed, like tmux)
 ./target/release/ccmux
 
-# In client:
-#   n = create new session
-#   Ctrl+D = delete selected session
-#   Enter = attach to selected session
-#   q = quit
-
 # Run MCP bridge for Claude Code integration
 ./target/release/ccmux-server mcp-bridge
 
 # Run tests
 cargo test --workspace
 ```
+
+### Session Selection UI Keys
+| Key | Action |
+|-----|--------|
+| `n` | Create new session |
+| `Ctrl+D` | Delete selected session |
+| `Enter` | Attach to selected session |
+| `j/k` or `↑/↓` | Navigate session list |
+| `q` | Quit |
+
+### Prefix Keybinds (Ctrl+b, then...)
+| Key | Action |
+|-----|--------|
+| **Windows** ||
+| `c` | Create window |
+| `&` | Close window |
+| `n/p` | Next/prev window |
+| `0-9` | Select window by number |
+| `w` | List windows |
+| **Panes** ||
+| `%` | Split vertical |
+| `"` | Split horizontal |
+| `x` | Close pane |
+| `o` | Next pane (cycle) |
+| `;` | Previous pane |
+| `h/j/k/l` | Vim-style navigation |
+| `←↓↑→` | Arrow navigation |
+| `z` | Zoom pane (fullscreen) |
+| **Session** ||
+| `s` | Session picker |
+| `d` | Detach |
+| **Modes** ||
+| `:` | Command mode |
+| `[` | Copy/scroll mode |
+| `?` | Help |
 
 ## Configuration
 
@@ -231,6 +268,29 @@ Add to `~/.claude/mcp.json`:
 - `3a1ad12` - fix(server): add pane cleanup loop for BUG-004
 - Merge FEAT-031, FEAT-032, FEAT-033
 - `8501844` - feat(config): add default_command for auto-launching programs
+
+## Session Log (2026-01-09) - tmux Keybind Alignment
+
+### Work Completed
+1. **FEAT-037** implemented - tmux-compatible prefix keybinds
+2. **Prefix+s** now returns to session picker (was TODO)
+3. Created worktrees for FEAT-017, FEAT-034, FEAT-035
+
+### Key Changes
+- `c` now creates window (was: pane)
+- `n/p` now navigate windows (was: panes)
+- `o` cycles panes (tmux default)
+- `;` goes to previous pane (tmux default)
+- `0-9` select window by number (new)
+- `&` closes window (new)
+- `s` returns to session picker (implemented)
+
+### Commits Made
+- `4a15c13` - feat(client): implement Prefix+s to return to session selection
+- `a15a767` - feat(client): align prefix keybinds with tmux defaults
+- `025bb36` - docs: add FEAT-037 tmux-compatible keybinds (completed)
+
+---
 
 ## Session Log (2026-01-09) - Bug Fix & Feature Planning Session
 
