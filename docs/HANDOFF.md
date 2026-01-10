@@ -65,6 +65,7 @@
 | BUG-006 | Viewport not sizing to terminal | P1 | ✅ Fixed |
 | BUG-007 | Shift+Tab not passed through | P1 | ✅ Fixed |
 | BUG-008 | Pane/window creation no PTY | P0 | ✅ Fixed |
+| BUG-010 | MCP pane broadcast not received by TUI | P1 | 🔍 Investigating |
 
 ## Post-MVP Features
 
@@ -81,6 +82,12 @@
 | FEAT-037 | tmux-Compatible Keybinds | P1 | ✅ Merged |
 | FEAT-038 | Split Pane Rendering | P1 | ✅ Merged |
 | FEAT-039 | MCP Pane Creation Broadcast | P2 | ✅ Merged |
+| FEAT-040 | MCP Pane Reliability Improvements | P1 | ✅ Merged |
+
+### FEAT-040: MCP Pane Reliability (BUG-010 Investigation)
+- Added debug logging to broadcast_to_session_except() for diagnosis
+- Added comprehensive tests for MCP-to-TUI broadcast scenarios
+- BUG-010 root cause still under investigation
 
 ### FEAT-034/035: Navigation Improvements
 - **FEAT-034**: Mouse scroll navigates terminal scrollback with visual offset indicator
