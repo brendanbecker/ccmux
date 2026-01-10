@@ -359,6 +359,14 @@ impl RecoveryManager {
 
         Ok(has_checkpoint || has_wal)
     }
+
+    /// Shutdown the recovery manager, ensuring all data is persisted
+    ///
+    /// This must be called before dropping the manager if data durability
+    /// is required (e.g., in tests that reopen the WAL).
+    pub fn shutdown(self) -> Result<()> {
+        self.wal.shutdown()
+    }
 }
 
 /// Detect if the previous shutdown was clean
@@ -450,7 +458,7 @@ mod tests {
         let window_id = Uuid::new_v4();
         let pane_id = Uuid::new_v4();
 
-        // Write WAL entries and checkpoint
+        // Write WAL entries
         {
             let manager = create_manager_at(&state_dir);
 
@@ -477,8 +485,10 @@ mod tests {
                 created_at: 12345,
             }).unwrap();
 
-            // Checkpoint to persist entries
-            manager.wal().checkpoint_active().unwrap();
+            // Shutdown ensures entries are durably written without marking as checkpointed
+            // (checkpoint_active() would mark entries as processed by an external checkpoint,
+            // which we don't have, causing them to be skipped during recovery)
+            manager.shutdown().unwrap();
         }
 
         // Re-open and recover
@@ -517,7 +527,8 @@ mod tests {
                 id: session_id,
             }).unwrap();
 
-            manager.wal().checkpoint_active().unwrap();
+            // Just shutdown - no checkpoint_active() since we're only using WAL recovery
+            manager.shutdown().unwrap();
         }
 
         // Re-open and recover
@@ -579,7 +590,8 @@ mod tests {
                 cwd: Some("/home/user".to_string()),
             }).unwrap();
 
-            manager.wal().checkpoint_active().unwrap();
+            // Just shutdown - no checkpoint_active() since we're only using WAL recovery
+            manager.shutdown().unwrap();
         }
 
         // Re-open and recover
@@ -602,6 +614,7 @@ mod tests {
         {
             let manager = create_manager_at(&state_dir);
             assert!(!manager.has_state_to_recover().unwrap());
+            manager.shutdown().unwrap();
         }
 
         // Write and checkpoint
@@ -612,7 +625,8 @@ mod tests {
                 name: "test".to_string(),
                 created_at: 0,
             }).unwrap();
-            manager.wal().checkpoint_active().unwrap();
+            // Just shutdown - no checkpoint_active() since we're only using WAL recovery
+            manager.shutdown().unwrap();
         }
 
         // Re-open - now should have state
@@ -658,7 +672,8 @@ mod tests {
                 new_name: "new-name".to_string(),
             }).unwrap();
 
-            manager.wal().checkpoint_active().unwrap();
+            // Just shutdown - no checkpoint_active() since we're only using WAL recovery
+            manager.shutdown().unwrap();
         }
 
         let manager = create_manager_at(&state_dir);
@@ -711,7 +726,8 @@ mod tests {
                 pane_id: Some(pane_id),
             }).unwrap();
 
-            manager.wal().checkpoint_active().unwrap();
+            // Just shutdown - no checkpoint_active() since we're only using WAL recovery
+            manager.shutdown().unwrap();
         }
 
         let manager = create_manager_at(&state_dir);

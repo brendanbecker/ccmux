@@ -420,8 +420,9 @@ mod tests {
             })
             .unwrap();
 
-            // Checkpoint to ensure data is persisted
-            wal.checkpoint_active().unwrap();
+            // Just shutdown - no checkpoint_active() since we're only using WAL recovery
+            // (checkpoint_active() marks entries as processed by an external checkpoint)
+            wal.shutdown().unwrap();
         }
 
         // Re-open and verify recovery
@@ -570,7 +571,8 @@ mod tests {
                 })
                 .unwrap();
             }
-            wal.checkpoint_active().unwrap();
+            // Just shutdown - no checkpoint_active() since we're only using WAL recovery
+            wal.shutdown().unwrap();
         }
 
         // Re-open and use reader

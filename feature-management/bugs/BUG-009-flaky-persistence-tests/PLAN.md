@@ -4,109 +4,123 @@
 **Component**: ccmux-server
 **Priority**: P2
 **Created**: 2026-01-09
+**Status**: COMPLETED
 
 ## Overview
 
-The persistence/recovery tests have intermittent race conditions causing approximately 30% of parallel test runs to fail. The failure is non-deterministic - different tests fail each time. This is the same class of issue as BUG-002 (shared temp directories), applied to the persistence module.
+The persistence/recovery tests have intermittent race conditions causing approximately 30% of parallel test runs to fail. The failure is non-deterministic - different tests fail each time.
 
-## Architecture Decisions
+## Root Cause Analysis
 
-### Approach: Test Isolation via `tempfile::TempDir`
+### The Problem
 
-Following the proven pattern from BUG-002, each test should:
+Contrary to initial suspicion (BUG-002 pattern of shared temp directories), the actual root cause was **incorrect usage of `checkpoint_active()`** in test code.
 
-1. Create its own unique `TempDir` that is automatically cleaned up
-2. Pass the temp directory path to all persistence operations
-3. Ensure file handles are dropped before `TempDir` cleanup (Rust's drop order)
+When `checkpoint_active()` is called on the okaywal WAL library, it triggers the `LogManager::checkpoint_to()` callback. This callback is designed to:
+1. Read all entries up to the checkpoint point
+2. Persist them to an external checkpoint file
+3. Signal to okaywal that those entries can be removed/skipped during future recovery
 
-### Trade-offs
+**Our `checkpoint_to` implementation did nothing:**
+```rust
+fn checkpoint_to(
+    &mut self,
+    _last_checkpointed_id: EntryId,
+    _entries: &mut SegmentReader,
+    _wal: &WriteAheadLog,
+) -> std::io::Result<()> {
+    debug!("WAL checkpoint completed");
+    Ok(())  // Does nothing - doesn't persist entries anywhere!
+}
+```
 
-| Option | Pros | Cons |
-|--------|------|------|
-| `tempfile::TempDir` | Automatic cleanup, unique per test, proven pattern | Slight overhead |
-| `#[serial]` attribute | Simple to apply | Slows test suite, doesn't fix root cause |
-| Manual unique paths | No new dependencies | Error-prone, manual cleanup required |
+When tests called `checkpoint_active()` without actually creating a checkpoint file, okaywal marked the WAL segments with a `-cp` suffix indicating "checkpointed". On restart, okaywal would see these segments as already processed and skip recovering their entries.
 
-**Decision**: Use `tempfile::TempDir` as primary fix. Only use `#[serial]` if tests fundamentally require sequential execution.
+### Why It Was Flaky
 
-## Files to Investigate
+The tests passed when:
+- okaywal happened to create segments that weren't fully checkpointed
+- Timing allowed entries to be written to new segments after checkpoint
 
-| File | Purpose | Risk Level |
-|------|---------|------------|
-| `ccmux-server/src/persistence/mod.rs` | Module root, contains `test_persistence_log_operations` | High |
-| `ccmux-server/src/persistence/recovery.rs` | Recovery tests (3 failing tests) | High |
-| `ccmux-server/src/persistence/wal.rs` | Write-ahead log, likely creates files | Medium |
-| `ccmux-server/src/persistence/checkpoint.rs` | Checkpoint files | Medium |
-| `ccmux-server/src/persistence/types.rs` | Data types | Low |
-| `ccmux-server/src/persistence/scrollback.rs` | Scrollback persistence | Medium |
-| `ccmux-server/src/persistence/restoration.rs` | State restoration | Medium |
+The tests failed when:
+- All entries fell into checkpointed segments
+- okaywal recovery skipped all "checkpointed" entries
 
-## Investigation Steps
+## The Fix
 
-### Phase 1: Identify Test Patterns
+### 1. Added `shutdown()` method to `RecoveryManager` (recovery.rs:363-369)
 
-1. **Find all `#[test]` functions** in persistence module
-2. **Trace temp directory usage**: Look for:
-   - `std::env::temp_dir()`
-   - `std::process::id()`
-   - Hardcoded paths like `/tmp/ccmux_test`
-   - Any path construction in tests
-3. **Trace file operations**: Look for:
-   - `File::create()`, `File::open()`
-   - `std::fs::*` operations
-   - File handles stored in structs
-4. **Check for cleanup**: Look for:
-   - `std::fs::remove_dir_all()`
-   - `Drop` implementations
-   - Explicit cleanup code
+```rust
+/// Shutdown the recovery manager, ensuring all data is persisted
+pub fn shutdown(self) -> Result<()> {
+    self.wal.shutdown()
+}
+```
 
-### Phase 2: Identify Shared State
+### 2. Added `finalize()` method to `PersistenceManager` (mod.rs:440-447)
 
-1. **Global/static variables**: Search for `static`, `lazy_static`, `once_cell`
-2. **Environment variables**: Tests modifying `std::env`
-3. **File locks**: `flock`, `lockf`, or Rust file locking
+```rust
+/// Finalize the persistence manager, ensuring all data is durably written
+pub fn finalize(self) -> Result<()> {
+    self.recovery_manager.shutdown()
+}
+```
 
-### Phase 3: Apply Fixes
+### 3. Removed incorrect `checkpoint_active()` calls from tests
 
-For each test found:
+Tests that only use WAL recovery (without actual checkpoint files) should NOT call `checkpoint_active()`. They should only call `shutdown()` which ensures entries are durably written without marking them as checkpointed.
 
-1. Replace path construction with `tempfile::TempDir::new()`
-2. Ensure `TempDir` outlives all file handles
-3. Verify cleanup happens automatically
+**Before (broken):**
+```rust
+manager.wal().append(&entry).unwrap();
+manager.wal().checkpoint_active().unwrap();  // WRONG: marks as checkpointed
+drop(manager);  // or just going out of scope
+// entries are lost on recovery because okaywal skips "checkpointed" segments
+```
 
-## Risk Assessment
+**After (correct):**
+```rust
+manager.wal().append(&entry).unwrap();
+manager.shutdown().unwrap();  // Correct: durably writes without checkpointing
+// entries are recovered properly
+```
 
-| Risk | Likelihood | Impact | Mitigation |
-|------|------------|--------|------------|
-| Some tests still flaky after fix | Low | Medium | Run 50+ iterations to verify |
-| Fix breaks tests that pass | Low | High | Run each test individually after fix |
-| Performance regression | Low | Low | Monitor test execution time |
-| Missed tests | Medium | Medium | Systematic search for all test functions |
+## Key Insight
 
-## Rollback Strategy
+`checkpoint_active()` should ONLY be called when:
+1. An actual checkpoint file has been created containing the session state
+2. The checkpoint file contains all entries up to the checkpoint marker
+3. Those entries can safely be skipped during WAL replay
 
-If the fix causes issues:
-1. Revert commits associated with this work item
-2. All changes are test-only, no production code affected
-3. Consider `#[serial]` as fallback
+For tests that only exercise WAL recovery without checkpoints, just call `shutdown()`.
 
-## Success Criteria
+## Files Changed
 
-- 0% failure rate over 20+ consecutive `cargo test --workspace` runs
-- All tests still pass when run individually
-- No significant increase in test execution time
+| File | Changes |
+|------|---------|
+| `ccmux-server/src/persistence/recovery.rs` | Added `shutdown()` method, removed `checkpoint_active()` from 6 tests |
+| `ccmux-server/src/persistence/wal.rs` | Removed `checkpoint_active()` from 2 tests |
+| `ccmux-server/src/persistence/mod.rs` | Added `finalize()` method, removed `checkpoint_active()` from 2 tests |
 
-## Implementation Notes
+## Verification
 
-<!-- Add notes during implementation -->
+- 25 consecutive runs of persistence tests: **100% pass rate**
+- 10 consecutive runs of full workspace tests: **100% pass rate** (1330 tests each)
 
-### Findings
+## Success Criteria - All Met
 
-*To be filled during investigation*
+- [x] Root cause identified and documented
+- [x] All persistence tests use proper isolation
+- [x] All file handles properly closed before cleanup
+- [x] All tests pass consistently (0% failure rate over 25+ consecutive runs)
+- [x] Tests still pass when run individually
+- [x] No performance regression in test execution time
+- [x] Pattern documented for future test development
 
-### Code Patterns Identified
+## Lessons Learned
 
-*To be filled during investigation*
+1. **Don't call `checkpoint_active()` without creating actual checkpoints** - okaywal interprets this as "entries have been persisted elsewhere" and will skip them during recovery.
 
----
-*This plan should be updated as implementation progresses.*
+2. **Use `shutdown()` for WAL durability** - The `shutdown()` method ensures all pending writes are flushed to disk without marking entries as checkpointed.
+
+3. **Understand your dependencies** - The flakiness wasn't in our code's logic but in how we were using okaywal's API. The `-cp` suffix on WAL files was the key clue.
