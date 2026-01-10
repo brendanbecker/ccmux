@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-10
 
 ## Summary Statistics
-- Total Bugs: 15
-- New: 9
+- Total Bugs: 16
+- New: 10
 - In Progress: 0
 - Resolved: 5
 - Deprecated: 1
@@ -16,7 +16,29 @@
 
 *No open P0 bugs*
 
-### P1 - High Priority (6)
+### P1 - High Priority (7)
+
+#### BUG-020: Session reattach from session manager creates client without PTY [NEW]
+
+**Status**: New
+**Filed**: 2026-01-10
+**Component**: ccmux-server
+**Directory**: [BUG-020-session-reattach-no-pty](BUG-020-session-reattach-no-pty/)
+
+**Description**:
+When a user selects an existing session from the session manager/session selection UI, it creates an additional client connection to the session but the client doesn't get a PTY. The user cannot interact with the terminal - they see the pane but can't type or see output.
+
+**Symptoms**:
+- Selecting an existing session from session manager UI
+- Client appears to connect (additional client registered)
+- No PTY is assigned/visible to the new client
+- Cannot interact with the terminal pane
+
+**Suspected Root Cause**:
+May be related to how session attachment handles PTY reader cloning or output poller registration. The attach handler may not be properly connecting the new client to the existing PTY output stream.
+
+**Impact**:
+Session reattachment via session manager is broken. Users cannot reconnect to existing sessions through the UI.
 
 #### BUG-016: PTY output not routed to pane state - breaks Claude detection and MCP read_pane [NEW]
 
@@ -335,6 +357,7 @@ Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-10 | BUG-020 | Filed | Session reattach from session manager creates client without PTY |
 | 2026-01-10 | BUG-018 | Filed | TUI pane interaction failure - can't see input bar or interact with pane |
 | 2026-01-10 | BUG-017 | Filed | MCP send_input doesn't handle Enter key |
 | 2026-01-10 | BUG-016 | Filed | PTY output not routed to pane state - breaks Claude detection and MCP read_pane |
