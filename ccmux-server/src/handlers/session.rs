@@ -170,6 +170,9 @@ impl HandlerContext {
                 .flat_map(|w| w.panes().map(|p| p.to_info()))
                 .collect();
 
+            // Set this as the active session for MCP commands that don't specify a session
+            session_manager.set_active_session(session_id);
+
             drop(session_manager);
 
             // Register in client registry

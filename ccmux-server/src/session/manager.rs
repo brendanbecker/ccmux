@@ -12,6 +12,8 @@ pub struct SessionManager {
     sessions: HashMap<Uuid, Session>,
     /// Map session name to ID for lookup
     name_to_id: HashMap<String, Uuid>,
+    /// The currently active session (used when no session is explicitly specified)
+    active_session_id: Option<Uuid>,
 }
 
 impl SessionManager {
@@ -87,6 +89,41 @@ impl SessionManager {
     /// Get session count
     pub fn session_count(&self) -> usize {
         self.sessions.len()
+    }
+
+    /// Get the active session ID
+    ///
+    /// Returns the currently active session, or the most recently created
+    /// session if no session is explicitly active.
+    pub fn active_session_id(&self) -> Option<Uuid> {
+        // Return explicitly set active session if valid
+        if let Some(id) = self.active_session_id {
+            if self.sessions.contains_key(&id) {
+                return Some(id);
+            }
+        }
+        // Fall back to most recently created session
+        self.list_sessions().last().map(|s| s.id())
+    }
+
+    /// Get the active session
+    pub fn active_session(&self) -> Option<&Session> {
+        self.active_session_id().and_then(|id| self.get_session(id))
+    }
+
+    /// Set the active session
+    ///
+    /// This is called when a TUI client attaches to a session, making it
+    /// the default target for MCP commands that don't specify a session.
+    pub fn set_active_session(&mut self, session_id: Uuid) {
+        if self.sessions.contains_key(&session_id) {
+            self.active_session_id = Some(session_id);
+        }
+    }
+
+    /// Clear the active session
+    pub fn clear_active_session(&mut self) {
+        self.active_session_id = None;
     }
 
     /// Find pane by ID across all sessions

@@ -245,9 +245,9 @@ impl HandlerContext {
                 }
             }
         } else {
-            // Use first session or create one
-            match session_manager.list_sessions().first() {
-                Some(s) => s.id(),
+            // Use active session or create one
+            match session_manager.active_session_id() {
+                Some(id) => id,
                 None => {
                     match session_manager.create_session("default") {
                         Ok(s) => s.id(),
