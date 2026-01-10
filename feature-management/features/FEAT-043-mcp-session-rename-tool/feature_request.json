@@ -3,7 +3,7 @@
   "title": "MCP Session Rename Tool",
   "component": "ccmux-server (MCP)",
   "priority": "P2",
-  "status": "new",
+  "status": "completed",
   "type": "enhancement",
   "created_date": "2026-01-10",
   "updated_date": "2026-01-10",

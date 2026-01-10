@@ -191,6 +191,11 @@ impl HandlerContext {
                 self.handle_create_window_with_options(session_filter, name, command)
                     .await
             }
+
+            ClientMessage::RenameSession {
+                session_filter,
+                new_name,
+            } => self.handle_rename_session(session_filter, new_name).await,
         }
     }
 

@@ -1057,7 +1057,8 @@ impl App {
             | ServerMessage::PaneStatus { .. }
             | ServerMessage::PaneCreatedWithDetails { .. }
             | ServerMessage::SessionCreatedWithDetails { .. }
-            | ServerMessage::WindowCreatedWithDetails { .. } => {
+            | ServerMessage::WindowCreatedWithDetails { .. }
+            | ServerMessage::SessionRenamed { .. } => {
                 // These messages are for the MCP bridge, not the TUI client
             }
         }

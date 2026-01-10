@@ -359,6 +359,15 @@ impl McpBridge {
                 let pane_id = parse_uuid(arguments, "pane_id")?;
                 self.tool_focus_pane(pane_id).await
             }
+            "ccmux_rename_session" => {
+                let session = arguments["session"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'session' parameter".into()))?;
+                let name = arguments["name"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'name' parameter".into()))?;
+                self.tool_rename_session(session, name).await
+            }
             _ => Err(McpError::UnknownTool(name.into())),
         }
     }
@@ -709,6 +718,41 @@ impl McpBridge {
         let json = serde_json::to_string_pretty(&result)
             .map_err(|e| McpError::Internal(e.to_string()))?;
         Ok(ToolResult::text(json))
+    }
+
+    async fn tool_rename_session(
+        &mut self,
+        session_filter: &str,
+        new_name: &str,
+    ) -> Result<ToolResult, McpError> {
+        self.send_to_daemon(ClientMessage::RenameSession {
+            session_filter: session_filter.to_string(),
+            new_name: new_name.to_string(),
+        })
+        .await?;
+
+        match self.recv_from_daemon().await? {
+            ServerMessage::SessionRenamed {
+                session_id,
+                previous_name,
+                new_name,
+            } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "session_id": session_id.to_string(),
+                    "previous_name": previous_name,
+                    "new_name": new_name
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
     }
 }
 

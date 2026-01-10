@@ -87,7 +87,7 @@ Claude Code can control ccmux sessions via MCP. Add to `~/.claude/mcp.json`:
 ```
 
 **Available MCP Tools**:
-- `ccmux_list_sessions`, `ccmux_create_session`
+- `ccmux_list_sessions`, `ccmux_create_session`, `ccmux_rename_session`
 - `ccmux_list_windows`, `ccmux_create_window`
 - `ccmux_list_panes`, `ccmux_create_pane`, `ccmux_close_pane`, `ccmux_focus_pane`
 - `ccmux_read_pane`, `ccmux_send_input`, `ccmux_get_status`

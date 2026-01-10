@@ -196,6 +196,14 @@ pub enum ClientMessage {
         /// Command to run in default pane (default: shell)
         command: Option<String>,
     },
+
+    /// Rename a session (for MCP bridge)
+    RenameSession {
+        /// Session to rename (UUID or current name)
+        session_filter: String,
+        /// New name for the session
+        new_name: String,
+    },
 }
 
 /// Messages sent from server to client
@@ -337,6 +345,13 @@ pub enum ServerMessage {
         pane_id: Uuid,
         session_name: String,
     },
+
+    /// Session was renamed (for MCP bridge)
+    SessionRenamed {
+        session_id: Uuid,
+        previous_name: String,
+        new_name: String,
+    },
 }
 
 /// Entry in the pane list (for MCP bridge)
@@ -371,6 +386,8 @@ pub enum ErrorCode {
     NoRepository,
     /// No recipients for orchestration message
     NoRecipients,
+    /// Session name already exists
+    SessionNameExists,
 }
 
 #[cfg(test)]
@@ -880,9 +897,10 @@ mod tests {
             ErrorCode::NotAwaitingInput,
             ErrorCode::NoRepository,
             ErrorCode::NoRecipients,
+            ErrorCode::SessionNameExists,
         ];
 
-        assert_eq!(codes.len(), 9);
+        assert_eq!(codes.len(), 10);
         for (i, code) in codes.iter().enumerate() {
             // Each code should be unique
             for (j, other) in codes.iter().enumerate() {
