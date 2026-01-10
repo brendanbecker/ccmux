@@ -334,7 +334,7 @@ With 3-way parallelism: **10-16 hours wall time** for all items.
 ### Open Features (blocked/in-progress)
 | ID | Feature | Notes |
 |----|---------|-------|
-| FEAT-015 | Claude Detection from PTY Output | ✅ Unblocked - BUG-016 fixed, verify detection works |
+| FEAT-015 | Claude Detection from PTY Output | ✅ Merged |
 
 ### Backlog Features (future enhancements)
 | ID | Feature | Notes |
@@ -362,17 +362,13 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 | Worktree | Branch | Status | Next Task |
 |----------|--------|--------|-----------|
-| `ccmux-stream-a` | `stream-a-critical-path` | ✅ BUG-016 done | Rebase, reassign to FEAT-044 or BUG-017 |
-| `ccmux-bug-013` | `bug-013-mouse-scroll` | ✅ Merged | Can be removed |
-| `ccmux-bug-010` | `bug-010-mcp-pane-broadcast` | ✅ Merged | Can be removed |
-| `ccmux-bug-011` | `bug-011-large-paste-crash` | ✅ Merged | Can be removed |
-| `ccmux-feat-043` | `feat-043-session-rename` | ✅ Merged | Can be removed |
-| `ccmux-wt-bug-009` | `bug-009-flaky-persistence-tests` | ✅ Merged | Can be removed |
+| `ccmux-stream-a` | `stream-a-critical-path` | ✅ FEAT-015 merged | Rebase, reassign to FEAT-044 or BUG-017 |
 
 ### Next Session Checklist
 - [x] Check if BUG-013 (mouse scroll) is complete in `ccmux-bug-013` worktree
+- [x] Merged FEAT-015 from `ccmux-stream-a`
+- [x] Clean up merged worktrees (bug-010, bug-011, bug-013, feat-043, wt-bug-009)
 - [ ] Rebase `ccmux-stream-a` and assign to next P1 task (FEAT-044 or BUG-017)
-- [ ] Clean up merged worktrees (bug-010, bug-011, bug-013, feat-043, wt-bug-009)
 - [ ] Rebuild server with all fixes and test `read_pane` works (BUG-016 fix)
 
 ## Session Log (2026-01-10) - Parallel Execution & Major Bug Fixes
