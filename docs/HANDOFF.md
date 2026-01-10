@@ -61,6 +61,7 @@
 | BUG-005 | Sideband parsing not integrated | P0 | ✅ Fixed |
 | BUG-006 | Viewport not sizing to terminal | P1 | ✅ Fixed |
 | BUG-007 | Shift+Tab not passed through | P1 | ✅ Fixed |
+| BUG-008 | Pane/window creation no PTY | P0 | ✅ Fixed |
 
 ## Post-MVP Features
 
@@ -269,12 +270,14 @@ Add to `~/.claude/mcp.json`:
 - Merge FEAT-031, FEAT-032, FEAT-033
 - `8501844` - feat(config): add default_command for auto-launching programs
 
-## Session Log (2026-01-09) - tmux Keybind Alignment
+## Session Log (2026-01-09) - tmux Keybind Alignment + Bug Fix
 
 ### Work Completed
 1. **FEAT-037** implemented - tmux-compatible prefix keybinds
 2. **Prefix+s** now returns to session picker (was TODO)
 3. Created worktrees for FEAT-017, FEAT-034, FEAT-035
+4. **FEAT-017** merged (was already complete in worktree)
+5. **BUG-008** fixed - Pane/window creation now spawns PTY
 
 ### Key Changes
 - `c` now creates window (was: pane)
@@ -284,11 +287,15 @@ Add to `~/.claude/mcp.json`:
 - `0-9` select window by number (new)
 - `&` closes window (new)
 - `s` returns to session picker (implemented)
+- `%` and `"` now create working panes with shells (BUG-008 fix)
 
 ### Commits Made
 - `4a15c13` - feat(client): implement Prefix+s to return to session selection
 - `a15a767` - feat(client): align prefix keybinds with tmux defaults
 - `025bb36` - docs: add FEAT-037 tmux-compatible keybinds (completed)
+- `e630f06` - Merge FEAT-017 (hot-reload config)
+- `8f02484` - fix(server): spawn PTY for new panes and windows (BUG-008)
+- `9055d9b` - docs: add BUG-008 work item
 
 ---
 
