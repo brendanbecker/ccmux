@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-09
 
 ## Summary Statistics
-- Total Bugs: 7
-- New: 1
+- Total Bugs: 8
+- New: 2
 - In Progress: 0
 - Resolved: 5
 
@@ -15,7 +15,29 @@
 
 *No open P0 bugs*
 
-### P1 - High Priority (3)
+### P1 - High Priority (4)
+
+#### BUG-010: MCP pane creation broadcast not received by TUI [NEW]
+
+**Status**: New
+**Filed**: 2026-01-09
+**Component**: ccmux-server / ccmux-client
+**Directory**: [BUG-010-mcp-pane-broadcast-not-received](BUG-010-mcp-pane-broadcast-not-received/)
+
+**Description**:
+When panes are created via MCP tools (e.g., `ccmux_create_pane`), the TUI client does not receive the `PaneCreated` broadcast. The pane exists on the server but the TUI is unaware of it - no split is rendered, and `Ctrl+B o` cannot switch to the new pane.
+
+**Symptoms**:
+- MCP `ccmux_create_pane` returns success
+- Server shows 2 panes (via `ccmux_list_panes`)
+- TUI shows only 1 pane (no split)
+- New pane has default 80x24 dimensions (not resized)
+
+**Suspected Root Cause**:
+FEAT-039 implemented `ResponseWithBroadcast` but the broadcast is not reaching TUI clients. Possible issues: session ID mismatch, client not registered in session_clients, or channel delivery failure.
+
+**Impact**:
+MCP-based pane splitting is broken. Claude cannot effectively split panes via MCP tools.
 
 #### BUG-004: Client hangs when reattaching to session with dead pane [RESOLVED]
 
@@ -152,6 +174,7 @@ Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-09 | BUG-010 | Filed | MCP pane broadcast not received by TUI |
 | 2026-01-09 | BUG-009 | Filed | Flaky persistence tests due to test isolation issues |
 | 2026-01-09 | BUG-005 | Resolved | Integrated sideband parsing into PTY output flow |
 | 2026-01-09 | BUG-007 | Resolved | Added KeyCode::BackTab handler |

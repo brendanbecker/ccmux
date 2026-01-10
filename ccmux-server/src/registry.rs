@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use dashmap::DashMap;
 use tokio::sync::mpsc;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use ccmux_protocol::ServerMessage;
@@ -356,6 +356,17 @@ impl ClientRegistry {
         except_client: ClientId,
         message: ServerMessage,
     ) -> usize {
+        // Log all clients attached to this session for debugging
+        let all_session_clients: Vec<ClientId> = self.session_clients
+            .get(&session_id)
+            .map(|clients| clients.iter().copied().collect())
+            .unwrap_or_default();
+
+        info!(
+            "broadcast_to_session_except: session={}, except={}, all_clients_in_session={:?}",
+            session_id, except_client, all_session_clients
+        );
+
         // Get the list of client IDs for this session
         let client_ids: Vec<ClientId> = match self.session_clients.get(&session_id) {
             Some(clients) => clients
@@ -363,28 +374,44 @@ impl ClientRegistry {
                 .copied()
                 .filter(|&id| id != except_client)
                 .collect(),
-            None => return 0,
+            None => {
+                warn!(
+                    "broadcast_to_session_except: No clients found for session {}",
+                    session_id
+                );
+                return 0;
+            }
         };
 
         if client_ids.is_empty() {
+            warn!(
+                "broadcast_to_session_except: All clients filtered out for session {} (except={})",
+                session_id, except_client
+            );
             return 0;
         }
 
-        debug!(
-            "Broadcasting to {} clients in session {} (except {})",
+        info!(
+            "Broadcasting {:?} to {} clients in session {} (except {}): {:?}",
+            std::mem::discriminant(&message),
             client_ids.len(),
             session_id,
-            except_client
+            except_client,
+            client_ids
         );
 
         let mut success_count = 0;
 
         for client_id in client_ids {
             if self.send_to_client(client_id, message.clone()).await {
+                info!("Broadcast to client {} succeeded", client_id);
                 success_count += 1;
+            } else {
+                warn!("Broadcast to client {} failed", client_id);
             }
         }
 
+        info!("Broadcast complete: {}/{} succeeded", success_count, success_count);
         success_count
     }
 

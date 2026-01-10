@@ -1,0 +1,100 @@
+# BUG-010: MCP Pane Creation Broadcast Not Received by TUI
+
+**Priority**: P1
+**Component**: ccmux-server / ccmux-client
+**Type**: bug
+**Status**: new
+
+## Summary
+
+When panes are created via MCP tools (e.g., `ccmux_create_pane`), the TUI client does not receive the `PaneCreated` broadcast message, so the split pane is not rendered. The pane exists on the server but the TUI is unaware of it.
+
+## Symptoms
+
+1. MCP tool `ccmux_create_pane` returns success with pane details
+2. Server shows 2 panes exist (verified via `ccmux_list_panes`)
+3. TUI continues showing only 1 pane (no split rendered)
+4. `Ctrl+B o` (next pane) does not switch to the new pane
+5. New pane has default 80x24 dimensions instead of resized dimensions
+
+## Expected Behavior
+
+When MCP creates a pane:
+1. Server broadcasts `PaneCreated` to all TUI clients attached to the session
+2. TUI receives the message and updates its layout
+3. Split pane rendering shows both panes
+4. `Ctrl+B o` cycles through all panes including the new one
+
+## Root Cause Analysis
+
+FEAT-039 implemented `ResponseWithBroadcast` in `handle_create_pane_with_options()` but the broadcast is not reaching the TUI client. Possible causes:
+
+### Hypothesis 1: Session ID Mismatch
+The `session_id` used in the broadcast might not match the session the TUI is attached to.
+
+- MCP uses first session when no filter specified
+- TUI attaches to a session by ID
+- If these don't match, broadcast goes to wrong session
+
+### Hypothesis 2: Registry Not Updated
+The TUI client may not be properly registered in `session_clients` for the session.
+
+- `attach_to_session()` adds client to `session_clients[session_id]`
+- `broadcast_to_session_except()` reads from `session_clients[session_id]`
+- If registration failed, broadcast has no recipients
+
+### Hypothesis 3: Channel Issue
+The broadcast channel might be full, closed, or have some other issue.
+
+- Server creates channel on client connect
+- Broadcast uses `send_to_client()` which sends through channel
+- If channel is problematic, message is dropped
+
+## Code References
+
+### Server Side (broadcast sender)
+- `ccmux-server/src/handlers/mcp_bridge.rs:358` - Returns `ResponseWithBroadcast`
+- `ccmux-server/src/main.rs:597` - Calls `broadcast_to_session_except`
+- `ccmux-server/src/registry.rs:353` - `broadcast_to_session_except` implementation
+
+### Client Side (broadcast receiver)
+- `ccmux-client/src/ui/app.rs:859` - Handles `ServerMessage::PaneCreated`
+- `ccmux-client/src/ui/app.rs:278` - `poll_server_messages` during tick events
+- `ccmux-client/src/connection/client.rs:136` - `try_recv` for messages
+
+## Reproduction Steps
+
+1. Start ccmux: `ccmux`
+2. Create/attach to a session
+3. From Claude Code (or MCP client), call `ccmux_create_pane`
+4. Observe: Pane created on server, TUI shows no split
+5. Try `Ctrl+B o` - does not switch panes
+
+## Investigation Tasks
+
+- [ ] Add debug logging to `broadcast_to_session_except` to verify it's called
+- [ ] Log the session_id being broadcast to
+- [ ] Log which clients are in `session_clients[session_id]`
+- [ ] Verify TUI's client_id is in the session_clients map
+- [ ] Check if `send_to_client` returns success
+- [ ] Add logging to client's message receive path
+
+## Proposed Fix
+
+1. **Add integration test** - Test that covers MCP pane creation -> TUI receives broadcast
+2. **Debug logging** - Add tracing to broadcast path to identify where message is lost
+3. **Fix the root cause** - Once identified, fix the registration or routing issue
+
+## Missing Test Coverage
+
+FEAT-039 was marked as implemented but lacks an integration test for:
+- MCP creates pane
+- TUI client receives `PaneCreated` broadcast
+- TUI layout updates correctly
+
+## Acceptance Criteria
+
+- [ ] MCP-created panes appear in TUI immediately
+- [ ] `Ctrl+B o` can switch to MCP-created panes
+- [ ] Split pane rendering works for MCP-created splits
+- [ ] Integration test covers MCP-to-TUI broadcast path
