@@ -79,6 +79,7 @@
 | BUG-016 | PTY output not routed to pane state (breaks Claude detection + MCP read_pane) | P1 | ✅ Fixed |
 | BUG-017 | MCP send_input doesn't handle Enter key | P1 | ✅ Fixed |
 | BUG-018 | TUI pane interaction failure (can't see input bar) | P1 | 🔍 Needs investigation |
+| BUG-019 | Claude detector UTF-8 panic causes TUI hang | P1 | ✅ Fixed |
 
 ## Parallel Execution Plan
 
@@ -367,7 +368,32 @@ None - all work merged to main.
 - [x] Merged FEAT-015 from `ccmux-stream-a`
 - [x] Clean up merged worktrees (bug-010, bug-011, bug-013, feat-043, wt-bug-009)
 - [ ] Rebase `ccmux-stream-a` and assign to next P1 task (FEAT-044 or BUG-017)
-- [ ] Rebuild server with all fixes and test `read_pane` works (BUG-016 fix)
+- [x] Rebuild server with all fixes and test `read_pane` works (BUG-016 fix)
+
+## Session Log (2026-01-10) - BUG-019 Fix: UTF-8 Panic in Claude Detector
+
+### Root Cause
+After FEAT-015 merge, TUI would hang after some terminal output. Investigation found:
+- Claude detector's `output_buffer` truncation used byte slicing without checking UTF-8 char boundaries
+- When truncation point landed mid-character (common with box drawing ╭─, spinners ⠋, etc.), it panicked
+- Panic killed the output poller task silently, stopping all output to TUI
+- Input still worked (Ctrl+b s) because that's handled by separate event loop
+
+### Fix
+Changed `detector.rs` lines 193-199:
+```rust
+// Before: let split_point = len - max/2; buffer[split_point..]  // PANIC!
+// After: Find valid UTF-8 boundary before slicing
+let split_point = (target_point..len)
+    .find(|&i| buffer.is_char_boundary(i))
+    .unwrap_or(len);
+```
+
+### Commits
+- Fix UTF-8 panic in ClaudeDetector buffer truncation (BUG-019)
+- Added regression tests for multi-byte UTF-8 handling
+
+---
 
 ## Session Log (2026-01-10) - Parallel Execution & Major Bug Fixes
 

@@ -190,8 +190,12 @@ impl ClaudeDetector {
         // Append to buffer for multi-line pattern matching
         self.output_buffer.push_str(&clean_text);
         if self.output_buffer.len() > self.max_buffer_size {
-            // Keep only the last portion
-            let split_point = self.output_buffer.len() - self.max_buffer_size / 2;
+            // Keep only the last portion - find a valid UTF-8 character boundary
+            let target_point = self.output_buffer.len() - self.max_buffer_size / 2;
+            // Find the next valid character boundary at or after target_point
+            let split_point = (target_point..self.output_buffer.len())
+                .find(|&i| self.output_buffer.is_char_boundary(i))
+                .unwrap_or(self.output_buffer.len());
             self.output_buffer = self.output_buffer[split_point..].to_string();
         }
 
@@ -1071,5 +1075,51 @@ mod tests {
         let debug = format!("{:?}", detector);
         assert!(debug.contains("ClaudeDetector"));
         assert!(debug.contains("is_claude"));
+    }
+
+    // ==================== Buffer Truncation Tests ====================
+
+    #[test]
+    fn test_buffer_truncation_with_utf8_multibyte() {
+        // This test verifies that buffer truncation doesn't panic on multi-byte UTF-8
+        // characters when the split point lands in the middle of a character.
+        let mut detector = ClaudeDetector::with_config(super::super::state::DetectorConfig {
+            debounce_duration: Duration::from_millis(0),
+            idle_timeout: Duration::from_secs(60),
+            log_transitions: false,
+        });
+        detector.max_buffer_size = 100; // Small buffer to trigger truncation quickly
+
+        // Fill buffer with multi-byte UTF-8 characters (box drawing, spinners)
+        // Each of these characters is 3 bytes in UTF-8
+        let multibyte_text = "╭──────────────────────────────────────────────────╮";
+
+        // This should not panic even when truncation happens mid-character
+        for _ in 0..10 {
+            detector.analyze(multibyte_text);
+        }
+
+        // Verify buffer was truncated and is still valid UTF-8
+        assert!(detector.output_buffer.len() <= detector.max_buffer_size);
+    }
+
+    #[test]
+    fn test_buffer_truncation_with_mixed_characters() {
+        let mut detector = ClaudeDetector::with_config(super::super::state::DetectorConfig {
+            debounce_duration: Duration::from_millis(0),
+            idle_timeout: Duration::from_secs(60),
+            log_transitions: false,
+        });
+        detector.max_buffer_size = 50;
+
+        // Mix of ASCII and multi-byte characters
+        let mixed_text = "Hello ⠋ World ╭─ Test ❯ Done";
+
+        // Should not panic
+        for _ in 0..20 {
+            detector.analyze(mixed_text);
+        }
+
+        assert!(detector.output_buffer.len() <= detector.max_buffer_size);
     }
 }
