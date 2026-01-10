@@ -80,6 +80,7 @@
 | FEAT-035 | Configurable Tab/Pane Switching | P2 | ✅ Merged |
 | FEAT-037 | tmux-Compatible Keybinds | P1 | ✅ Merged |
 | FEAT-038 | Split Pane Rendering | P1 | ✅ Merged |
+| FEAT-039 | MCP Pane Creation Broadcast | P2 | ✅ Merged |
 
 ### FEAT-034/035: Navigation Improvements
 - **FEAT-034**: Mouse scroll navigates terminal scrollback with visual offset indicator
