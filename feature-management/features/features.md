@@ -5,10 +5,10 @@
 
 ## Summary Statistics
 
-- **Total Features**: 37
-- **By Priority**: P0: 5, P1: 22, P2: 10, P3: 0
+- **Total Features**: 38
+- **By Priority**: P0: 5, P1: 23, P2: 10, P3: 0
 - **By Status**:
-  - New: 30
+  - New: 31
   - In Progress: 0
   - Completed: 6
   - Implemented: 1
@@ -26,7 +26,7 @@
 | FEAT-025 | Pane Output Rendering | ccmux-client | new | [Link](FEAT-025-pane-output-rendering/) |
 | FEAT-027 | Client Connection Registry | ccmux-server | new | [Link](FEAT-027-client-connection-registry/) |
 
-### P1 - High Priority (22)
+### P1 - High Priority (23)
 
 | ID | Title | Component | Status | Link |
 |----|-------|-----------|--------|------|
@@ -52,6 +52,7 @@
 | FEAT-033 | tmux-like Auto-Start Behavior | ccmux-client | new | [Link](FEAT-033-tmux-like-auto-start-behavior/) |
 | FEAT-036 | Session-aware MCP Commands with Window/Pane Naming | ccmux-server (MCP) | new | [Link](FEAT-036-session-aware-mcp-commands-with-naming/) |
 | FEAT-038 | Split Pane Rendering - Layout Manager for Multi-Pane Display | ccmux-client | new | [Link](FEAT-038-split-pane-rendering/) |
+| FEAT-039 | MCP Pane Creation Broadcast - Sync TUI Clients on MCP Splits | ccmux-server | new | [Link](FEAT-039-mcp-pane-creation-broadcast/) |
 
 ### P2 - Medium Priority (10)
 
@@ -74,6 +75,7 @@
 
 ## Recent Activity
 
+- 2026-01-09: Created FEAT-039 - MCP Pane Creation Broadcast - Sync TUI Clients on MCP Splits (P1 High)
 - 2026-01-09: Created FEAT-038 - Split Pane Rendering - Layout Manager for Multi-Pane Display (P1 High)
 - 2026-01-09: Created FEAT-036 - Session-aware MCP Commands with Window/Pane Naming (P1 High)
 - 2026-01-09: Created FEAT-035 - Configurable Tab/Pane Switching (P2 Medium)
@@ -160,6 +162,7 @@ Based on the project vision, features will likely include:
 - **Sideband Pane Splitting (FEAT-030)**
 - **Integrated MCP Server (FEAT-032)** - Shared session state with TUI
 - **Session-aware MCP Commands with Window/Pane Naming (FEAT-036)** - Better defaults and organization
+- **MCP Pane Creation Broadcast (FEAT-039)** - Keep TUI clients in sync with MCP operations
 
 ### Session Management
 - Session persistence and recovery
