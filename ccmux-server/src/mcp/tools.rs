@@ -183,6 +183,24 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                 }
             }),
         },
+        Tool {
+            name: "ccmux_rename_session".into(),
+            description: "Rename a session for easier identification".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Session to rename (UUID or current name)"
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "New display name for the session"
+                    }
+                },
+                "required": ["session", "name"]
+            }),
+        },
     ]
 }
 
@@ -239,5 +257,6 @@ mod tests {
         assert!(names.contains(&"ccmux_list_windows"));
         assert!(names.contains(&"ccmux_create_session"));
         assert!(names.contains(&"ccmux_create_window"));
+        assert!(names.contains(&"ccmux_rename_session"));
     }
 }

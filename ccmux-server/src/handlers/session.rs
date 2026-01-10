@@ -1,9 +1,10 @@
 //! Session-related message handlers
 //!
-//! Handles: ListSessions, CreateSession, AttachSession, CreateWindow
+//! Handles: ListSessions, CreateSession, AttachSession, CreateWindow, RenameSession
 
 use tracing::{debug, info, warn};
 use uuid::Uuid;
+use ccmux_utils::CcmuxError;
 
 use crate::pty::{PtyConfig, PtyOutputPoller};
 
@@ -368,6 +369,74 @@ impl HandlerContext {
             },
         }
     }
+
+    /// Handle RenameSession message - rename a session
+    ///
+    /// Resolves session by UUID or name, then renames it.
+    /// Returns error if session not found or name is already in use.
+    pub async fn handle_rename_session(
+        &self,
+        session_filter: String,
+        new_name: String,
+    ) -> HandlerResult {
+        info!(
+            "RenameSession '{}' -> '{}' request from {}",
+            session_filter, new_name, self.client_id
+        );
+
+        let mut session_manager = self.session_manager.write().await;
+
+        // Resolve session: by UUID first, then by name
+        let session_id = if let Ok(id) = Uuid::parse_str(&session_filter) {
+            if session_manager.get_session(id).is_some() {
+                id
+            } else {
+                debug!("Session UUID {} not found", session_filter);
+                return HandlerContext::error(
+                    ErrorCode::SessionNotFound,
+                    format!("Session '{}' not found", session_filter),
+                );
+            }
+        } else {
+            match session_manager.get_session_by_name(&session_filter) {
+                Some(session) => session.id(),
+                None => {
+                    debug!("Session name '{}' not found", session_filter);
+                    return HandlerContext::error(
+                        ErrorCode::SessionNotFound,
+                        format!("Session '{}' not found", session_filter),
+                    );
+                }
+            }
+        };
+
+        // Perform the rename
+        match session_manager.rename_session(session_id, &new_name) {
+            Ok(previous_name) => {
+                info!(
+                    "Session {} renamed from '{}' to '{}'",
+                    session_id, previous_name, new_name
+                );
+
+                HandlerResult::Response(ServerMessage::SessionRenamed {
+                    session_id,
+                    previous_name,
+                    new_name,
+                })
+            }
+            Err(CcmuxError::SessionExists(name)) => {
+                debug!("Session name '{}' is already in use", name);
+                HandlerContext::error(
+                    ErrorCode::SessionNameExists,
+                    format!("Session name '{}' is already in use", name),
+                )
+            }
+            Err(e) => {
+                debug!("Failed to rename session: {}", e);
+                HandlerContext::error(ErrorCode::InternalError, format!("Failed to rename: {}", e))
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -639,6 +708,154 @@ mod tests {
                 assert_eq!(window.name, "0");
             }
             _ => panic!("Expected WindowCreated response"),
+        }
+    }
+
+    // ==================== Rename Session Tests ====================
+
+    #[tokio::test]
+    async fn test_handle_rename_session_by_name() {
+        let ctx = create_test_context();
+
+        // Create a session
+        {
+            let mut session_manager = ctx.session_manager.write().await;
+            session_manager.create_session("original").unwrap();
+        }
+
+        let result = ctx
+            .handle_rename_session("original".to_string(), "renamed".to_string())
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::SessionRenamed {
+                previous_name,
+                new_name,
+                ..
+            }) => {
+                assert_eq!(previous_name, "original");
+                assert_eq!(new_name, "renamed");
+            }
+            _ => panic!("Expected SessionRenamed response"),
+        }
+
+        // Verify the session was actually renamed
+        let session_manager = ctx.session_manager.read().await;
+        assert!(session_manager.get_session_by_name("original").is_none());
+        assert!(session_manager.get_session_by_name("renamed").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_handle_rename_session_by_uuid() {
+        let ctx = create_test_context();
+
+        // Create a session and get its ID
+        let session_id = {
+            let mut session_manager = ctx.session_manager.write().await;
+            session_manager.create_session("test").unwrap().id()
+        };
+
+        let result = ctx
+            .handle_rename_session(session_id.to_string(), "new-name".to_string())
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::SessionRenamed {
+                session_id: resp_id,
+                previous_name,
+                new_name,
+            }) => {
+                assert_eq!(resp_id, session_id);
+                assert_eq!(previous_name, "test");
+                assert_eq!(new_name, "new-name");
+            }
+            _ => panic!("Expected SessionRenamed response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_rename_session_not_found() {
+        let ctx = create_test_context();
+
+        let result = ctx
+            .handle_rename_session("nonexistent".to_string(), "new-name".to_string())
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::Error { code, .. }) => {
+                assert_eq!(code, ErrorCode::SessionNotFound);
+            }
+            _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_rename_session_uuid_not_found() {
+        let ctx = create_test_context();
+
+        let fake_uuid = Uuid::new_v4();
+        let result = ctx
+            .handle_rename_session(fake_uuid.to_string(), "new-name".to_string())
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::Error { code, .. }) => {
+                assert_eq!(code, ErrorCode::SessionNotFound);
+            }
+            _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_rename_session_duplicate_name() {
+        let ctx = create_test_context();
+
+        // Create two sessions
+        {
+            let mut session_manager = ctx.session_manager.write().await;
+            session_manager.create_session("session1").unwrap();
+            session_manager.create_session("session2").unwrap();
+        }
+
+        // Try to rename session2 to session1's name
+        let result = ctx
+            .handle_rename_session("session2".to_string(), "session1".to_string())
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::Error { code, message }) => {
+                assert_eq!(code, ErrorCode::SessionNameExists);
+                assert!(message.contains("session1"));
+            }
+            _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_rename_session_same_name() {
+        let ctx = create_test_context();
+
+        // Create a session
+        {
+            let mut session_manager = ctx.session_manager.write().await;
+            session_manager.create_session("same").unwrap();
+        }
+
+        // Rename to same name should succeed as no-op
+        let result = ctx
+            .handle_rename_session("same".to_string(), "same".to_string())
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::SessionRenamed {
+                previous_name,
+                new_name,
+                ..
+            }) => {
+                assert_eq!(previous_name, "same");
+                assert_eq!(new_name, "same");
+            }
+            _ => panic!("Expected SessionRenamed response"),
         }
     }
 }

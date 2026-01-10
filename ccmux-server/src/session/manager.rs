@@ -76,6 +76,53 @@ impl SessionManager {
         }
     }
 
+    /// Rename a session
+    ///
+    /// Changes the session's name to the new name. Returns error if:
+    /// - The session doesn't exist
+    /// - The new name is already in use by another session
+    ///
+    /// Renaming to the same name is a no-op and succeeds.
+    pub fn rename_session(&mut self, session_id: Uuid, new_name: impl Into<String>) -> Result<String> {
+        let new_name = new_name.into();
+
+        // Get the session to check it exists and get its current name
+        let session = self.sessions.get(&session_id)
+            .ok_or_else(|| CcmuxError::SessionNotFound(session_id.to_string()))?;
+
+        let old_name = session.name().to_string();
+
+        // If renaming to same name, it's a no-op
+        if old_name == new_name {
+            return Ok(old_name);
+        }
+
+        // Check if new name is already in use by another session
+        if let Some(&existing_id) = self.name_to_id.get(&new_name) {
+            if existing_id != session_id {
+                return Err(CcmuxError::SessionExists(new_name));
+            }
+        }
+
+        // Update the name_to_id mapping
+        self.name_to_id.remove(&old_name);
+        self.name_to_id.insert(new_name.clone(), session_id);
+
+        // Update the session's name
+        let session = self.sessions.get_mut(&session_id).unwrap();
+        session.set_name(&new_name);
+
+        Ok(old_name)
+    }
+
+    /// Get mutable session by name
+    pub fn get_session_by_name_mut(&mut self, name: &str) -> Option<&mut Session> {
+        self.name_to_id
+            .get(name)
+            .copied()
+            .and_then(|id| self.sessions.get_mut(&id))
+    }
+
     /// List all sessions
     ///
     /// Sessions are returned sorted by creation time (oldest first).
@@ -1037,5 +1084,106 @@ mod tests {
         assert_eq!(pane_ids.len(), 4);
         let unique_ids: std::collections::HashSet<_> = pane_ids.iter().collect();
         assert_eq!(unique_ids.len(), 4);
+    }
+
+    // ==================== Rename Session Tests ====================
+
+    #[test]
+    fn test_rename_session_basic() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("original").unwrap();
+        let session_id = session.id();
+
+        let old_name = manager.rename_session(session_id, "renamed").unwrap();
+        assert_eq!(old_name, "original");
+
+        // Session should have new name
+        let session = manager.get_session(session_id).unwrap();
+        assert_eq!(session.name(), "renamed");
+
+        // Old name should not work
+        assert!(manager.get_session_by_name("original").is_none());
+
+        // New name should work
+        assert!(manager.get_session_by_name("renamed").is_some());
+    }
+
+    #[test]
+    fn test_rename_session_same_name() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("same").unwrap();
+        let session_id = session.id();
+
+        // Renaming to same name should be no-op
+        let old_name = manager.rename_session(session_id, "same").unwrap();
+        assert_eq!(old_name, "same");
+
+        let session = manager.get_session(session_id).unwrap();
+        assert_eq!(session.name(), "same");
+    }
+
+    #[test]
+    fn test_rename_session_duplicate_name() {
+        let mut manager = SessionManager::new();
+
+        manager.create_session("session1").unwrap();
+        let session2 = manager.create_session("session2").unwrap();
+        let session2_id = session2.id();
+
+        // Try to rename session2 to session1's name
+        let result = manager.rename_session(session2_id, "session1");
+        assert!(matches!(result, Err(CcmuxError::SessionExists(_))));
+
+        // session2 should still have its original name
+        let session = manager.get_session(session2_id).unwrap();
+        assert_eq!(session.name(), "session2");
+    }
+
+    #[test]
+    fn test_rename_session_not_found() {
+        let mut manager = SessionManager::new();
+
+        let nonexistent_id = Uuid::new_v4();
+        let result = manager.rename_session(nonexistent_id, "new-name");
+        assert!(matches!(result, Err(CcmuxError::SessionNotFound(_))));
+    }
+
+    #[test]
+    fn test_rename_session_updates_name_lookup() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("lookup-test").unwrap();
+        let session_id = session.id();
+
+        manager.rename_session(session_id, "new-lookup-test").unwrap();
+
+        // Lookup by new name should return the same session
+        let found = manager.get_session_by_name("new-lookup-test").unwrap();
+        assert_eq!(found.id(), session_id);
+    }
+
+    #[test]
+    fn test_get_session_by_name_mut() {
+        let mut manager = SessionManager::new();
+
+        let session = manager.create_session("mutable").unwrap();
+        let session_id = session.id();
+
+        // Get mutable and modify
+        let session_mut = manager.get_session_by_name_mut("mutable").unwrap();
+        session_mut.create_window(Some("test-window".to_string()));
+
+        // Verify modification
+        let session = manager.get_session(session_id).unwrap();
+        assert_eq!(session.window_count(), 1);
+    }
+
+    #[test]
+    fn test_get_session_by_name_mut_nonexistent() {
+        let mut manager = SessionManager::new();
+
+        assert!(manager.get_session_by_name_mut("nonexistent").is_none());
     }
 }
