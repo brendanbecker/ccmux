@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-036",
+  "title": "Session-aware MCP Commands with Window/Pane Naming",
+  "component": "ccmux-server (MCP)",
+  "priority": "P1",
+  "status": "new",
+  "type": "enhancement",
+  "created_date": "2026-01-09",
+  "updated_date": "2026-01-09",
+  "assigned_to": null,
+  "tags": ["mcp", "ux", "session-management"],
+  "estimated_effort": "medium",
+  "dependencies": ["FEAT-029"],
+  "description": "MCP commands should intelligently default to the active session (one with attached clients) when no session is explicitly specified. Additionally, add ability to name windows and panes for easier identification and management.",
+  "business_value": "high",
+  "technical_complexity": "medium",
+  "user_impact": "Prevents incorrect session targeting when multiple sessions exist, and provides better organization for multi-pane workflows"
+}
