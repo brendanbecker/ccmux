@@ -330,7 +330,7 @@ With 3-way parallelism: **10-16 hours wall time** for all items.
 | FEAT-042 | MCP Debug Logging | P1 | ✅ Merged |
 | FEAT-043 | MCP Session Rename Tool | P2 | ✅ Merged |
 | FEAT-044 | Claude Session Persistence & Auto-Resume | P1 | ✅ Done (stream-d) |
-| FEAT-045 | MCP Declarative Layout Tools | P2 | 📋 Planned (stream-e) |
+| FEAT-045 | MCP Declarative Layout Tools | P2 | ✅ Merged |
 | FEAT-046 | MCP Focus/Select Control | P1 | ✅ Done (stream-e) |
 
 ### Open Features (blocked/in-progress)
@@ -362,23 +362,21 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 ## Active Worktrees
 
-| Worktree | Branch | Items | Status |
-|----------|--------|-------|--------|
-| `ccmux-stream-e-mcp` | stream-e-mcp | FEAT-045 | 📋 In progress |
-
-Rebased off main `336ccd0` (2026-01-10).
+None - all work merged to main.
 
 ### Recently Merged (2026-01-10)
-- ✅ BUG-014: Large output buffer overflow (stream-c)
-- ✅ BUG-015: Layout not recalculated on pane close (stream-b)
-- ✅ BUG-018/020: Session reattach - client has no PTY (stream-a)
-- ✅ FEAT-044: Claude session persistence & auto-resume (stream-d)
-- ✅ FEAT-046: MCP focus/select control (stream-e)
+- ✅ BUG-014: Large output buffer overflow
+- ✅ BUG-015: Layout not recalculated on pane close
+- ✅ BUG-018/020: Session reattach - client has no PTY
+- ✅ BUG-021: ccmux_rename_session missing from standalone MCP server
+- ✅ FEAT-044: Claude session persistence & auto-resume
+- ✅ FEAT-045: MCP declarative layout tools
+- ✅ FEAT-046: MCP focus/select control
 
 ### Next Session Checklist
-- [ ] Complete FEAT-045 (MCP declarative layout tools) in stream-e
-- [ ] Merge stream-e when complete
-- [ ] Rebuild and comprehensive test
+- [ ] Push to origin
+- [ ] Comprehensive testing of all merged features
+- [ ] Update README with new MCP tools
 - [x] Rebuild server with all fixes and test `read_pane` works (BUG-016 fix)
 
 ## Session Log (2026-01-10) - BUG-019 Fix: UTF-8 Panic in Claude Detector
