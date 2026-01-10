@@ -437,6 +437,15 @@ impl PersistenceManager {
         Ok(())
     }
 
+    /// Finalize the persistence manager, ensuring all data is durably written
+    ///
+    /// This consumes the manager and properly shuts down the WAL.
+    /// Use this when you need to ensure all data is persisted before
+    /// the manager is dropped (e.g., in tests that reopen the WAL).
+    pub fn finalize(self) -> Result<()> {
+        self.recovery_manager.shutdown()
+    }
+
     // ==================== Utilities ====================
 
     /// Get current Unix timestamp
@@ -501,11 +510,9 @@ mod tests {
         manager.log_active_window_changed(session_id, Some(window_id)).unwrap();
         manager.log_active_pane_changed(window_id, Some(pane_id)).unwrap();
 
-        // Checkpoint to ensure entries are persisted
-        manager.recovery_manager.wal().checkpoint_active().unwrap();
-
-        // Drop manager and create a new one to simulate restart
-        drop(manager);
+        // Just finalize - no checkpoint_active() since we're only using WAL recovery
+        // (checkpoint_active() marks entries as processed by an external checkpoint)
+        manager.finalize().unwrap();
 
         let manager2 = PersistenceManager::new(
             temp_dir.path().join("state"),
@@ -588,12 +595,11 @@ mod tests {
         // Empty state - no recovery needed
         assert!(!manager.needs_recovery().unwrap());
 
-        // Add some WAL entries and checkpoint to persist them
+        // Add some WAL entries
         manager.log_session_created(Uuid::new_v4(), "test").unwrap();
-        manager.recovery_manager.wal().checkpoint_active().unwrap();
 
-        // Drop and create new manager to simulate restart
-        drop(manager);
+        // Just finalize - no checkpoint_active() since we're only using WAL recovery
+        manager.finalize().unwrap();
 
         let manager2 = PersistenceManager::new(
             temp_dir.path().join("state"),
