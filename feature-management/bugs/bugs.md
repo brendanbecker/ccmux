@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-10
 
 ## Summary Statistics
-- Total Bugs: 11
-- New: 5
+- Total Bugs: 12
+- New: 6
 - In Progress: 0
 - Resolved: 5
 - Deprecated: 1
@@ -132,7 +132,28 @@ Shift+Tab keystrokes are silently dropped instead of being sent to the PTY. Prog
 **Resolution**:
 Added `KeyCode::BackTab => Some(b"\x1b[Z".to_vec())` to `keys.rs`.
 
-### P2 - Medium Priority (4)
+### P2 - Medium Priority (5)
+
+#### BUG-015: Layout doesn't recalculate when panes are closed - remaining pane stays at partial size [NEW]
+
+**Status**: New
+**Filed**: 2026-01-10
+**Component**: ccmux-client
+**Directory**: [BUG-015-layout-not-recalculated-on-pane-close](BUG-015-layout-not-recalculated-on-pane-close/)
+
+**Description**:
+When multiple panes exist (e.g., quadrant layout with 4 panes) and some panes are closed, the remaining pane(s) do not expand to fill the available window space. Instead, the remaining pane stays at its previous size leaving empty/unused space.
+
+**Symptoms**:
+- Remaining pane stays at partial size after other panes are closed
+- Empty/dead space visible in the window
+- Layout tree not recalculated when nodes are removed
+
+**Suspected Root Cause**:
+The TUI layout system does not trigger a recalculation when panes are closed, or the layout tree is not being pruned/simplified when nodes are removed.
+
+**Impact**:
+Wastes screen space and requires user to restart ccmux to restore full-window pane. Workaround exists (restart) but disrupts workflow.
 
 #### BUG-013: Mouse scroll wheel not working for scrollback [NEW]
 
@@ -248,6 +269,7 @@ Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-10 | BUG-015 | Filed | Layout doesn't recalculate when panes are closed |
 | 2026-01-10 | BUG-014 | Filed | Large output causes buffer overflow, making input unresponsive |
 | 2026-01-10 | BUG-013 | Filed | Mouse scroll wheel not working for scrollback |
 | 2026-01-10 | BUG-012 | Deprecated | Shift+click works for native selection (by design) |
