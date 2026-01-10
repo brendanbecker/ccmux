@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-10
 
 ## Summary Statistics
-- Total Bugs: 12
-- New: 6
+- Total Bugs: 13
+- New: 7
 - In Progress: 0
 - Resolved: 5
 - Deprecated: 1
@@ -16,7 +16,30 @@
 
 *No open P0 bugs*
 
-### P1 - High Priority (5)
+### P1 - High Priority (6)
+
+#### BUG-016: PTY output not routed to pane state - breaks Claude detection and MCP read_pane [NEW]
+
+**Status**: New
+**Filed**: 2026-01-10
+**Component**: ccmux-server
+**Directory**: [BUG-016-pty-output-not-routed-to-pane-state](BUG-016-pty-output-not-routed-to-pane-state/)
+
+**Description**:
+The PtyOutputPoller broadcasts PTY output to connected TUI clients via ServerMessage::Output, but never routes the output back to the pane's scrollback buffer or through pane.process() for Claude detection. This causes two critical failures:
+1. MCP read_pane returns empty because the scrollback buffer is never populated
+2. Claude detection never triggers because pane.process() is never called
+
+**Symptoms**:
+- All panes show is_claude: false regardless of what's running
+- MCP ccmux_read_pane returns empty strings
+- Claude detection is completely non-functional
+
+**Root Cause**:
+PtyOutputPoller::flush() only broadcasts to clients via registry.broadcast_to_session(). There is no call to route data to pane.process() which handles scrollback and Claude detection.
+
+**Impact**:
+Core MCP functionality broken. read_pane always returns empty. Claude detection non-functional, breaking orchestration features.
 
 #### BUG-014: Large output causes viewport/buffer overflow, making input unresponsive [NEW]
 
@@ -269,6 +292,7 @@ Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-10 | BUG-016 | Filed | PTY output not routed to pane state - breaks Claude detection and MCP read_pane |
 | 2026-01-10 | BUG-015 | Filed | Layout doesn't recalculate when panes are closed |
 | 2026-01-10 | BUG-014 | Filed | Large output causes buffer overflow, making input unresponsive |
 | 2026-01-10 | BUG-013 | Filed | Mouse scroll wheel not working for scrollback |
