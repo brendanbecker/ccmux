@@ -105,6 +105,8 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 | Worktree | Branch | Purpose |
 |----------|--------|---------|
 | `ccmux-bug-010` | `bug-010-mcp-pane-broadcast` | BUG-010 investigation |
+| `ccmux-feat-041` | `feat-041-mcp-session-targeting` | FEAT-041: MCP session/window targeting |
+| `ccmux-feat-042` | `feat-042-mcp-debug-logging` | FEAT-042: Debug logging for broadcast path |
 
 ### BUG-010 Investigation Status
 
