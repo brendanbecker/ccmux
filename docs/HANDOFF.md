@@ -76,6 +76,7 @@
 | FEAT-034 | Mouse Scroll Support | P2 | 📋 Planned |
 | FEAT-035 | Configurable Tab/Pane Switching | P2 | 📋 Planned |
 | FEAT-037 | tmux-Compatible Keybinds | P1 | ✅ Merged |
+| FEAT-038 | Split Pane Rendering | P1 | 🚧 In Progress |
 
 ### FEAT-037: tmux-Compatible Keybinds
 All prefix keybinds now match tmux defaults for muscle-memory compatibility.
@@ -90,6 +91,7 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 |----------|--------|---------|
 | `ccmux-wt-feat-034` | `feat-034-mouse-scroll` | Mouse scroll support |
 | `ccmux-wt-feat-035` | `feat-035-tab-switching` | Ctrl+PageUp/Down tab switching |
+| `ccmux-wt-feat-038` | `feat-038-split-pane-rendering` | Split pane UI rendering |
 
 ## Session Log (2026-01-09) - Continued
 
