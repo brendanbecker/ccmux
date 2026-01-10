@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-042",
+  "title": "Debug Logging for MCP Pane Broadcast Path",
+  "component": "ccmux-server / ccmux-client",
+  "priority": "P0",
+  "status": "new",
+  "type": "enhancement",
+  "created_date": "2026-01-10",
+  "updated_date": "2026-01-10",
+  "assigned_to": null,
+  "tags": ["debugging", "mcp", "tracing", "diagnostics"],
+  "estimated_effort": "medium",
+  "dependencies": [],
+  "description": "Add comprehensive debug logging throughout the MCP pane creation and broadcast path to diagnose BUG-010. The TUI never receives PaneCreated broadcasts from MCP-created panes, and we need to trace where messages get lost in the message flow from handler to registry to client connection to TUI app.",
+  "business_value": "high",
+  "technical_complexity": "low",
+  "user_impact": "Enables diagnosis of BUG-010 which prevents MCP-created panes from appearing in TUI. Critical for unblocking the MCP pane creation feature."
+}
