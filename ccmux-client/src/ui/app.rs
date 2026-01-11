@@ -745,13 +745,14 @@ impl App {
             }
 
             ClientCommand::CreateSession(name) => {
-                let session_name =
-                    name.unwrap_or_else(|| format!("session-{}", Uuid::new_v4().as_simple()));
                 // Use CLI command only for first session, then clear it
+                // Pass client's cwd so new session starts in the right directory
+                let cwd = std::env::current_dir().ok().map(|p| p.to_string_lossy().into_owned());
                 self.connection
-                    .send(ClientMessage::CreateSession {
-                        name: session_name,
+                    .send(ClientMessage::CreateSessionWithOptions {
+                        name,
                         command: self.session_command.take(),
+                        cwd,
                     })
                     .await?;
             }
@@ -1176,10 +1177,13 @@ impl App {
             }
             (KeyCode::Char('n'), KeyModifiers::NONE) => {
                 // Create new session (CLI command only applies to first session)
+                // Pass client's cwd so new session starts in the right directory
+                let cwd = std::env::current_dir().ok().map(|p| p.to_string_lossy().into_owned());
                 self.connection
-                    .send(ClientMessage::CreateSession {
-                        name: format!("session-{}", Uuid::new_v4().as_simple()),
+                    .send(ClientMessage::CreateSessionWithOptions {
+                        name: None,
                         command: self.session_command.take(),
+                        cwd,
                     })
                     .await?;
             }
@@ -1577,13 +1581,19 @@ impl App {
                 }
             }
 
+            ServerMessage::SessionCreatedWithDetails { session_id, .. } => {
+                // Automatically attach to new session (used by CreateSessionWithOptions)
+                self.connection
+                    .send(ClientMessage::AttachSession { session_id })
+                    .await?;
+            }
+
             // MCP bridge messages - not used by TUI client
             ServerMessage::AllPanesList { .. }
             | ServerMessage::WindowList { .. }
             | ServerMessage::PaneContent { .. }
             | ServerMessage::PaneStatus { .. }
             | ServerMessage::PaneCreatedWithDetails { .. }
-            | ServerMessage::SessionCreatedWithDetails { .. }
             | ServerMessage::WindowCreatedWithDetails { .. }
             | ServerMessage::SessionRenamed { .. }
             | ServerMessage::PaneRenamed { .. }
