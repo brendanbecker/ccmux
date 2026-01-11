@@ -33,3 +33,23 @@ Calling `ccmux_create_window` returns an error about an unexpected `SessionFocus
 - The session was successfully selected immediately before this call
 - The error suggests the daemon is returning a SessionFocused message when it should return a WindowCreated message
 - May be a message routing/matching issue in the MCP handler
+
+## Resolution
+
+**Root Cause**: The `is_broadcast_message()` filter in `ccmux-server/src/mcp/bridge.rs` was missing three focus-related broadcast message types added for BUG-026:
+- `SessionFocused`
+- `WindowFocused`
+- `PaneFocused`
+
+When `tool_select_session()` was called, it sent `SelectSession` to the daemon but returned immediately without waiting for a response. The daemon then broadcast `SessionFocused` to all clients including the MCP bridge. This broadcast message sat in the MCP bridge's receive channel.
+
+When the next MCP tool (`create_window`) called `recv_response_from_daemon()`, it received the stale `SessionFocused` broadcast message instead of the expected `WindowCreatedWithDetails` response, causing the "Unexpected response: SessionFocused" error.
+
+**Fix**: Added `SessionFocused`, `WindowFocused`, and `PaneFocused` to the `is_broadcast_message()` filter so they are skipped when waiting for tool responses.
+
+**Files Changed**:
+- `ccmux-server/src/mcp/bridge.rs`: Added three message types to `is_broadcast_message()` filter and added regression tests
+
+**Related**:
+- BUG-027: Similar issue where broadcast messages leaked into response channel (fixed: filter broadcast messages in recv_response_from_daemon)
+- BUG-026: Added the focus broadcast messages that were missing from the filter

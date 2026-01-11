@@ -451,6 +451,15 @@ impl McpBridge {
             | ServerMessage::OrchestrationReceived { .. }
             // FEAT-060: Pong responses from health monitor Pings (filter from tool responses)
             | ServerMessage::Pong
+            // BUG-029 FIX: Focus change broadcasts from BUG-026
+            // These are broadcast to TUI clients but were not being filtered, causing
+            // them to be picked up as responses to subsequent MCP tool calls.
+            // For example: SelectSession sends no response but daemon broadcasts SessionFocused.
+            // If CreateWindow is called next, it would receive SessionFocused instead of
+            // WindowCreatedWithDetails, causing "Unexpected response: SessionFocused" errors.
+            | ServerMessage::SessionFocused { .. }
+            | ServerMessage::WindowFocused { .. }
+            | ServerMessage::PaneFocused { .. }
         )
     }
 
@@ -2288,6 +2297,40 @@ mod tests {
     fn test_is_broadcast_message_pong() {
         // FEAT-060: Pong should be filtered as a broadcast (from health monitor pings)
         let msg = ServerMessage::Pong;
+        assert!(McpBridge::is_broadcast_message(&msg));
+    }
+
+    // ==================== BUG-029 Fix Tests ====================
+
+    #[test]
+    fn test_is_broadcast_message_session_focused() {
+        // BUG-029 FIX: SessionFocused is a broadcast to TUI clients, not a response
+        // This was causing "Unexpected response: SessionFocused" errors when
+        // create_window was called after select_session
+        let msg = ServerMessage::SessionFocused {
+            session_id: Uuid::new_v4(),
+        };
+        assert!(McpBridge::is_broadcast_message(&msg));
+    }
+
+    #[test]
+    fn test_is_broadcast_message_window_focused() {
+        // BUG-029 FIX: WindowFocused is a broadcast to TUI clients, not a response
+        let msg = ServerMessage::WindowFocused {
+            session_id: Uuid::new_v4(),
+            window_id: Uuid::new_v4(),
+        };
+        assert!(McpBridge::is_broadcast_message(&msg));
+    }
+
+    #[test]
+    fn test_is_broadcast_message_pane_focused() {
+        // BUG-029 FIX: PaneFocused is a broadcast to TUI clients, not a response
+        let msg = ServerMessage::PaneFocused {
+            session_id: Uuid::new_v4(),
+            window_id: Uuid::new_v4(),
+            pane_id: Uuid::new_v4(),
+        };
         assert!(McpBridge::is_broadcast_message(&msg));
     }
 }
