@@ -24,6 +24,10 @@ const MAX_PASTE_SIZE: usize = 10 * 1024 * 1024;
 /// while still maintaining responsive input handling.
 const MAX_MESSAGES_PER_TICK: usize = 50;
 
+/// Beads status refresh interval in ticks (FEAT-058).
+/// Default config is 30 seconds, tick rate is 100ms, so 300 ticks.
+const BEADS_REFRESH_INTERVAL_TICKS: u64 = 300;
+
 use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
@@ -104,6 +108,12 @@ pub struct App {
     /// Previous input mode for tracking mode transitions (FEAT-056)
     /// Used to detect when user exits command mode
     previous_input_mode: InputMode,
+    /// Last tick when beads status was requested (FEAT-058)
+    last_beads_request_tick: u64,
+    /// Whether current pane is in a beads-tracked repo (FEAT-057)
+    is_beads_tracked: bool,
+    /// Beads ready task count (FEAT-058): None = unavailable, Some(n) = n tasks ready
+    beads_ready_count: Option<usize>,
 }
 
 impl App {
@@ -133,6 +143,9 @@ impl App {
             pending_split_direction: None,
             session_command: None,
             previous_input_mode: InputMode::Normal,
+            last_beads_request_tick: 0,
+            is_beads_tracked: false,
+            beads_ready_count: None,
         })
     }
 
@@ -162,6 +175,9 @@ impl App {
             pending_split_direction: None,
             session_command: None,
             previous_input_mode: InputMode::Normal,
+            last_beads_request_tick: 0,
+            is_beads_tracked: false,
+            beads_ready_count: None,
         })
     }
 
@@ -298,6 +314,14 @@ impl App {
                 self.tick_count = self.tick_count.wrapping_add(1);
                 // Poll for server messages
                 self.poll_server_messages().await?;
+
+                // FEAT-058: Periodic beads status refresh when attached
+                if self.state == AppState::Attached {
+                    let since_last_request = self.tick_count.saturating_sub(self.last_beads_request_tick);
+                    if since_last_request >= BEADS_REFRESH_INTERVAL_TICKS {
+                        self.request_beads_status().await?;
+                    }
+                }
             }
         }
         Ok(())
@@ -330,6 +354,24 @@ impl App {
                 processed = processed,
                 "Hit message processing limit, deferring remaining messages to next tick"
             );
+        }
+        Ok(())
+    }
+
+    /// Request beads status for the active pane (FEAT-058)
+    ///
+    /// Sends a RequestBeadsStatus message to get the ready task count
+    /// from the beads daemon for the active pane's working directory.
+    async fn request_beads_status(&mut self) -> Result<()> {
+        // Only request if we have an active pane and beads tracking is enabled
+        if let Some(pane_id) = self.active_pane_id {
+            if self.is_beads_tracked {
+                tracing::trace!(pane_id = %pane_id, "Requesting beads status");
+                self.connection
+                    .send(ClientMessage::RequestBeadsStatus { pane_id })
+                    .await?;
+                self.last_beads_request_tick = self.tick_count;
+            }
         }
         Ok(())
     }
@@ -1256,6 +1298,18 @@ impl App {
                 if let Some(active_id) = self.active_pane_id {
                     self.pane_manager.set_active(active_id);
                 }
+
+                // FEAT-057/058: Check if session is in a beads-tracked repo
+                self.is_beads_tracked = self
+                    .session
+                    .as_ref()
+                    .map(|s| s.metadata.contains_key("beads.root"))
+                    .unwrap_or(false);
+
+                // FEAT-058: Trigger immediate beads status request on attach
+                self.last_beads_request_tick = 0;
+                // Clear any stale beads count
+                self.beads_ready_count = None;
             }
             ServerMessage::WindowCreated { window } => {
                 self.windows.insert(window.id, window);
@@ -1511,6 +1565,24 @@ impl App {
             | ServerMessage::TagsSet { .. }
             | ServerMessage::TagsList { .. } => {
                 // These messages are for the MCP bridge, not the TUI client
+            }
+
+            // FEAT-058: Beads status updates
+            ServerMessage::BeadsStatusUpdate { pane_id, status } => {
+                // Update status bar if this is the active pane
+                if Some(pane_id) == self.active_pane_id {
+                    if status.daemon_available {
+                        self.beads_ready_count = Some(status.ready_count);
+                    } else {
+                        // Daemon not available - clear count so we fall back to basic "beads" indicator
+                        self.beads_ready_count = None;
+                    }
+                }
+            }
+
+            ServerMessage::BeadsReadyList { pane_id: _, tasks: _ } => {
+                // TODO: Implement beads panel display (FEAT-058 Section 4)
+                // For now, this message is received but not displayed
             }
         }
         Ok(())
@@ -1776,11 +1848,23 @@ impl App {
             "".to_string()
         };
 
+        // FEAT-057/058: Beads indicator with ready count
+        let beads_indicator = if self.is_beads_tracked {
+            match self.beads_ready_count {
+                Some(0) => " | bd:0".to_string(),
+                Some(count) => format!(" | bd:{}", count),
+                None => " | beads".to_string(),
+            }
+        } else {
+            "".to_string()
+        };
+
         format!(
-            " {} | {} panes {}{}",
+            " {} | {} panes {}{}{}",
             session_name,
             self.panes.len(),
             pane_info,
+            beads_indicator,
             mode_indicator
         )
     }

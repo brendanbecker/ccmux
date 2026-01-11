@@ -332,6 +332,14 @@ pub enum ClientMessage {
     ///
     /// Sent when the user completes a command, presses Escape, or the prefix timeout expires.
     UserCommandModeExited,
+
+    // ==================== Beads Query Integration (FEAT-058) ====================
+
+    /// Request beads status for a pane's repository
+    RequestBeadsStatus { pane_id: Uuid },
+
+    /// Request full ready task list for the beads panel
+    RequestBeadsReadyList { pane_id: Uuid },
 }
 
 /// Messages sent from server to client
@@ -603,6 +611,20 @@ pub enum ServerMessage {
     /// Active session changed - broadcast to TUI clients
     SessionFocused {
         session_id: Uuid,
+    },
+
+    // ==================== Beads Query Integration (FEAT-058) ====================
+
+    /// Beads status update for a pane (daemon availability, ready count)
+    BeadsStatusUpdate {
+        pane_id: Uuid,
+        status: crate::types::BeadsStatus,
+    },
+
+    /// Full list of ready tasks for the beads panel
+    BeadsReadyList {
+        pane_id: Uuid,
+        tasks: Vec<crate::types::BeadsTask>,
     },
 }
 

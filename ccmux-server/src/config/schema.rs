@@ -29,6 +29,8 @@ pub struct BeadsConfig {
     pub auto_set_beads_dir: bool,
     /// Set BEADS_NO_DAEMON for new panes (useful for worktrees)
     pub no_daemon_default: bool,
+    /// Query configuration for daemon integration
+    pub query: BeadsQueryConfig,
 }
 
 impl Default for BeadsConfig {
@@ -37,6 +39,32 @@ impl Default for BeadsConfig {
             auto_detect: true,
             auto_set_beads_dir: true,
             no_daemon_default: false,
+            query: BeadsQueryConfig::default(),
+        }
+    }
+}
+
+/// Beads daemon query settings for TUI integration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BeadsQueryConfig {
+    /// Enable daemon connection for ready task queries (default: true)
+    pub enabled: bool,
+    /// Show ready count in status bar (default: true)
+    pub show_ready_count: bool,
+    /// Refresh interval for status bar updates in seconds (default: 30)
+    pub refresh_interval: u32,
+    /// Socket connection timeout in milliseconds (default: 1000)
+    pub socket_timeout: u32,
+}
+
+impl Default for BeadsQueryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            show_ready_count: true,
+            refresh_interval: 30,
+            socket_timeout: 1000,
         }
     }
 }
@@ -963,11 +991,13 @@ screen_snapshot_lines = 1000
             auto_detect: true,
             auto_set_beads_dir: false,
             no_daemon_default: true,
+            query: BeadsQueryConfig::default(),
         };
         let cloned = config.clone();
         assert_eq!(config.auto_detect, cloned.auto_detect);
         assert_eq!(config.auto_set_beads_dir, cloned.auto_set_beads_dir);
         assert_eq!(config.no_daemon_default, cloned.no_daemon_default);
+        assert_eq!(config.query.enabled, cloned.query.enabled);
     }
 
     #[test]
@@ -976,5 +1006,98 @@ screen_snapshot_lines = 1000
         assert!(config.beads.auto_detect);
         assert!(config.beads.auto_set_beads_dir);
         assert!(!config.beads.no_daemon_default);
+    }
+
+    // ==================== BeadsQueryConfig Tests ====================
+
+    #[test]
+    fn test_beads_query_config_defaults() {
+        let config = BeadsQueryConfig::default();
+        assert!(config.enabled);
+        assert!(config.show_ready_count);
+        assert_eq!(config.refresh_interval, 30);
+        assert_eq!(config.socket_timeout, 1000);
+    }
+
+    #[test]
+    fn test_beads_query_config_parse() {
+        let toml_str = r#"
+            [beads.query]
+            enabled = false
+            show_ready_count = false
+            refresh_interval = 60
+            socket_timeout = 2000
+        "#;
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert!(!config.beads.query.enabled);
+        assert!(!config.beads.query.show_ready_count);
+        assert_eq!(config.beads.query.refresh_interval, 60);
+        assert_eq!(config.beads.query.socket_timeout, 2000);
+    }
+
+    #[test]
+    fn test_beads_query_config_partial_parse() {
+        let toml_str = r#"
+            [beads.query]
+            refresh_interval = 15
+        "#;
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.beads.query.enabled); // Default
+        assert!(config.beads.query.show_ready_count); // Default
+        assert_eq!(config.beads.query.refresh_interval, 15); // Explicitly set
+        assert_eq!(config.beads.query.socket_timeout, 1000); // Default
+    }
+
+    #[test]
+    fn test_beads_query_config_debug() {
+        let config = BeadsQueryConfig::default();
+        let debug = format!("{:?}", config);
+        assert!(debug.contains("BeadsQueryConfig"));
+        assert!(debug.contains("enabled"));
+        assert!(debug.contains("refresh_interval"));
+    }
+
+    #[test]
+    fn test_beads_query_config_clone() {
+        let config = BeadsQueryConfig {
+            enabled: false,
+            show_ready_count: true,
+            refresh_interval: 45,
+            socket_timeout: 500,
+        };
+        let cloned = config.clone();
+        assert_eq!(config.enabled, cloned.enabled);
+        assert_eq!(config.show_ready_count, cloned.show_ready_count);
+        assert_eq!(config.refresh_interval, cloned.refresh_interval);
+        assert_eq!(config.socket_timeout, cloned.socket_timeout);
+    }
+
+    #[test]
+    fn test_beads_config_with_query_nested() {
+        let toml_str = r#"
+            [beads]
+            auto_detect = false
+            no_daemon_default = true
+
+            [beads.query]
+            enabled = true
+            refresh_interval = 10
+        "#;
+        let config: AppConfig = toml::from_str(toml_str).unwrap();
+        // Parent beads config
+        assert!(!config.beads.auto_detect);
+        assert!(config.beads.no_daemon_default);
+        // Nested query config
+        assert!(config.beads.query.enabled);
+        assert_eq!(config.beads.query.refresh_interval, 10);
+    }
+
+    #[test]
+    fn test_beads_query_config_in_full_config() {
+        let config = AppConfig::default();
+        assert!(config.beads.query.enabled);
+        assert!(config.beads.query.show_ready_count);
+        assert_eq!(config.beads.query.refresh_interval, 30);
+        assert_eq!(config.beads.query.socket_timeout, 1000);
     }
 }
