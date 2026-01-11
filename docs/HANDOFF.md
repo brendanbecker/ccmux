@@ -12,12 +12,12 @@
 
 ## Current State (2026-01-11)
 
-**ALL BUGS FIXED** - QA demo bugs resolved. 3 more features merged + FEAT-056 work item added.
+**MAJOR MILESTONE** - 4 features merged from parallel worktrees. Core multiplexer feature-complete.
 
 **Key Metrics:**
 - 27 bugs tracked, 26 resolved, 0 open, 1 deprecated
-- 56 features tracked, 51 completed, 5 in backlog
-- 1,487 tests passing
+- 59 features tracked, 55 completed, 4 in backlog
+- 1,526 tests passing
 - Clean git working tree on main branch
 
 ### What Works
@@ -93,35 +93,29 @@
 
 **Last Updated**: 2026-01-11
 
-All Gas Town P1 features completed. 6 features merged from parallel streams.
+All parallel worktree features merged. 4 features remain in backlog focused on agent orchestration and beads integration.
 
 ### Just Merged (This Session)
 | ID | Title | Status |
 |----|-------|--------|
-| ✅ FEAT-055 | Full tmux keybinding parity in TUI | Merged |
-| ✅ BUG-027 | MCP response routing fix | Merged |
-| ✅ BUG-026 | Focus management fix | Merged |
-| ✅ BUG-025 | Direction response fix | Merged |
-
-### P1 - High Priority (New)
-
-| ID | Title | Component | Effort | Notes |
-|----|-------|-----------|--------|-------|
-| **FEAT-056** | User Priority Lockout | MCP/TUI | Medium | Prevent MCP/user focus conflicts - lock MCP during Ctrl+B |
+| ✅ FEAT-056 | User Priority Lockout for MCP Focus Control | Merged |
+| ✅ FEAT-028 | Orchestration Flexibility Refactor (Tag-based Routing) | Merged |
+| ✅ FEAT-036 | Session-Aware MCP Commands | Merged |
+| ✅ FEAT-050 | Session Metadata Storage | Merged |
 
 ### P2 - Medium Priority (Enhancements)
 
 | ID | Title | Component | Effort | Notes |
 |----|-------|-----------|--------|-------|
-| **FEAT-028** | Orchestration Flexibility Refactor | Protocol | Medium | Generalize to tag-based roles |
-| **FEAT-036** | Session-Aware MCP Commands | MCP | Medium | Auto-default to active session |
-| **FEAT-048** | MCP Orchestration Protocol Tools | MCP | Medium | Agent-to-agent communication API |
+| **FEAT-048** | MCP Orchestration Protocol Tools | MCP | Medium | Agent-to-agent communication API (unblocked by FEAT-028) |
+| **FEAT-057** | Beads Passive Awareness | Server | Medium | Auto-detect .beads/ and configure env vars |
 
 ### P3 - Low Priority (Nice to Have)
 
 | ID | Title | Component | Effort | Notes |
 |----|-------|-----------|--------|-------|
-| **FEAT-050** | Session Metadata Storage | MCP | Small | Key-value metadata on sessions |
+| **FEAT-058** | Beads Query Integration | Server/Client | Medium | TUI visibility into beads work queue |
+| **FEAT-059** | Beads Workflow Integration | Server/Protocol | Medium | Pane-issue correlation, audit trails |
 
 ### Gas Town Integration: COMPLETE ✅
 
@@ -184,26 +178,20 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 ## Active Worktrees
 
-Four parallel streams for feature development:
+**No active worktrees** - All parallel streams merged to main.
 
-| Stream | Path | Branch | Feature | Priority |
-|--------|------|--------|---------|----------|
-| **A** | `ccmux-stream-a/` | `feat/feat-056-user-priority-lockout` | FEAT-056: User Priority Lockout | P1 |
-| **B** | `ccmux-stream-b/` | `feat/feat-028-orchestration-refactor` | FEAT-028: Orchestration Flexibility | P2 |
-| **C** | `ccmux-stream-c/` | `feat/feat-036-session-aware-mcp` | FEAT-036: Session-Aware MCP | P2 |
-| **D** | `ccmux-stream-d/` | `feat/feat-050-session-metadata` | FEAT-050: Session Metadata | P3 |
+**Available for next features:**
+- `ccmux-stream-a/` through `ccmux-stream-d/` can be created as needed
 
-Each worktree has a `SESSION.md` (gitignored) with detailed instructions.
-
-**Blocked**: FEAT-048 (MCP Orchestration Protocol Tools) - depends on FEAT-028
-
-**To start a worker:**
-```bash
-cd /home/becker/projects/tools/ccmux-stream-X
-cat SESSION.md  # Read instructions
-```
+**Ready to implement:**
+- FEAT-048 (MCP Orchestration Protocol Tools) - now unblocked by FEAT-028
+- FEAT-057/058/059 (Beads integration) - requires beads project availability
 
 ### Recently Merged (2026-01-11) - This Session
+- ✅ **FEAT-056**: User Priority Lockout for MCP Focus Control
+- ✅ **FEAT-028**: Orchestration Flexibility Refactor (Tag-based Routing)
+- ✅ **FEAT-036**: Session-Aware MCP Commands
+- ✅ **FEAT-050**: Session Metadata Storage
 - ✅ **FEAT-055**: Full tmux keybinding parity in TUI
 - ✅ **BUG-027**: MCP response routing (P0 critical)
 - ✅ **BUG-026**: Focus management broken
@@ -229,9 +217,13 @@ cat SESSION.md  # Read instructions
 - [x] ~~Fix BUG-026 (P1): Focus management broken~~ - DONE
 - [x] ~~Fix BUG-025 (P2): Direction response mismatch~~ - DONE
 - [x] ~~Cleanup merged worktree branches~~ - DONE
+- [x] ~~Implement FEAT-056: User priority lockout~~ - DONE
+- [x] ~~Implement FEAT-028: Tag-based routing~~ - DONE
+- [x] ~~Implement FEAT-036: Session-aware MCP~~ - DONE
+- [x] ~~Implement FEAT-050: Session metadata~~ - DONE
 - [ ] Update README with new MCP tools
-- [ ] Implement FEAT-056: User priority lockout for MCP focus control
 - [ ] Create release build and test full workflow
+- [ ] Implement FEAT-048: MCP Orchestration Protocol Tools (unblocked)
 
 ## Session Log (2026-01-11) - Feature Merge & QA Bugs
 
@@ -518,7 +510,7 @@ Add to `~/.claude/mcp.json`:
 | 3 | MCP Server, Session Isolation | ✅ Complete | 49 |
 | 4 | Client-Server Integration (7 features) | ✅ Complete | 126 |
 
-**Total Tests**: 1,219 passing
+**Total Tests**: 1,526 passing
 
 ## Key Documents
 

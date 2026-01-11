@@ -6,23 +6,19 @@
 ## Summary Statistics
 
 - **Total Features**: 59
-- **Completed**: 51
-- **Backlog**: 8
+- **Completed**: 55
+- **Backlog**: 4
 
 ## Current Status
 
-All Gas Town integration features have been implemented. Eight features remain in backlog for future consideration.
+Core terminal multiplexer features complete. Four features remain in backlog focused on agent orchestration and beads integration.
 
 ### Backlog Features
 
 | ID | Title | Component | Priority | Notes |
 |----|-------|-----------|----------|-------|
-| FEAT-056 | User Priority Lockout for MCP Focus Control | ccmux-server, ccmux-client, ccmux-protocol | P1 | Prevent MCP focus ops from conflicting with user commands |
-| FEAT-028 | Orchestration Flexibility Refactor | ccmux-protocol | P2 | Generalize orchestrator/worker to tag-based roles |
-| FEAT-036 | Session-Aware MCP Commands | ccmux-server (MCP) | P2 | May overlap with FEAT-043 (session rename) |
-| FEAT-048 | Expose orchestration protocol via MCP tools | ccmux-server (MCP) | P2 | Agent-to-agent orchestration API surface |
+| FEAT-048 | Expose orchestration protocol via MCP tools | ccmux-server (MCP) | P2 | Agent-to-agent orchestration API surface (depends on FEAT-028) |
 | FEAT-057 | Beads Passive Awareness | ccmux-server | P2 | Auto-detect .beads/ and configure env vars |
-| FEAT-050 | Session Metadata Storage | ccmux-server (MCP) | P3 | Arbitrary key-value metadata on sessions for agent identity |
 | FEAT-058 | Beads Query Integration | ccmux-server, ccmux-client | P3 | TUI visibility into beads work queue via daemon socket |
 | FEAT-059 | Beads Workflow Integration | ccmux-server, ccmux-protocol | P3 | Pane-issue correlation, audit trails, recovery hints |
 
@@ -104,6 +100,10 @@ All completed features are in `feature-management/completed/`. Here's a summary 
 | FEAT-053 | Auto-inject CCMUX Context Environment Variables | Complete |
 | FEAT-054 | Pane-bounded text selection in copy mode | Complete |
 | FEAT-055 | Full tmux keybinding parity in TUI | Complete |
+| FEAT-056 | User Priority Lockout for MCP Focus Control | Complete |
+| FEAT-028 | Orchestration Flexibility Refactor (Tag-based Routing) | Complete |
+| FEAT-036 | Session-Aware MCP Commands | Complete |
+| FEAT-050 | Session Metadata Storage | Complete |
 
 ## Test Coverage
 
@@ -114,8 +114,8 @@ All completed features are in `feature-management/completed/`. Here's a summary 
 | Wave 2 | 3 | 224 |
 | Wave 3 | 2 | 49 |
 | Wave 4 | 7 | 126 |
-| Post-MVP | 24 | 268 |
-| **Total** | **51** | **1,487** |
+| Post-MVP | 28 | 307 |
+| **Total** | **55** | **1,526** |
 
 ## Architecture
 
