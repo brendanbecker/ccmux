@@ -93,6 +93,7 @@ impl HandlerContext {
                     if let Ok(cwd) = std::env::current_dir() {
                         pty_config = pty_config.with_cwd(cwd);
                     }
+                    pty_config = pty_config.with_ccmux_context(session_id, &name, window_id, pane_id);
 
                     match pty_manager.spawn(pane_id, pty_config) {
                         Ok(handle) => {
@@ -328,10 +329,11 @@ impl HandlerContext {
         // Default terminal size for new panes
         let (cols, rows) = (80, 24);
 
-        let (window_info, pane_id) = {
+        let (window_info, pane_id, session_name) = {
             let mut session_manager = self.session_manager.write().await;
 
             if let Some(session) = session_manager.get_session_mut(session_id) {
+                let session_name = session.name().to_string();
                 // Create window first
                 let window = session.create_window(name);
                 let window_info = window.to_info();
@@ -347,7 +349,7 @@ impl HandlerContext {
                     window_info.name, session_id, window_id, pane_id
                 );
 
-                (window_info, pane_id)
+                (window_info, pane_id, session_name)
             } else {
                 debug!("Session {} not found for CreateWindow", session_id);
                 return HandlerContext::error(
@@ -356,6 +358,8 @@ impl HandlerContext {
                 );
             }
         };
+
+        let window_id = window_info.id;
 
         // Spawn PTY for the default pane
         {
@@ -372,6 +376,7 @@ impl HandlerContext {
             if let Ok(cwd) = std::env::current_dir() {
                 pty_config = pty_config.with_cwd(cwd);
             }
+            pty_config = pty_config.with_ccmux_context(session_id, &session_name, window_id, pane_id);
 
             match pty_manager.spawn(pane_id, pty_config) {
                 Ok(handle) => {
