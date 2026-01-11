@@ -302,6 +302,60 @@ pub fn get_tool_definitions() -> Vec<Tool> {
             }),
         },
         Tool {
+            name: "ccmux_kill_session".into(),
+            description: "Kill/destroy a session and all its windows and panes".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Session to kill (UUID or name)"
+                    }
+                },
+                "required": ["session"]
+            }),
+        },
+        Tool {
+            name: "ccmux_set_environment".into(),
+            description: "Set an environment variable on a session (inherited by new panes)".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Session UUID or name"
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "Environment variable name"
+                    },
+                    "value": {
+                        "type": "string",
+                        "description": "Environment variable value"
+                    }
+                },
+                "required": ["session", "key", "value"]
+            }),
+        },
+        Tool {
+            name: "ccmux_get_environment".into(),
+            description: "Get environment variables from a session".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Session UUID or name"
+                    },
+                    "key": {
+                        "type": "string",
+                        "description": "Specific environment variable to get (omit to get all)"
+                    }
+                },
+                "required": ["session"]
+            }),
+        },
+        Tool {
             name: "ccmux_create_layout".into(),
             description: "Create complex layouts declaratively in a single call. Supports nested splits with custom ratios.".into(),
             input_schema: serde_json::json!({
@@ -423,5 +477,8 @@ mod tests {
         assert!(names.contains(&"ccmux_split_pane"));
         assert!(names.contains(&"ccmux_resize_pane"));
         assert!(names.contains(&"ccmux_create_layout"));
+        assert!(names.contains(&"ccmux_kill_session"));
+        assert!(names.contains(&"ccmux_set_environment"));
+        assert!(names.contains(&"ccmux_get_environment"));
     }
 }

@@ -1328,7 +1328,10 @@ impl App {
             | ServerMessage::SessionRenamed { .. }
             | ServerMessage::PaneSplit { .. }
             | ServerMessage::PaneResized { .. }
-            | ServerMessage::LayoutCreated { .. } => {
+            | ServerMessage::LayoutCreated { .. }
+            | ServerMessage::SessionDestroyed { .. }
+            | ServerMessage::EnvironmentSet { .. }
+            | ServerMessage::EnvironmentList { .. } => {
                 // These messages are for the MCP bridge, not the TUI client
             }
         }

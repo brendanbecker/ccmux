@@ -248,14 +248,15 @@ impl HandlerContext {
             session_id, self.client_id
         );
 
-        // Collect pane IDs for PTY cleanup before removing session
-        let pane_ids: Vec<Uuid> = {
+        // Collect pane IDs and session name for PTY cleanup before removing session
+        let (pane_ids, session_name): (Vec<Uuid>, String) = {
             let session_manager = self.session_manager.read().await;
             if let Some(session) = session_manager.get_session(session_id) {
-                session
+                let panes = session
                     .windows()
                     .flat_map(|w| w.panes().map(|p| p.id()))
-                    .collect()
+                    .collect();
+                (panes, session.name().to_string())
             } else {
                 debug!("Session {} not found for DestroySession", session_id);
                 return HandlerContext::error(
@@ -308,8 +309,11 @@ impl HandlerContext {
         self.registry
             .broadcast_to_all(ServerMessage::SessionList { sessions });
 
-        // No direct response needed - clients get the broadcast
-        HandlerResult::NoResponse
+        // Return confirmation to the requesting client (for MCP bridge)
+        HandlerResult::Response(ServerMessage::SessionDestroyed {
+            session_id,
+            session_name,
+        })
     }
 
     /// Handle CreateWindow message - create a new window in a session
