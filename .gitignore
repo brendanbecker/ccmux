@@ -36,3 +36,6 @@ tarpaulin-report.html
 # Local environment files
 .env
 .env.local
+
+# Session tracking (worker-local, not committed)
+SESSION.md
