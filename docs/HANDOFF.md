@@ -180,13 +180,9 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 | Stream | Path | Branch | Feature | Status |
 |--------|------|--------|---------|--------|
-| **A** | `ccmux-stream-a/` | `feat/feat-048-mcp-orchestration-tools` | FEAT-048: MCP Orchestration Tools | ✅ **MERGED** |
-| **B** | `ccmux-stream-b/` | `feat/feat-057-beads-passive-awareness` | FEAT-057: Beads Passive Awareness | ✅ **MERGED** |
 | **C** | `ccmux-stream-c/` | `feat/feat-058-beads-query-integration` | FEAT-058: Beads Query Integration | **READY** |
-| **E** | `ccmux-stream-e/` | `fix/bug-028-create-layout-crash` | BUG-028: Daemon crash fix | ✅ **MERGED** |
-| **F** | `ccmux-stream-f/` | `feat/feat-060-mcp-daemon-recovery` | FEAT-060: MCP Auto-Recovery | ✅ **MERGED** |
 
-**Stream D removed** - will recreate when FEAT-058 completes.
+Merged worktrees (A, B, E, F) cleaned up. Stream D will be recreated when FEAT-058 completes.
 
 **To start a worker:**
 ```bash
@@ -228,7 +224,7 @@ cat SESSION.md  # Read instructions
 - [x] ~~Implement FEAT-057: Beads Passive Awareness~~ - MERGED
 - [x] ~~Fix BUG-028 (P0): Daemon crash on nested create_layout~~ - MERGED
 - [x] ~~Implement FEAT-060: MCP Daemon Auto-Recovery~~ - MERGED
-- [ ] Cleanup merged worktree branches (stream-a, stream-b, stream-e, stream-f)
+- [x] ~~Cleanup merged worktree branches~~ - DONE
 - [ ] Implement FEAT-058: Beads Query Integration (stream-c ready)
 - [ ] Update README with new MCP tools
 - [ ] Create release build and test full workflow
