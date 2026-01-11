@@ -352,17 +352,20 @@ impl InputHandler {
 
             // Pane navigation (tmux defaults)
             KeyCode::Char('o') => InputAction::Command(ClientCommand::NextPane),
-            KeyCode::Char(';') => InputAction::Command(ClientCommand::PreviousPane),
+            KeyCode::Char(';') => InputAction::Command(ClientCommand::LastPane),
             KeyCode::Left => InputAction::Command(ClientCommand::PaneLeft),
             KeyCode::Down => InputAction::Command(ClientCommand::PaneDown),
             KeyCode::Up => InputAction::Command(ClientCommand::PaneUp),
             KeyCode::Right => InputAction::Command(ClientCommand::PaneRight),
+            KeyCode::Char('q') => InputAction::Command(ClientCommand::ShowPaneNumbers),
 
             // Pane navigation (vim-style extension, common in tmux configs)
             KeyCode::Char('h') => InputAction::Command(ClientCommand::PaneLeft),
             KeyCode::Char('j') => InputAction::Command(ClientCommand::PaneDown),
             KeyCode::Char('k') => InputAction::Command(ClientCommand::PaneUp),
-            KeyCode::Char('l') => InputAction::Command(ClientCommand::PaneRight),
+
+            // Window navigation (tmux defaults)
+            KeyCode::Char('l') => InputAction::Command(ClientCommand::LastWindow),
 
             // Zoom/fullscreen pane
             KeyCode::Char('z') => InputAction::Command(ClientCommand::ToggleZoom),
@@ -370,6 +373,20 @@ impl InputHandler {
             // Session management
             KeyCode::Char('d') => InputAction::Detach,
             KeyCode::Char('s') => InputAction::Command(ClientCommand::ListSessions),
+            KeyCode::Char('$') => {
+                // Enter command mode with rename-session prefix
+                self.mode = InputMode::Command;
+                self.command_buffer = "rename-session ".to_string();
+                InputAction::None
+            }
+
+            // Rename window (tmux ,)
+            KeyCode::Char(',') => {
+                // Enter command mode with rename-window prefix
+                self.mode = InputMode::Command;
+                self.command_buffer = "rename-window ".to_string();
+                InputAction::None
+            }
 
             // Modes
             KeyCode::Char(':') => {
@@ -891,7 +908,7 @@ mod tests {
     fn test_vim_navigation() {
         let mut handler = InputHandler::new();
 
-        // Test h/j/k/l navigation
+        // Test h/j/k navigation (vim-style pane movement)
         let prefix = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL);
 
         handler.handle_key(prefix.clone());
@@ -906,9 +923,59 @@ mod tests {
         let k_key = KeyEvent::new(KeyCode::Char('k'), KeyModifiers::empty());
         assert_eq!(handler.handle_key(k_key), InputAction::Command(ClientCommand::PaneUp));
 
+        // Note: 'l' is now LastWindow (tmux default) instead of vim-style PaneRight
+        // Use arrow keys for directional pane navigation
         handler.handle_key(prefix);
         let l_key = KeyEvent::new(KeyCode::Char('l'), KeyModifiers::empty());
-        assert_eq!(handler.handle_key(l_key), InputAction::Command(ClientCommand::PaneRight));
+        assert_eq!(handler.handle_key(l_key), InputAction::Command(ClientCommand::LastWindow));
+    }
+
+    #[test]
+    fn test_last_pane_keybinding() {
+        let mut handler = InputHandler::new();
+
+        // Test ; for LastPane (tmux default)
+        let prefix = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL);
+        handler.handle_key(prefix);
+        let semicolon_key = KeyEvent::new(KeyCode::Char(';'), KeyModifiers::empty());
+        assert_eq!(handler.handle_key(semicolon_key), InputAction::Command(ClientCommand::LastPane));
+    }
+
+    #[test]
+    fn test_show_pane_numbers_keybinding() {
+        let mut handler = InputHandler::new();
+
+        // Test q for ShowPaneNumbers (tmux default)
+        let prefix = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL);
+        handler.handle_key(prefix);
+        let q_key = KeyEvent::new(KeyCode::Char('q'), KeyModifiers::empty());
+        assert_eq!(handler.handle_key(q_key), InputAction::Command(ClientCommand::ShowPaneNumbers));
+    }
+
+    #[test]
+    fn test_rename_keybindings() {
+        let mut handler = InputHandler::new();
+
+        // Test , for rename-window (enters command mode)
+        let prefix = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL);
+        handler.handle_key(prefix);
+        let comma_key = KeyEvent::new(KeyCode::Char(','), KeyModifiers::empty());
+        let result = handler.handle_key(comma_key);
+        assert_eq!(result, InputAction::None);
+        assert_eq!(handler.mode(), InputMode::Command);
+        assert_eq!(handler.command_buffer(), "rename-window ");
+
+        // Reset and test $ for rename-session
+        handler.mode = InputMode::Normal;
+        handler.command_buffer.clear();
+
+        let prefix = KeyEvent::new(KeyCode::Char('b'), KeyModifiers::CONTROL);
+        handler.handle_key(prefix);
+        let dollar_key = KeyEvent::new(KeyCode::Char('$'), KeyModifiers::empty());
+        let result = handler.handle_key(dollar_key);
+        assert_eq!(result, InputAction::None);
+        assert_eq!(handler.mode(), InputMode::Command);
+        assert_eq!(handler.command_buffer(), "rename-session ");
     }
 
     // ==================== Quick Bindings Tests ====================

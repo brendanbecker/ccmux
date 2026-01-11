@@ -19,8 +19,10 @@ pub enum ClientCommand {
     // Pane navigation
     /// Focus next pane
     NextPane,
-    /// Focus previous pane
+    /// Focus previous pane (cycle backward)
     PreviousPane,
+    /// Focus last (previously active) pane - tmux `;` behavior
+    LastPane,
     /// Focus pane to the left
     PaneLeft,
     /// Focus pane to the right
@@ -31,6 +33,8 @@ pub enum ClientCommand {
     PaneDown,
     /// Focus pane by index
     FocusPane(usize),
+    /// Show pane numbers overlay - tmux `q` behavior
+    ShowPaneNumbers,
 
     // Window management
     /// Create a new window
@@ -41,6 +45,8 @@ pub enum ClientCommand {
     NextWindow,
     /// Switch to previous window
     PreviousWindow,
+    /// Switch to last (previously active) window - tmux `l` behavior
+    LastWindow,
     /// List all windows
     ListWindows,
     /// Select window by index
@@ -161,7 +167,8 @@ impl CommandHandler {
                     None => Some(ClientCommand::NextPane),
                 }
             }
-            "last-pane" | "lastp" => Some(ClientCommand::PreviousPane),
+            "last-pane" | "lastp" => Some(ClientCommand::LastPane),
+            "display-panes" | "displayp" => Some(ClientCommand::ShowPaneNumbers),
             "resize-pane" | "resizep" => {
                 let flag = parts.next();
                 let amount: u16 = parts.next().and_then(|s| s.parse().ok()).unwrap_or(1);
@@ -191,6 +198,7 @@ impl CommandHandler {
             "kill-window" | "killw" => Some(ClientCommand::CloseWindow),
             "next-window" | "next" | "n" => Some(ClientCommand::NextWindow),
             "previous-window" | "prev" | "p" => Some(ClientCommand::PreviousWindow),
+            "last-window" | "last" | "l" => Some(ClientCommand::LastWindow),
             "select-window" | "selectw" => {
                 let index = parts.next().and_then(|s| s.parse().ok());
                 index.map(ClientCommand::SelectWindow)
@@ -252,6 +260,8 @@ Pane Commands:
   split-window [-h|-v]  Split current pane (default: vertical)
   kill-pane            Close current pane
   select-pane [-L|-R|-U|-D|<n>]  Select pane by direction or index
+  last-pane            Switch to last active pane
+  display-panes        Show pane numbers
   resize-pane [-U|-D|-L|-R] [n]  Resize pane in direction
 
 Window Commands:
@@ -259,6 +269,7 @@ Window Commands:
   kill-window          Close current window
   next-window          Switch to next window
   previous-window      Switch to previous window
+  last-window          Switch to last active window
   select-window <n>    Select window by index
   rename-window <name> Rename current window
   list-windows         List all windows
@@ -392,6 +403,41 @@ mod tests {
         assert_eq!(
             CommandHandler::parse_command("p"),
             Some(ClientCommand::PreviousWindow)
+        );
+        // Test last-window command
+        assert_eq!(
+            CommandHandler::parse_command("last-window"),
+            Some(ClientCommand::LastWindow)
+        );
+        assert_eq!(
+            CommandHandler::parse_command("last"),
+            Some(ClientCommand::LastWindow)
+        );
+        assert_eq!(
+            CommandHandler::parse_command("l"),
+            Some(ClientCommand::LastWindow)
+        );
+    }
+
+    #[test]
+    fn test_parse_pane_commands() {
+        // Test last-pane command
+        assert_eq!(
+            CommandHandler::parse_command("last-pane"),
+            Some(ClientCommand::LastPane)
+        );
+        assert_eq!(
+            CommandHandler::parse_command("lastp"),
+            Some(ClientCommand::LastPane)
+        );
+        // Test display-panes command
+        assert_eq!(
+            CommandHandler::parse_command("display-panes"),
+            Some(ClientCommand::ShowPaneNumbers)
+        );
+        assert_eq!(
+            CommandHandler::parse_command("displayp"),
+            Some(ClientCommand::ShowPaneNumbers)
         );
     }
 
