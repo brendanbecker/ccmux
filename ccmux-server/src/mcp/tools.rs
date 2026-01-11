@@ -196,6 +196,10 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                     "name": {
                         "type": "string",
                         "description": "Optional name for the session (auto-generated if omitted)"
+                    },
+                    "command": {
+                        "type": "string",
+                        "description": "Command to run in the default pane (default: user's shell)"
                     }
                 }
             }),

@@ -193,6 +193,8 @@ pub enum ClientMessage {
     CreateSessionWithOptions {
         /// Session name (auto-generated if omitted)
         name: Option<String>,
+        /// Command to run in the default pane (default: $SHELL or /bin/sh)
+        command: Option<String>,
     },
 
     /// Create a new window with options (for MCP bridge)

@@ -445,8 +445,9 @@ impl HandlerContext {
     pub async fn handle_create_session_with_options(
         &self,
         name: Option<String>,
+        command: Option<String>,
     ) -> HandlerResult {
-        info!("CreateSessionWithOptions request from {} (name: {:?})", self.client_id, name);
+        info!("CreateSessionWithOptions request from {} (name: {:?}, command: {:?})", self.client_id, name, command);
 
         let mut session_manager = self.session_manager.write().await;
 
@@ -511,12 +512,34 @@ impl HandlerContext {
 
         // Spawn PTY for the default pane
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-        let config = PtyConfig::command(&shell);
+        let config = if let Some(ref cmd) = command {
+            // Wrap user command in shell to handle arguments and shell syntax
+            PtyConfig::command("sh").with_arg("-c").with_arg(cmd)
+        } else {
+            PtyConfig::command(&shell)
+        };
 
         {
             let mut pty_manager = self.pty_manager.write().await;
-            if let Err(e) = pty_manager.spawn(pane_id, config) {
-                warn!("Failed to spawn PTY for pane {}: {}", pane_id, e);
+            match pty_manager.spawn(pane_id, config) {
+                Ok(handle) => {
+                    info!("PTY spawned for MCP session pane {}", pane_id);
+
+                    // Start output poller with sideband parsing enabled
+                    let reader = handle.clone_reader();
+                    let _poller_handle = PtyOutputPoller::spawn_with_sideband(
+                        pane_id,
+                        session_id,
+                        reader,
+                        self.registry.clone(),
+                        Some(self.pane_closed_tx.clone()),
+                        self.command_executor.clone(),
+                    );
+                    info!("Output poller started for MCP session pane {} (sideband enabled)", pane_id);
+                }
+                Err(e) => {
+                    warn!("Failed to spawn PTY for pane {}: {}", pane_id, e);
+                }
             }
         }
 
@@ -630,13 +653,34 @@ impl HandlerContext {
 
         // Spawn PTY
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-        let cmd = command.as_deref().unwrap_or(&shell);
-        let config = PtyConfig::command(cmd);
+        let config = if let Some(ref cmd) = command {
+            // Wrap user command in shell to handle arguments and shell syntax
+            PtyConfig::command("sh").with_arg("-c").with_arg(cmd)
+        } else {
+            PtyConfig::command(&shell)
+        };
 
         {
             let mut pty_manager = self.pty_manager.write().await;
-            if let Err(e) = pty_manager.spawn(pane_id, config) {
-                warn!("Failed to spawn PTY for pane {}: {}", pane_id, e);
+            match pty_manager.spawn(pane_id, config) {
+                Ok(handle) => {
+                    info!("PTY spawned for MCP window pane {}", pane_id);
+
+                    // Start output poller with sideband parsing enabled
+                    let reader = handle.clone_reader();
+                    let _poller_handle = PtyOutputPoller::spawn_with_sideband(
+                        pane_id,
+                        session_id,
+                        reader,
+                        self.registry.clone(),
+                        Some(self.pane_closed_tx.clone()),
+                        self.command_executor.clone(),
+                    );
+                    info!("Output poller started for MCP window pane {} (sideband enabled)", pane_id);
+                }
+                Err(e) => {
+                    warn!("Failed to spawn PTY for pane {}: {}", pane_id, e);
+                }
             }
         }
 
@@ -847,7 +891,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_session_with_options() {
         let ctx = create_test_context();
-        let result = ctx.handle_create_session_with_options(Some("my-session".to_string())).await;
+        let result = ctx.handle_create_session_with_options(Some("my-session".to_string()), None).await;
 
         match result {
             HandlerResult::Response(ServerMessage::SessionCreatedWithDetails {
@@ -863,7 +907,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_session_with_auto_name() {
         let ctx = create_test_context();
-        let result = ctx.handle_create_session_with_options(None).await;
+        let result = ctx.handle_create_session_with_options(None, None).await;
 
         match result {
             HandlerResult::Response(ServerMessage::SessionCreatedWithDetails {

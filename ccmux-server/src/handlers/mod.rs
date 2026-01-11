@@ -193,8 +193,8 @@ impl HandlerContext {
                 .await
             }
 
-            ClientMessage::CreateSessionWithOptions { name } => {
-                self.handle_create_session_with_options(name).await
+            ClientMessage::CreateSessionWithOptions { name, command } => {
+                self.handle_create_session_with_options(name, command).await
             }
 
             ClientMessage::CreateWindowWithOptions {

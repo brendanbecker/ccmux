@@ -4,14 +4,20 @@
 **Last Updated**: 2026-01-10
 
 ## Summary Statistics
-- Total Bugs: 21
-- Open: 0
-- Resolved: 20
+- Total Bugs: 23
+- Open: 1
+- Resolved: 21
 - Deprecated: 1
+
+## Active Bugs
+
+| ID | Description | Priority | Status | Component | Link |
+|----|-------------|----------|--------|-----------|------|
+| BUG-022 | Viewport gets stuck above bottom after subagent finishes | P2 | in_progress | tui | [Link](BUG-022-viewport-stuck-above-bottom-after-subagent/) |
 
 ## Bug Status
 
-All bugs have been resolved or deprecated. See `feature-management/completed/` for detailed work items.
+See `feature-management/completed/` for resolved work items.
 
 ### Resolved Bugs
 
@@ -37,6 +43,7 @@ All bugs have been resolved or deprecated. See `feature-management/completed/` f
 | BUG-019 | Claude detector UTF-8 panic causes TUI hang | P1 | Fixed - char boundary check |
 | BUG-020 | Session reattach creates client without PTY | P1 | Fixed (stream-a) - send scrollback on reattach |
 | BUG-021 | ccmux_rename_session missing from standalone MCP | P1 | Fixed |
+| BUG-023 | ccmux_create_session doesn't spawn shell in default pane | P1 | Fixed - added command param + output poller |
 
 ### Deprecated Bugs
 
@@ -48,6 +55,9 @@ All bugs have been resolved or deprecated. See `feature-management/completed/` f
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-10 | BUG-023 | Resolved | Fixed: added command param + output poller to create_session handler |
+| 2026-01-10 | BUG-023 | Created | ccmux_create_session MCP tool doesn't spawn shell - needs command param |
+| 2026-01-10 | BUG-022 | Created | Viewport stuck above bottom after subagent - fix implemented, awaiting verification |
 | 2026-01-10 | BUG-021 | Resolved | ccmux_rename_session added to standalone MCP server |
 | 2026-01-10 | BUG-020 | Resolved | Fixed in commit 8f53895 - send scrollback on reattach |
 | 2026-01-10 | BUG-019 | Resolved | UTF-8 char boundary fix in ClaudeDetector |
