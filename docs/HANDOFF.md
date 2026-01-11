@@ -12,13 +12,14 @@
 
 ## Current State (2026-01-11)
 
-**MAJOR MILESTONE** - All bugs resolved, core multiplexer feature-complete.
+**QA Demo Complete** - Found 3 new bugs in MCP layer during comprehensive testing.
 
 **Key Metrics:**
-- 28 bugs tracked, 27 resolved, 0 open, 1 deprecated
-- 60 features tracked, 58 completed, 2 in backlog
-- 1,566 tests passing
+- 31 bugs tracked, 27 resolved, 3 open, 1 deprecated
+- 60 features tracked, 59 completed, 1 in backlog
+- 1,526 tests passing
 - Clean git working tree on main branch
+- No active worktrees - all streams merged
 
 ### What Works
 - Server accepts client connections via Unix socket
@@ -68,9 +69,16 @@
 | FEAT-025 | Pane Output Rendering | P0 | ✅ Merged |
 | FEAT-026 | Input Testing | P1 | ✅ Working (verified manually) |
 
-## Bug Status: ALL RESOLVED ✅
+## Bug Status: 3 Open (MCP Layer)
 
-**Open Bugs: 0** - All bugs fixed!
+**Open Bugs: 3** - Found during QA demo, all in MCP/daemon layer.
+
+### Open Bugs (P0/P2)
+| Bug | Priority | Description | Status |
+|-----|----------|-------------|--------|
+| BUG-029 | P0 | MCP response synchronization - responses lag by one call | Open |
+| BUG-030 | P0 | Daemon unresponsive after create_window/kill_session/create_layout | Open |
+| BUG-031 | P2 | Session metadata not persisting across restarts (FEAT-050 incomplete) | Open |
 
 ### Recent Critical Fixes
 | Bug | Priority | Description | Resolution |
@@ -94,11 +102,12 @@
 
 **Last Updated**: 2026-01-11
 
-All parallel worktree features merged. 2 features remain in backlog (beads integration).
+All parallel worktree features merged. 1 feature remains in backlog (beads workflow).
 
 ### Just Merged (This Session)
 | ID | Title | Status |
 |----|-------|--------|
+| ✅ FEAT-058 | Beads Query Integration | Merged |
 | ✅ BUG-028 | Daemon crash on nested create_layout | Fixed |
 | ✅ FEAT-060 | MCP Daemon Auto-Recovery | Merged |
 | ✅ FEAT-048 | MCP Orchestration Protocol Tools | Merged |
@@ -112,8 +121,7 @@ All parallel worktree features merged. 2 features remain in backlog (beads integ
 
 | ID | Title | Component | Effort | Notes |
 |----|-------|-----------|--------|-------|
-| **FEAT-058** | Beads Query Integration | Server/Client | Medium | TUI visibility into beads work queue (READY) |
-| **FEAT-059** | Beads Workflow Integration | Server/Protocol | Medium | Pane-issue correlation (blocked by FEAT-058) |
+| **FEAT-059** | Beads Workflow Integration | Server/Protocol | Medium | Pane-issue correlation (ready now) |
 
 ### Gas Town Integration: COMPLETE ✅
 
@@ -155,10 +163,10 @@ All Gas Town integration features have been implemented:
 ### Backlog Features (updated after retrospective)
 | ID | Feature | Status | Notes |
 |----|---------|--------|-------|
-| FEAT-048 | MCP Orchestration Protocol Tools | Ready | Agent-to-agent messaging via MCP |
-| FEAT-057 | Beads Passive Awareness | Ready | Auto-detect .beads/, set env vars |
-| FEAT-058 | Beads Query Integration | Blocked | TUI visibility into work queue |
-| FEAT-059 | Beads Workflow Integration | Blocked | Pane-issue correlation |
+| FEAT-048 | MCP Orchestration Protocol Tools | ✅ Merged | Agent-to-agent messaging via MCP |
+| FEAT-057 | Beads Passive Awareness | ✅ Merged | Auto-detect .beads/, set env vars |
+| FEAT-058 | Beads Query Integration | ✅ Merged | TUI visibility into work queue |
+| FEAT-059 | Beads Workflow Integration | Ready | Pane-issue correlation (unblocked) |
 
 ### FEAT-040: MCP Pane Reliability (BUG-010 Investigation)
 - Added debug logging to broadcast_to_session_except() for diagnosis
@@ -178,17 +186,16 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 ## Active Worktrees
 
-| Stream | Path | Branch | Feature | Status |
-|--------|------|--------|---------|--------|
-| **C** | `ccmux-stream-c/` | `feat/feat-058-beads-query-integration` | FEAT-058: Beads Query Integration | **READY** |
+**None** - All streams merged and cleaned up.
 
-Merged worktrees (A, B, E, F) cleaned up. Stream D will be recreated when FEAT-058 completes.
-
-**To start a worker:**
-```bash
-cd /home/becker/projects/tools/ccmux-stream-c
-cat SESSION.md  # Read instructions
-```
+| Stream | Feature | Status |
+|--------|---------|--------|
+| A | FEAT-048, FEAT-057 | ✅ Merged |
+| B | BUG-028 | ✅ Merged |
+| C | FEAT-058 | ✅ Merged |
+| D | QA Demo | ✅ Complete (bugs filed) |
+| E | FEAT-060 | ✅ Merged |
+| F | Various | ✅ Merged |
 
 ### Recently Merged (2026-01-11) - This Session
 - ✅ **BUG-028**: Daemon crash on nested create_layout (stream-e)
@@ -225,9 +232,47 @@ cat SESSION.md  # Read instructions
 - [x] ~~Fix BUG-028 (P0): Daemon crash on nested create_layout~~ - MERGED
 - [x] ~~Implement FEAT-060: MCP Daemon Auto-Recovery~~ - MERGED
 - [x] ~~Cleanup merged worktree branches~~ - DONE
-- [ ] Implement FEAT-058: Beads Query Integration (stream-c ready)
+- [x] ~~Implement FEAT-058: Beads Query Integration~~ - MERGED
+- [x] ~~QA Demo of MCP tools~~ - Complete (3 bugs filed)
+- [ ] Fix BUG-029 (P0): MCP response synchronization
+- [ ] Fix BUG-030 (P0): Daemon unresponsive after certain operations
+- [ ] Fix BUG-031 (P2): Metadata persistence
 - [ ] Update README with new MCP tools
 - [ ] Create release build and test full workflow
+
+## Session Log (2026-01-11) - QA Demo & Stream C Merge
+
+### Work Completed This Session
+1. **Comprehensive QA demo of MCP tools** - Tested 15+ operations
+2. **FEAT-058 merged** - Beads query integration (stream-c)
+3. **3 new bugs filed**:
+   - BUG-029 (P0): MCP response synchronization - responses lag by one call
+   - BUG-030 (P0): Daemon unresponsive after create_window/kill_session/create_layout
+   - BUG-031 (P2): Session metadata not persisting (FEAT-050 persistence incomplete)
+4. **All worktrees cleaned up** - No active streams remaining
+
+### QA Demo Results
+**Features Verified Working:**
+- Session CRUD (create, list, select, rename)
+- Pane operations (split, resize, focus, read)
+- Environment variables (set/get)
+- Metadata (set/get - but not persisting)
+- Input sending to panes
+
+**Bugs Discovered:**
+- Response synchronization issue causes "Unexpected response" errors
+- Operations succeed but wrong response type returned
+- Certain operations (create_window, kill_session, create_layout) crash daemon
+- Metadata lost on daemon restart
+
+### Root Cause Analysis
+BUG-029 (response sync) appears to be the root cause. Responses are delivered to the wrong MCP calls, offset by one. When error handling triggers on mismatched types, certain operations cause the daemon to enter an unrecoverable state (BUG-030).
+
+### Commits Made
+- `6c233e5` - docs: add QA demo bug reports (BUG-029, BUG-030, BUG-031)
+- `f9028ad` - Merge branch 'feat/feat-058-beads-query-integration'
+
+---
 
 ## Session Log (2026-01-11) - Feature Merge & QA Bugs
 
