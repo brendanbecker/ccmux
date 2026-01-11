@@ -1,24 +1,27 @@
 //! Sideband protocol for Claude-ccmux communication
 //!
-//! This module implements the XML sideband protocol that allows Claude to send
-//! structured commands to ccmux embedded in its terminal output. The protocol
-//! supports commands for pane management, input routing, notifications, and
-//! viewport control.
+//! This module implements the OSC (Operating System Command) sideband protocol
+//! that allows Claude to send structured commands to ccmux embedded in its
+//! terminal output. The protocol supports commands for pane management, input
+//! routing, notifications, and viewport control.
 //!
 //! ## Protocol Format
 //!
-//! Commands are embedded using XML-like tags with the `ccmux:` namespace:
+//! Commands use OSC escape sequences (ESC ] ... BEL) with the `ccmux:` prefix:
 //!
-//! ```xml
-//! <!-- Self-closing commands -->
-//! <ccmux:spawn direction="vertical" command="cargo build" />
-//! <ccmux:focus pane="1" />
-//! <ccmux:scroll lines="-10" />
+//! ```text
+//! # Self-closing commands (terminated by BEL \x07 or ST \x1b\x5c)
+//! \x1b]ccmux:spawn direction="vertical" command="cargo build"\x07
+//! \x1b]ccmux:focus pane="1"\x07
+//! \x1b]ccmux:scroll lines="-10"\x07
 //!
-//! <!-- Commands with content -->
-//! <ccmux:input pane="1">ls -la</ccmux:input>
-//! <ccmux:notify title="Build Complete">Build succeeded</ccmux:notify>
+//! # Commands with content
+//! \x1b]ccmux:input pane="1"\x07ls -la\x1b]ccmux:/input\x07
+//! \x1b]ccmux:notify title="Build Complete"\x07Build succeeded\x1b]ccmux:/notify\x07
 //! ```
+//!
+//! The OSC format prevents accidental command triggering from grep/cat output
+//! of source files containing command examples.
 //!
 //! ## Supported Commands
 //!
@@ -61,7 +64,7 @@ mod commands;
 mod executor;
 mod parser;
 
-pub use async_executor::AsyncCommandExecutor;
+pub use async_executor::{AsyncCommandExecutor, SpawnLimits};
 pub use commands::{ControlAction, NotifyLevel, PaneRef, SidebandCommand, SplitDirection};
 pub use executor::{CommandExecutor, ExecuteError, ExecuteResult, SpawnResult};
 pub use parser::SidebandParser;
@@ -87,6 +90,19 @@ mod tests {
         (executor, manager)
     }
 
+    // Helper to create OSC command string
+    fn osc(cmd: &str) -> String {
+        format!("\x1b]ccmux:{}\x07", cmd)
+    }
+
+    // Helper to create OSC command with content
+    fn osc_content(cmd: &str, attrs: &str, content: &str) -> String {
+        format!(
+            "\x1b]ccmux:{} {}\x07{}\x1b]ccmux:/{}\x07",
+            cmd, attrs, content, cmd
+        )
+    }
+
     /// Integration test: parse and execute commands
     #[test]
     fn test_parse_and_execute_integration() {
@@ -109,11 +125,13 @@ mod tests {
             pane.id()
         };
 
-        // Parse input with embedded command
-        let input = r#"Building project...<ccmux:notify title="Build Status">Starting build</ccmux:notify>
-Output continues..."#;
+        // Parse input with embedded OSC command
+        let input = format!(
+            "Building project...{}\nOutput continues...",
+            osc_content("notify", r#"title="Build Status""#, "Starting build")
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         // Verify parsing
         assert_eq!(display, "Building project...\nOutput continues...");
@@ -146,10 +164,15 @@ Output continues..."#;
             window.create_pane().id()
         };
 
-        // Parse multiple commands
-        let input = r#"<ccmux:focus pane="0" /><ccmux:control action="resize" cols="100" rows="50" /><ccmux:notify level="info">Ready</ccmux:notify>"#;
+        // Parse multiple OSC commands
+        let input = format!(
+            "{}{}{}",
+            osc(r#"focus pane="0""#),
+            osc(r#"control action="resize" cols="100" rows="50""#),
+            osc_content("notify", r#"level="info""#, "Ready")
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "");
         assert_eq!(commands.len(), 3);
@@ -169,9 +192,9 @@ Output continues..."#;
     fn test_chunked_parsing_integration() {
         let mut parser = SidebandParser::new();
 
-        // Simulate data arriving in chunks
-        let chunk1 = "Hello <ccmux:noti";
-        let chunk2 = r#"fy title="Test">Message</ccmux:notify> World"#;
+        // Simulate OSC data arriving in chunks
+        let chunk1 = "Hello \x1b]ccmux:noti";
+        let chunk2 = "fy title=\"Test\"\x07Message\x1b]ccmux:/notify\x07 World";
 
         let (display1, commands1) = parser.parse(chunk1);
         assert_eq!(display1, "Hello ");
@@ -189,9 +212,14 @@ Output continues..."#;
     fn test_malformed_commands_stripped() {
         let mut parser = SidebandParser::new();
 
-        let input = r#"Start <ccmux:unknown attr="value" /> Middle <ccmux:focus pane="0" /> End"#;
+        // Mix of unknown command and valid command
+        let input = format!(
+            "Start {} Middle {} End",
+            osc(r#"unknown attr="value""#),
+            osc(r#"focus pane="0""#)
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         // Both tags stripped, only valid command parsed
         assert_eq!(display, "Start  Middle  End");
@@ -205,19 +233,32 @@ Output continues..."#;
         let mut parser = SidebandParser::new();
 
         let inputs = vec![
-            (r#"<ccmux:spawn direction="h" />"#, "Spawn"),
-            (r#"<ccmux:focus pane="0" />"#, "Focus"),
-            (r#"<ccmux:input pane="0">test</ccmux:input>"#, "Input"),
-            (r#"<ccmux:scroll lines="-5" />"#, "Scroll"),
-            (r#"<ccmux:notify>msg</ccmux:notify>"#, "Notify"),
-            (r#"<ccmux:control action="close" />"#, "Control"),
+            (osc(r#"spawn direction="h""#), "Spawn"),
+            (osc(r#"focus pane="0""#), "Focus"),
+            (osc_content("input", r#"pane="0""#, "test"), "Input"),
+            (osc(r#"scroll lines="-5""#), "Scroll"),
+            (osc_content("notify", "", "msg"), "Notify"),
+            (osc(r#"control action="close""#), "Control"),
         ];
 
         for (input, expected_type) in inputs {
-            let (_, commands) = parser.parse(input);
-            assert_eq!(commands.len(), 1, "Failed for: {}", input);
+            let (_, commands) = parser.parse(&input);
+            assert_eq!(commands.len(), 1, "Failed for: {:?}", input);
             let debug_str = format!("{:?}", commands[0]);
             assert!(debug_str.contains(expected_type), "Expected {} in {:?}", expected_type, debug_str);
         }
+    }
+
+    /// Test that old XML format is NOT parsed (security fix for BUG-024)
+    #[test]
+    fn test_old_xml_format_ignored() {
+        let mut parser = SidebandParser::new();
+
+        // Old XML format should pass through as plain text
+        let input = r#"<ccmux:spawn direction="vertical" /> some grep output"#;
+        let (display, commands) = parser.parse(input);
+
+        assert_eq!(display, input);
+        assert!(commands.is_empty(), "Old XML format should NOT be parsed");
     }
 }

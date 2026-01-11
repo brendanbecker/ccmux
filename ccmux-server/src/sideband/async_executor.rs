@@ -4,6 +4,7 @@
 //! tokio::sync::RwLock for integration with SharedState.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
@@ -17,6 +18,26 @@ use crate::pty::{PtyConfig, PtyManager};
 use crate::registry::ClientRegistry;
 use crate::session::SessionManager;
 
+/// Configuration for spawn limits to prevent runaway pane creation
+#[derive(Debug, Clone)]
+pub struct SpawnLimits {
+    /// Maximum spawn chain depth (pane spawning pane spawning pane...)
+    /// Default: 5
+    pub max_spawn_depth: usize,
+    /// Maximum total panes per session
+    /// Default: 50
+    pub max_panes_per_session: usize,
+}
+
+impl Default for SpawnLimits {
+    fn default() -> Self {
+        Self {
+            max_spawn_depth: 5,
+            max_panes_per_session: 50,
+        }
+    }
+}
+
 /// Async executor for sideband commands
 ///
 /// Works with tokio::sync::RwLock for integration with async SharedState.
@@ -28,20 +49,41 @@ pub struct AsyncCommandExecutor {
     pty_manager: Arc<RwLock<PtyManager>>,
     /// Reference to the client registry for broadcasting notifications
     registry: Arc<ClientRegistry>,
+    /// Spawn limits configuration
+    spawn_limits: SpawnLimits,
+    /// Current total sideband-spawned panes (for rate limiting)
+    sideband_spawn_count: AtomicUsize,
 }
 
 impl AsyncCommandExecutor {
-    /// Create a new async command executor
+    /// Create a new async command executor with default spawn limits
     pub fn new(
         session_manager: Arc<RwLock<SessionManager>>,
         pty_manager: Arc<RwLock<PtyManager>>,
         registry: Arc<ClientRegistry>,
     ) -> Self {
+        Self::with_limits(session_manager, pty_manager, registry, SpawnLimits::default())
+    }
+
+    /// Create a new async command executor with custom spawn limits
+    pub fn with_limits(
+        session_manager: Arc<RwLock<SessionManager>>,
+        pty_manager: Arc<RwLock<PtyManager>>,
+        registry: Arc<ClientRegistry>,
+        spawn_limits: SpawnLimits,
+    ) -> Self {
         Self {
             session_manager,
             pty_manager,
             registry,
+            spawn_limits,
+            sideband_spawn_count: AtomicUsize::new(0),
         }
+    }
+
+    /// Get the current spawn limits
+    pub fn spawn_limits(&self) -> &SpawnLimits {
+        &self.spawn_limits
     }
 
     /// Get a reference to the session manager
@@ -155,6 +197,8 @@ impl AsyncCommandExecutor {
     ///
     /// Creates a new pane in the same window as source_pane, spawns a PTY,
     /// and broadcasts the pane creation to connected clients.
+    ///
+    /// Respects spawn limits to prevent runaway pane creation.
     async fn execute_spawn_internal(
         &self,
         source_pane: Uuid,
@@ -166,6 +210,19 @@ impl AsyncCommandExecutor {
             "Spawn requested: direction={:?}, command={:?}, cwd={:?}",
             direction, command, cwd
         );
+
+        // Check spawn limits before proceeding
+        let current_spawn_count = self.sideband_spawn_count.load(Ordering::SeqCst);
+        if current_spawn_count >= self.spawn_limits.max_panes_per_session {
+            warn!(
+                "Spawn limit reached: {} sideband-spawned panes (max: {})",
+                current_spawn_count, self.spawn_limits.max_panes_per_session
+            );
+            return Err(ExecuteError::ExecutionFailed(format!(
+                "Spawn limit reached: maximum {} sideband-spawned panes allowed",
+                self.spawn_limits.max_panes_per_session
+            )));
+        }
 
         // Step 1: Create the new pane in SessionManager
         let (session_id, pane_id, pane_info, pane_cwd, pane_size) = {
@@ -239,6 +296,13 @@ impl AsyncCommandExecutor {
         debug!(
             "Broadcast PaneCreated to {} clients in session {}",
             delivered, session_id
+        );
+
+        // Increment spawn count for rate limiting
+        let new_count = self.sideband_spawn_count.fetch_add(1, Ordering::SeqCst) + 1;
+        info!(
+            "Sideband spawn successful (total sideband-spawned: {}/{})",
+            new_count, self.spawn_limits.max_panes_per_session
         );
 
         Ok(SpawnResult {

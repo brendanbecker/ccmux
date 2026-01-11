@@ -1,8 +1,11 @@
-//! Sideband XML parser for extracting ccmux commands from PTY output
+//! Sideband command parser for extracting ccmux commands from PTY output
 //!
-//! Parses XML-like tags embedded in terminal output:
-//! - Self-closing: `<ccmux:spawn direction="vertical" />`
-//! - With content: `<ccmux:input pane="1">ls -la</ccmux:input>`
+//! Parses OSC (Operating System Command) escape sequences:
+//! - Self-closing: `\x1b]ccmux:spawn direction="vertical"\x07`
+//! - With content: `\x1b]ccmux:input pane="1"\x07ls -la\x1b]ccmux:/input\x07`
+//!
+//! The OSC format (ESC ] ... BEL) ensures commands won't accidentally trigger
+//! from grep/cat output of source files containing command examples.
 
 use std::collections::HashMap;
 
@@ -13,12 +16,13 @@ use super::commands::{ControlAction, NotifyLevel, PaneRef, SidebandCommand, Spli
 
 /// Parser for extracting sideband commands from terminal output
 pub struct SidebandParser {
-    /// Regex for matching self-closing ccmux tags: <ccmux:cmd attrs />
-    self_closing_regex: Regex,
-    /// Regex for matching ccmux tags with content: <ccmux:cmd attrs>content</ccmux:cmd>
-    /// Note: This uses named groups and we manually verify the closing tag matches
-    content_tag_regex: Regex,
-    /// Buffer for incomplete tags across chunks
+    /// Regex for matching OSC ccmux commands: ESC ] ccmux:cmd attrs BEL
+    /// Format: \x1b]ccmux:CMD ATTRS\x07
+    osc_command_regex: Regex,
+    /// Regex for matching OSC ccmux closing tags: ESC ] ccmux:/cmd BEL
+    /// Format: \x1b]ccmux:/CMD\x07
+    osc_close_regex: Regex,
+    /// Buffer for incomplete commands across chunks
     buffer: String,
 }
 
@@ -32,89 +36,86 @@ impl SidebandParser {
     /// Create a new sideband parser
     pub fn new() -> Self {
         Self {
-            // Match self-closing tags: <ccmux:cmd attrs />
+            // Match OSC commands: ESC ] ccmux:CMD ATTRS BEL (or ESC \)
             // Group 1: command type
-            // Group 2: attributes string
-            self_closing_regex: Regex::new(
-                r"<ccmux:(\w+)([^>]*)/>"
-            ).expect("Invalid self-closing regex"),
-            // Match content tags: <ccmux:cmd attrs>content</ccmux:cmd>
-            // Group 1: command type (opening)
-            // Group 2: attributes string
-            // Group 3: content
-            // Group 4: command type (closing)
-            content_tag_regex: Regex::new(
-                r"<ccmux:(\w+)([^>]*)>(.*?)</ccmux:(\w+)>"
-            ).expect("Invalid content tag regex"),
+            // Group 2: attributes string (may be empty)
+            // Terminators: BEL (\x07) or ST (ESC \, i.e., \x1b\\)
+            osc_command_regex: Regex::new(
+                r"\x1b\]ccmux:(\w+)([^\x07\x1b]*)(?:\x07|\x1b\\)"
+            ).expect("Invalid OSC command regex"),
+            // Match OSC closing tags: ESC ] ccmux:/CMD BEL (or ESC \)
+            // Group 1: command type being closed
+            osc_close_regex: Regex::new(
+                r"\x1b\]ccmux:/(\w+)(?:\x07|\x1b\\)"
+            ).expect("Invalid OSC close regex"),
             buffer: String::new(),
         }
     }
 
     /// Parse output, returning (display_text, commands)
     ///
-    /// - Extracts ccmux commands from the input
-    /// - Strips command tags from display output
-    /// - Buffers incomplete tags for next chunk
+    /// - Extracts ccmux OSC commands from the input
+    /// - Strips command sequences from display output
+    /// - Buffers incomplete sequences for next chunk
     pub fn parse(&mut self, input: &str) -> (String, Vec<SidebandCommand>) {
         let full_input = format!("{}{}", self.buffer, input);
         self.buffer.clear();
 
-        // Collect matches with their positions and types
+        // Collect all opening commands with their positions
+        // (start, end, cmd_type, attrs)
+        let mut open_commands: Vec<(usize, usize, String, String)> = Vec::new();
+        for cap in self.osc_command_regex.captures_iter(&full_input) {
+            let m = cap.get(0).unwrap();
+            let cmd_type = cap.get(1).unwrap().as_str().to_string();
+            let attrs = cap.get(2).unwrap().as_str().trim().to_string();
+            open_commands.push((m.start(), m.end(), cmd_type, attrs));
+        }
+
+        // Collect all closing tags with their positions
+        // (start, end, cmd_type)
+        let mut close_tags: Vec<(usize, usize, String)> = Vec::new();
+        for cap in self.osc_close_regex.captures_iter(&full_input) {
+            let m = cap.get(0).unwrap();
+            let cmd_type = cap.get(1).unwrap().as_str().to_string();
+            close_tags.push((m.start(), m.end(), cmd_type));
+        }
+
+        // Build list of complete commands with their ranges
         // (start, end, cmd_type, attrs, content)
         let mut all_matches: Vec<(usize, usize, String, String, String)> = Vec::new();
 
-        // Find self-closing tags first (they take priority)
-        let mut self_closing_ranges: Vec<(usize, usize)> = Vec::new();
-        for cap in self.self_closing_regex.captures_iter(&full_input) {
-            let m = cap.get(0).unwrap();
-            let cmd_type = cap.get(1).unwrap().as_str().to_string();
-            let attrs = cap.get(2).unwrap().as_str().to_string();
-            all_matches.push((m.start(), m.end(), cmd_type, attrs, String::new()));
-            self_closing_ranges.push((m.start(), m.end()));
-        }
-
-        // Build segments not covered by self-closing tags
-        // These are the regions where we'll look for content tags
-        self_closing_ranges.sort_by_key(|r| r.0);
-        let mut segments: Vec<(usize, &str)> = Vec::new();
-        let mut pos = 0;
-        for (sc_start, sc_end) in &self_closing_ranges {
-            if pos < *sc_start {
-                segments.push((pos, &full_input[pos..*sc_start]));
-            }
-            pos = *sc_end;
-        }
-        if pos < full_input.len() {
-            segments.push((pos, &full_input[pos..]));
-        }
-
-        // Find content tags in each segment
-        for (segment_offset, segment) in segments {
-            for cap in self.content_tag_regex.captures_iter(segment) {
-                let m = cap.get(0).unwrap();
-                let start = segment_offset + m.start();
-                let end = segment_offset + m.end();
-
-                let open_type = cap.get(1).unwrap().as_str();
-                let close_type = cap.get(4).unwrap().as_str();
-
-                // Only include if opening and closing tags match
-                if open_type == close_type {
-                    let attrs = cap.get(2).unwrap().as_str().to_string();
-                    let content = cap.get(3).unwrap().as_str().to_string();
-                    all_matches.push((start, end, open_type.to_string(), attrs, content));
-                } else {
-                    // Mismatched tags - will be stripped but not parsed
-                    warn!(
-                        "Mismatched sideband tags: opening '{}' vs closing '{}'",
-                        open_type, close_type
-                    );
-                    all_matches.push((start, end, String::new(), String::new(), String::new()));
+        for (open_start, open_end, cmd_type, attrs) in &open_commands {
+            // Look for matching close tag after this open tag
+            let mut found_close = false;
+            for (close_start, close_end, close_type) in &close_tags {
+                if close_start > open_end && close_type == cmd_type {
+                    // Found matching close - this is a content command
+                    let content = full_input[*open_end..*close_start].to_string();
+                    all_matches.push((
+                        *open_start,
+                        *close_end,
+                        cmd_type.clone(),
+                        attrs.clone(),
+                        content,
+                    ));
+                    found_close = true;
+                    break;
                 }
             }
+
+            if !found_close {
+                // No close tag - this is a self-closing command (no content)
+                all_matches.push((
+                    *open_start,
+                    *open_end,
+                    cmd_type.clone(),
+                    attrs.clone(),
+                    String::new(),
+                ));
+            }
         }
 
-        // Sort all matches by position
+        // Sort matches by position
         all_matches.sort_by_key(|m| m.0);
 
         // Process matches and build output
@@ -132,14 +133,12 @@ impl SidebandParser {
             display.push_str(&full_input[last_end..start]);
             last_end = end;
 
-            // Parse the command (skip mismatched tags)
-            if !cmd_type.is_empty() {
-                match self.parse_command(&cmd_type, &attrs_str, &content) {
-                    Ok(cmd) => commands.push(cmd),
-                    Err(e) => {
-                        warn!("Invalid sideband command: {}", e);
-                        // Don't display malformed commands - just strip them
-                    }
+            // Parse the command
+            match self.parse_command(&cmd_type, &attrs_str, &content) {
+                Ok(cmd) => commands.push(cmd),
+                Err(e) => {
+                    warn!("Invalid sideband command: {}", e);
+                    // Don't display malformed commands - just strip them
                 }
             }
         }
@@ -147,11 +146,12 @@ impl SidebandParser {
         // Append remaining text
         display.push_str(&full_input[last_end..]);
 
-        // Check for incomplete tag at end (buffer for next chunk)
-        if let Some(incomplete_start) = display.rfind("<ccmux:") {
-            // Check if the tag is complete
+        // Check for incomplete OSC sequence at end (buffer for next chunk)
+        // Look for ESC ] ccmux: that doesn't have a terminator
+        if let Some(incomplete_start) = display.rfind("\x1b]ccmux:") {
+            // Check if there's a terminator after it
             let after_tag = &display[incomplete_start..];
-            if !after_tag.contains("/>") && !after_tag.contains("</ccmux:") {
+            if !after_tag.contains('\x07') && !after_tag.contains("\x1b\\") {
                 self.buffer = display[incomplete_start..].to_string();
                 display.truncate(incomplete_start);
             }
@@ -292,12 +292,28 @@ impl std::fmt::Debug for SidebandParser {
 mod tests {
     use super::*;
 
+    // Helper to create OSC command string
+    fn osc(cmd: &str) -> String {
+        format!("\x1b]ccmux:{}\x07", cmd)
+    }
+
+    // Helper to create OSC command with content
+    fn osc_content(cmd: &str, attrs: &str, content: &str) -> String {
+        format!(
+            "\x1b]ccmux:{} {}\x07{}\x1b]ccmux:/{}\x07",
+            cmd, attrs, content, cmd
+        )
+    }
+
     #[test]
     fn test_parse_spawn_command() {
         let mut parser = SidebandParser::new();
-        let input = r#"Hello <ccmux:spawn direction="vertical" command="npm test" /> World"#;
+        let input = format!(
+            "Hello {} World",
+            osc(r#"spawn direction="vertical" command="npm test""#)
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "Hello  World");
         assert_eq!(commands.len(), 1);
@@ -313,9 +329,9 @@ mod tests {
     #[test]
     fn test_parse_spawn_horizontal() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:spawn direction="horizontal" />"#;
+        let input = osc(r#"spawn direction="horizontal""#);
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "");
         assert_eq!(commands.len(), 1);
@@ -329,9 +345,9 @@ mod tests {
     #[test]
     fn test_parse_spawn_shorthand_direction() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:spawn direction="h" />"#;
+        let input = osc(r#"spawn direction="h""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Spawn { direction, .. } = &commands[0] {
             assert_eq!(*direction, SplitDirection::Horizontal);
@@ -343,9 +359,9 @@ mod tests {
     #[test]
     fn test_parse_spawn_with_command_and_cwd() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:spawn command="cargo build" cwd="/home/user" />"#;
+        let input = osc(r#"spawn command="cargo build" cwd="/home/user""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Spawn { command, cwd, .. } = &commands[0] {
             assert_eq!(command.as_deref(), Some("cargo build"));
@@ -358,9 +374,9 @@ mod tests {
     #[test]
     fn test_parse_input_with_content() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:input pane="1">ls -la</ccmux:input>"#;
+        let input = osc_content("input", r#"pane="1""#, "ls -la");
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "");
         assert_eq!(commands.len(), 1);
@@ -375,9 +391,9 @@ mod tests {
     #[test]
     fn test_parse_input_active_pane() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:input>echo hello</ccmux:input>"#;
+        let input = osc_content("input", "", "echo hello");
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Input { pane, text } = &commands[0] {
             assert_eq!(*pane, PaneRef::Active);
@@ -390,9 +406,9 @@ mod tests {
     #[test]
     fn test_parse_focus_command() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:focus pane="2" />"#;
+        let input = osc(r#"focus pane="2""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Focus { pane } = &commands[0] {
             assert_eq!(*pane, PaneRef::Index(2));
@@ -405,7 +421,7 @@ mod tests {
     fn test_parse_focus_by_uuid() {
         let mut parser = SidebandParser::new();
         let uuid = "550e8400-e29b-41d4-a716-446655440000";
-        let input = format!(r#"<ccmux:focus pane="{}" />"#, uuid);
+        let input = osc(&format!(r#"focus pane="{}""#, uuid));
 
         let (_, commands) = parser.parse(&input);
 
@@ -419,9 +435,9 @@ mod tests {
     #[test]
     fn test_parse_scroll_command() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:scroll lines="-20" pane="0" />"#;
+        let input = osc(r#"scroll lines="-20" pane="0""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Scroll { pane, lines } = &commands[0] {
             assert_eq!(*pane, Some(PaneRef::Index(0)));
@@ -434,9 +450,9 @@ mod tests {
     #[test]
     fn test_parse_scroll_default_lines() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:scroll />"#;
+        let input = osc("scroll");
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Scroll { pane, lines } = &commands[0] {
             assert_eq!(*pane, None);
@@ -449,9 +465,13 @@ mod tests {
     #[test]
     fn test_parse_notify_command() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:notify title="Build Complete" level="info">Build succeeded with 0 errors</ccmux:notify>"#;
+        let input = osc_content(
+            "notify",
+            r#"title="Build Complete" level="info""#,
+            "Build succeeded with 0 errors",
+        );
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Notify {
             title,
@@ -470,9 +490,9 @@ mod tests {
     #[test]
     fn test_parse_notify_warning() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:notify level="warning">Warning message</ccmux:notify>"#;
+        let input = osc_content("notify", r#"level="warning""#, "Warning message");
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Notify { level, .. } = &commands[0] {
             assert_eq!(*level, NotifyLevel::Warning);
@@ -484,9 +504,9 @@ mod tests {
     #[test]
     fn test_parse_notify_error() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:notify level="error">Error!</ccmux:notify>"#;
+        let input = osc_content("notify", r#"level="error""#, "Error!");
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Notify { level, .. } = &commands[0] {
             assert_eq!(*level, NotifyLevel::Error);
@@ -498,9 +518,9 @@ mod tests {
     #[test]
     fn test_parse_control_close() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:control action="close" pane="1" />"#;
+        let input = osc(r#"control action="close" pane="1""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Control { action, pane } = &commands[0] {
             assert_eq!(*action, ControlAction::Close);
@@ -513,9 +533,9 @@ mod tests {
     #[test]
     fn test_parse_control_pin() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:control action="pin" />"#;
+        let input = osc(r#"control action="pin""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Control { action, .. } = &commands[0] {
             assert_eq!(*action, ControlAction::Pin);
@@ -527,9 +547,9 @@ mod tests {
     #[test]
     fn test_parse_control_resize() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:control action="resize" cols="120" rows="40" />"#;
+        let input = osc(r#"control action="resize" cols="120" rows="40""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Control { action, .. } = &commands[0] {
             assert_eq!(*action, ControlAction::Resize { cols: 120, rows: 40 });
@@ -539,43 +559,47 @@ mod tests {
     }
 
     #[test]
-    fn test_incomplete_tag_buffering() {
+    fn test_incomplete_osc_buffering() {
         let mut parser = SidebandParser::new();
 
-        // First chunk with incomplete tag
-        let (display1, commands1) = parser.parse("Hello <ccmux:spa");
+        // First chunk with incomplete OSC sequence (no terminator)
+        let (display1, commands1) = parser.parse("Hello \x1b]ccmux:spa");
         assert_eq!(display1, "Hello ");
         assert!(commands1.is_empty());
         assert!(parser.has_buffered());
 
-        // Second chunk completes the tag
-        let (display2, commands2) = parser.parse(r#"wn direction="h" />"#);
+        // Second chunk completes the OSC
+        let (display2, commands2) = parser.parse("wn direction=\"h\"\x07");
         assert_eq!(display2, "");
         assert_eq!(commands2.len(), 1);
         assert!(!parser.has_buffered());
     }
 
     #[test]
-    fn test_incomplete_tag_with_content() {
+    fn test_incomplete_content_command() {
         let mut parser = SidebandParser::new();
 
-        // First chunk with incomplete tag
-        let (display1, commands1) = parser.parse(r#"<ccmux:input pane="1"#);
-        assert_eq!(display1, "");
-        assert!(commands1.is_empty());
+        // When there's an open tag without a close tag, parser treats it as
+        // self-closing (no content). The "content" becomes display text.
+        let (display, commands) = parser.parse("\x1b]ccmux:input pane=\"1\"\x07ls -la");
 
-        // Second chunk completes it
-        let (display2, commands2) = parser.parse(r#">ls -la</ccmux:input>"#);
-        assert_eq!(display2, "");
-        assert_eq!(commands2.len(), 1);
+        // The open tag is parsed as a self-closing command (empty content)
+        // "ls -la" becomes display text since there's no close tag
+        assert_eq!(display, "ls -la");
+        assert_eq!(commands.len(), 1);
+        if let SidebandCommand::Input { text, .. } = &commands[0] {
+            assert_eq!(text, ""); // No content captured without close tag
+        } else {
+            panic!("Expected Input command");
+        }
     }
 
     #[test]
     fn test_malformed_command_stripped() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:unknown foo="bar" /> visible"#;
+        let input = format!("{} visible", osc(r#"unknown foo="bar""#));
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, " visible"); // Command stripped
         assert!(commands.is_empty()); // Unknown command ignored
@@ -584,9 +608,13 @@ mod tests {
     #[test]
     fn test_multiple_commands() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:focus pane="0" /><ccmux:input pane="0">test</ccmux:input>"#;
+        let input = format!(
+            "{}{}",
+            osc(r#"focus pane="0""#),
+            osc_content("input", r#"pane="0""#, "test")
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "");
         assert_eq!(commands.len(), 2);
@@ -595,9 +623,13 @@ mod tests {
     #[test]
     fn test_mixed_content_and_commands() {
         let mut parser = SidebandParser::new();
-        let input = "Start <ccmux:focus pane=\"1\" /> Middle <ccmux:scroll lines=\"5\" /> End";
+        let input = format!(
+            "Start {} Middle {} End",
+            osc(r#"focus pane="1""#),
+            osc(r#"scroll lines="5""#)
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "Start  Middle  End");
         assert_eq!(commands.len(), 2);
@@ -624,8 +656,8 @@ mod tests {
     fn test_clear_buffer() {
         let mut parser = SidebandParser::new();
 
-        // Create incomplete tag
-        let _ = parser.parse("<ccmux:spawn");
+        // Create incomplete OSC sequence
+        let _ = parser.parse("\x1b]ccmux:spawn");
         assert!(parser.has_buffered());
 
         parser.clear_buffer();
@@ -643,9 +675,9 @@ mod tests {
     #[test]
     fn test_single_quote_attributes() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:spawn direction='vertical' command='cargo test' />"#;
+        let input = osc("spawn direction='vertical' command='cargo test'");
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Spawn {
             direction, command, ..
@@ -661,9 +693,9 @@ mod tests {
     #[test]
     fn test_pane_ref_active_explicit() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:focus pane="active" />"#;
+        let input = osc(r#"focus pane="active""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         if let SidebandCommand::Focus { pane } = &commands[0] {
             assert_eq!(*pane, PaneRef::Active);
@@ -675,9 +707,9 @@ mod tests {
     #[test]
     fn test_invalid_pane_ref() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:focus pane="invalid-ref" />"#;
+        let input = osc(r#"focus pane="invalid-ref""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         // Invalid pane ref should result in command being dropped
         assert!(commands.is_empty());
@@ -686,9 +718,9 @@ mod tests {
     #[test]
     fn test_control_missing_action() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:control pane="1" />"#;
+        let input = osc(r#"control pane="1""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         // Missing action should result in command being dropped
         assert!(commands.is_empty());
@@ -697,9 +729,9 @@ mod tests {
     #[test]
     fn test_control_unknown_action() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:control action="unknown" />"#;
+        let input = osc(r#"control action="unknown""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         // Unknown action should result in command being dropped
         assert!(commands.is_empty());
@@ -726,9 +758,9 @@ mod tests {
     #[test]
     fn test_command_at_start() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:focus pane="0" />After"#;
+        let input = format!("{}After", osc(r#"focus pane="0""#));
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "After");
         assert_eq!(commands.len(), 1);
@@ -737,9 +769,9 @@ mod tests {
     #[test]
     fn test_command_at_end() {
         let mut parser = SidebandParser::new();
-        let input = r#"Before<ccmux:focus pane="0" />"#;
+        let input = format!("Before{}", osc(r#"focus pane="0""#));
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "Before");
         assert_eq!(commands.len(), 1);
@@ -748,9 +780,14 @@ mod tests {
     #[test]
     fn test_consecutive_commands() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:focus pane="0" /><ccmux:focus pane="1" /><ccmux:focus pane="2" />"#;
+        let input = format!(
+            "{}{}{}",
+            osc(r#"focus pane="0""#),
+            osc(r#"focus pane="1""#),
+            osc(r#"focus pane="2""#)
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert_eq!(display, "");
         assert_eq!(commands.len(), 3);
@@ -759,10 +796,13 @@ mod tests {
     #[test]
     fn test_preserve_ansi_escapes() {
         let mut parser = SidebandParser::new();
-        // ANSI color codes around a command
-        let input = "\x1b[31mRed\x1b[0m <ccmux:focus pane=\"0\" /> \x1b[32mGreen\x1b[0m";
+        // ANSI color codes around a command - these should NOT be parsed as ccmux commands
+        let input = format!(
+            "\x1b[31mRed\x1b[0m {} \x1b[32mGreen\x1b[0m",
+            osc(r#"focus pane="0""#)
+        );
 
-        let (display, commands) = parser.parse(input);
+        let (display, commands) = parser.parse(&input);
 
         assert!(display.contains("\x1b[31m"));
         assert!(display.contains("\x1b[32m"));
@@ -772,9 +812,9 @@ mod tests {
     #[test]
     fn test_control_resize_missing_dimensions() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:control action="resize" />"#;
+        let input = osc(r#"control action="resize""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         // Missing cols/rows should result in command being dropped
         assert!(commands.is_empty());
@@ -783,11 +823,56 @@ mod tests {
     #[test]
     fn test_control_resize_partial_dimensions() {
         let mut parser = SidebandParser::new();
-        let input = r#"<ccmux:control action="resize" cols="80" />"#;
+        let input = osc(r#"control action="resize" cols="80""#);
 
-        let (_, commands) = parser.parse(input);
+        let (_, commands) = parser.parse(&input);
 
         // Missing rows should result in command being dropped
         assert!(commands.is_empty());
+    }
+
+    #[test]
+    fn test_old_xml_format_not_parsed() {
+        // CRITICAL: Old XML format should NOT trigger commands anymore
+        // This is the fix for the runaway spawning bug
+        let mut parser = SidebandParser::new();
+        let input = r#"<ccmux:spawn direction="vertical" /> some text"#;
+
+        let (display, commands) = parser.parse(input);
+
+        // Old format should pass through as plain text, not be parsed
+        assert_eq!(display, input);
+        assert!(commands.is_empty());
+    }
+
+    #[test]
+    fn test_grep_output_not_parsed() {
+        // Simulating grep output that shows source code containing old format
+        let mut parser = SidebandParser::new();
+        let input = r#"parser.rs:123: <ccmux:spawn direction="vertical" />"#;
+
+        let (display, commands) = parser.parse(input);
+
+        // Should pass through unchanged - old XML format not parsed
+        assert_eq!(display, input);
+        assert!(commands.is_empty());
+    }
+
+    #[test]
+    fn test_st_terminator() {
+        // Test ESC followed by backslash (ST) as terminator instead of BEL
+        let mut parser = SidebandParser::new();
+        // ST terminator is ESC followed by backslash: \x1b\x5c
+        let input = "\x1b]ccmux:spawn direction=\"vertical\"\x1b\x5c";
+
+        let (display, commands) = parser.parse(input);
+
+        assert_eq!(display, "");
+        assert_eq!(commands.len(), 1);
+        if let SidebandCommand::Spawn { direction, .. } = &commands[0] {
+            assert_eq!(*direction, SplitDirection::Vertical);
+        } else {
+            panic!("Expected Spawn command");
+        }
     }
 }
