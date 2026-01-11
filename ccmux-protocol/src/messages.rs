@@ -299,6 +299,24 @@ pub enum ClientMessage {
         key: Option<String>,
     },
 
+    // ==================== Orchestration MCP Tools (FEAT-048) ====================
+
+    /// Set tags on a session (add/remove) for MCP bridge
+    SetTags {
+        /// Session filter (name or ID, uses first if omitted)
+        session_filter: Option<String>,
+        /// Tags to add
+        add: Vec<String>,
+        /// Tags to remove
+        remove: Vec<String>,
+    },
+
+    /// Get tags from a session for MCP bridge
+    GetTags {
+        /// Session filter (name or ID, uses first if omitted)
+        session_filter: Option<String>,
+    },
+
     // ==================== User Priority Lock Messages (FEAT-056) ====================
 
     /// User entered command mode (prefix key pressed)
@@ -547,6 +565,24 @@ pub enum ServerMessage {
         session_name: String,
         /// All metadata (or single requested key)
         metadata: std::collections::HashMap<String, String>,
+    },
+
+    // ==================== Orchestration MCP Tools (FEAT-048) ====================
+
+    /// Tags were set on a session (for MCP bridge)
+    TagsSet {
+        session_id: Uuid,
+        session_name: String,
+        /// Current tags after the operation
+        tags: std::collections::HashSet<String>,
+    },
+
+    /// Session tags (for MCP bridge)
+    TagsList {
+        session_id: Uuid,
+        session_name: String,
+        /// All tags for the session
+        tags: std::collections::HashSet<String>,
     },
 
     // ==================== Focus Change Broadcasts (BUG-026) ====================

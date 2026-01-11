@@ -497,6 +497,160 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                 "required": ["layout"]
             }),
         },
+        // ==================== FEAT-048: Orchestration MCP Tools ====================
+        Tool {
+            name: "ccmux_send_orchestration".into(),
+            description: "Send orchestration message to other sessions using tag-based routing".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "target": {
+                        "type": "object",
+                        "description": "Target for the message. Use ONE of: {\"tag\": \"..\"}, {\"session\": \"uuid\"}, {\"broadcast\": true}, {\"worktree\": \"path\"}",
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "tag": {
+                                        "type": "string",
+                                        "description": "Send to sessions with this tag (e.g., 'orchestrator', 'worker')"
+                                    }
+                                },
+                                "required": ["tag"]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "session": {
+                                        "type": "string",
+                                        "format": "uuid",
+                                        "description": "Send to specific session by UUID"
+                                    }
+                                },
+                                "required": ["session"]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "broadcast": {
+                                        "type": "boolean",
+                                        "const": true,
+                                        "description": "Broadcast to all sessions"
+                                    }
+                                },
+                                "required": ["broadcast"]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "worktree": {
+                                        "type": "string",
+                                        "description": "Send to sessions in specific worktree path"
+                                    }
+                                },
+                                "required": ["worktree"]
+                            }
+                        ]
+                    },
+                    "msg_type": {
+                        "type": "string",
+                        "description": "Message type identifier (e.g., 'status.update', 'task.assigned', 'help.request')"
+                    },
+                    "payload": {
+                        "type": "object",
+                        "description": "Message payload - structure defined by the workflow/message type"
+                    }
+                },
+                "required": ["target", "msg_type", "payload"]
+            }),
+        },
+        Tool {
+            name: "ccmux_set_tags".into(),
+            description: "Add or remove tags on a session for routing purposes".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Session UUID or name. Uses first session if omitted."
+                    },
+                    "add": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tags to add (e.g., ['orchestrator', 'primary'])"
+                    },
+                    "remove": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Tags to remove"
+                    }
+                }
+            }),
+        },
+        Tool {
+            name: "ccmux_get_tags".into(),
+            description: "Get tags from a session".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "session": {
+                        "type": "string",
+                        "description": "Session UUID or name. Uses first session if omitted."
+                    }
+                }
+            }),
+        },
+        Tool {
+            name: "ccmux_report_status".into(),
+            description: "Report current session status to orchestrator (sends to sessions tagged 'orchestrator')".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["idle", "working", "waiting_for_input", "blocked", "complete", "error"],
+                        "description": "Current status of the session"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "Optional status message with details"
+                    }
+                },
+                "required": ["status"]
+            }),
+        },
+        Tool {
+            name: "ccmux_request_help".into(),
+            description: "Request help from orchestrator (sends to sessions tagged 'orchestrator')".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "context": {
+                        "type": "string",
+                        "description": "Description of what help is needed"
+                    }
+                },
+                "required": ["context"]
+            }),
+        },
+        Tool {
+            name: "ccmux_broadcast".into(),
+            description: "Broadcast a message to all other sessions".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "msg_type": {
+                        "type": "string",
+                        "description": "Message type identifier"
+                    },
+                    "payload": {
+                        "type": "object",
+                        "description": "Message payload"
+                    }
+                },
+                "required": ["msg_type", "payload"]
+            }),
+        },
     ]
 }
 
@@ -567,5 +721,12 @@ mod tests {
         // FEAT-050: Session metadata
         assert!(names.contains(&"ccmux_set_metadata"));
         assert!(names.contains(&"ccmux_get_metadata"));
+        // FEAT-048: Orchestration MCP tools
+        assert!(names.contains(&"ccmux_send_orchestration"));
+        assert!(names.contains(&"ccmux_set_tags"));
+        assert!(names.contains(&"ccmux_get_tags"));
+        assert!(names.contains(&"ccmux_report_status"));
+        assert!(names.contains(&"ccmux_request_help"));
+        assert!(names.contains(&"ccmux_broadcast"));
     }
 }

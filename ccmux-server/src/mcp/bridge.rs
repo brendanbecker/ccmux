@@ -520,6 +520,59 @@ impl McpBridge {
                 let key = arguments["key"].as_str().map(String::from);
                 self.tool_get_metadata(session, key).await
             }
+            // FEAT-048: Orchestration MCP tools
+            "ccmux_send_orchestration" => {
+                let target = &arguments["target"];
+                let msg_type = arguments["msg_type"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'msg_type' parameter".into()))?;
+                let payload = arguments["payload"].clone();
+                self.tool_send_orchestration(target, msg_type, payload).await
+            }
+            "ccmux_set_tags" => {
+                let session = arguments["session"].as_str().map(String::from);
+                let add = arguments["add"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                let remove = arguments["remove"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                self.tool_set_tags(session, add, remove).await
+            }
+            "ccmux_get_tags" => {
+                let session = arguments["session"].as_str().map(String::from);
+                self.tool_get_tags(session).await
+            }
+            "ccmux_report_status" => {
+                let status = arguments["status"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'status' parameter".into()))?;
+                let message = arguments["message"].as_str().map(String::from);
+                self.tool_report_status(status, message).await
+            }
+            "ccmux_request_help" => {
+                let context = arguments["context"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'context' parameter".into()))?;
+                self.tool_request_help(context).await
+            }
+            "ccmux_broadcast" => {
+                let msg_type = arguments["msg_type"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'msg_type' parameter".into()))?;
+                let payload = arguments["payload"].clone();
+                self.tool_broadcast(msg_type, payload).await
+            }
             _ => Err(McpError::UnknownTool(name.into())),
         }
     }
@@ -1342,6 +1395,229 @@ impl McpBridge {
                     "session_id": session_id.to_string(),
                     "session_name": session_name,
                     "metadata": metadata,
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    // ==================== FEAT-048: Orchestration Tool Implementations ====================
+
+    async fn tool_send_orchestration(
+        &mut self,
+        target: &serde_json::Value,
+        msg_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<ToolResult, McpError> {
+        // Parse the target
+        let orchestration_target = if let Some(tag) = target.get("tag").and_then(|v| v.as_str()) {
+            ccmux_protocol::OrchestrationTarget::Tagged(tag.to_string())
+        } else if let Some(session) = target.get("session").and_then(|v| v.as_str()) {
+            let session_id = Uuid::parse_str(session)
+                .map_err(|e| McpError::InvalidParams(format!("Invalid session UUID: {}", e)))?;
+            ccmux_protocol::OrchestrationTarget::Session(session_id)
+        } else if target.get("broadcast").and_then(|v| v.as_bool()).unwrap_or(false) {
+            ccmux_protocol::OrchestrationTarget::Broadcast
+        } else if let Some(worktree) = target.get("worktree").and_then(|v| v.as_str()) {
+            ccmux_protocol::OrchestrationTarget::Worktree(worktree.to_string())
+        } else {
+            return Err(McpError::InvalidParams(
+                "Invalid target: must specify 'tag', 'session', 'broadcast', or 'worktree'".into(),
+            ));
+        };
+
+        let message = ccmux_protocol::OrchestrationMessage::new(msg_type, payload);
+
+        self.send_to_daemon(ClientMessage::SendOrchestration {
+            target: orchestration_target,
+            message,
+        })
+        .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::OrchestrationDelivered { delivered_count } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "delivered_count": delivered_count,
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_set_tags(
+        &mut self,
+        session_filter: Option<String>,
+        add: Vec<String>,
+        remove: Vec<String>,
+    ) -> Result<ToolResult, McpError> {
+        self.send_to_daemon(ClientMessage::SetTags {
+            session_filter,
+            add,
+            remove,
+        })
+        .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::TagsSet {
+                session_id,
+                session_name,
+                tags,
+            } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "session_id": session_id.to_string(),
+                    "session_name": session_name,
+                    "tags": tags.into_iter().collect::<Vec<_>>(),
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_get_tags(
+        &mut self,
+        session_filter: Option<String>,
+    ) -> Result<ToolResult, McpError> {
+        self.send_to_daemon(ClientMessage::GetTags { session_filter })
+            .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::TagsList {
+                session_id,
+                session_name,
+                tags,
+            } => {
+                let result = serde_json::json!({
+                    "session_id": session_id.to_string(),
+                    "session_name": session_name,
+                    "tags": tags.into_iter().collect::<Vec<_>>(),
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_report_status(
+        &mut self,
+        status: &str,
+        message: Option<String>,
+    ) -> Result<ToolResult, McpError> {
+        // Convenience tool: sends status.update message to sessions tagged "orchestrator"
+        let target = ccmux_protocol::OrchestrationTarget::Tagged("orchestrator".to_string());
+        let payload = serde_json::json!({
+            "status": status,
+            "message": message,
+        });
+        let msg = ccmux_protocol::OrchestrationMessage::new("status.update", payload);
+
+        self.send_to_daemon(ClientMessage::SendOrchestration {
+            target,
+            message: msg,
+        })
+        .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::OrchestrationDelivered { delivered_count } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "delivered_count": delivered_count,
+                    "status": status,
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_request_help(&mut self, context: &str) -> Result<ToolResult, McpError> {
+        // Convenience tool: sends help.request message to sessions tagged "orchestrator"
+        let target = ccmux_protocol::OrchestrationTarget::Tagged("orchestrator".to_string());
+        let payload = serde_json::json!({
+            "context": context,
+        });
+        let msg = ccmux_protocol::OrchestrationMessage::new("help.request", payload);
+
+        self.send_to_daemon(ClientMessage::SendOrchestration {
+            target,
+            message: msg,
+        })
+        .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::OrchestrationDelivered { delivered_count } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "delivered_count": delivered_count,
+                    "type": "help.request",
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_broadcast(
+        &mut self,
+        msg_type: &str,
+        payload: serde_json::Value,
+    ) -> Result<ToolResult, McpError> {
+        // Convenience tool: broadcasts message to all sessions
+        let target = ccmux_protocol::OrchestrationTarget::Broadcast;
+        let msg = ccmux_protocol::OrchestrationMessage::new(msg_type, payload);
+
+        self.send_to_daemon(ClientMessage::SendOrchestration {
+            target,
+            message: msg,
+        })
+        .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::OrchestrationDelivered { delivered_count } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "delivered_count": delivered_count,
+                    "type": msg_type,
                 });
 
                 let json = serde_json::to_string_pretty(&result)

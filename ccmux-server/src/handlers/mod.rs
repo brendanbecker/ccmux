@@ -280,6 +280,17 @@ impl HandlerContext {
                 key,
             } => self.handle_get_metadata(session_filter, key).await,
 
+            // FEAT-048: Orchestration MCP tag handlers
+            ClientMessage::SetTags {
+                session_filter,
+                add,
+                remove,
+            } => self.handle_set_tags(session_filter, add, remove).await,
+
+            ClientMessage::GetTags { session_filter } => {
+                self.handle_get_tags(session_filter).await
+            }
+
             // User priority lock handlers (FEAT-056)
             ClientMessage::UserCommandModeEntered { timeout_ms } => {
                 self.handle_user_command_mode_entered(timeout_ms)
