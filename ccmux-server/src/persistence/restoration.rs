@@ -417,6 +417,7 @@ impl SessionRestorer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use ccmux_protocol::ClaudeState;
     use std::collections::HashMap;
 
