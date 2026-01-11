@@ -5,15 +5,28 @@
 **Type**: new_feature
 **Estimated Effort**: medium
 **Business Value**: high
+**Status**: unblocked (FEAT-028 complete)
 
 ## Overview
 
-Add MCP tools for the existing orchestration message types, enabling agents to communicate directly without going through shell commands. ccmux already has OrchestrationMessage types in `ccmux-protocol/src/messages.rs:8-67`:
+Add MCP tools for the existing orchestration message types, enabling agents to communicate directly without going through shell commands. ccmux already has OrchestrationMessage types in `ccmux-protocol/src/messages.rs`:
 
-- **Message Types**: StatusUpdate, TaskAssignment, TaskComplete, HelpRequest, Broadcast, SyncRequest
-- **Targets**: Orchestrator, Session(Uuid), Broadcast, Worktree(String)
+- **Message Format**: Generic `OrchestrationMessage { msg_type: String, payload: serde_json::Value }` for flexible, workflow-defined messages
+- **Targets** (updated with FEAT-028 tag-based routing):
+  - `Tagged(String)` - Send to sessions with a specific tag (e.g., "orchestrator", "worker", "evaluator")
+  - `Session(Uuid)` - Send to specific session by ID
+  - `Broadcast` - Broadcast to all sessions in same repo
+  - `Worktree(String)` - Send to sessions in specific worktree
 
 Currently these are only accessible via the daemon protocol (ClientMessage::SendOrchestration), not MCP.
+
+## Architecture Context (Post-FEAT-028)
+
+FEAT-028 replaced the binary orchestrator/worker model with flexible tag-based routing:
+- Sessions have `tags: HashSet<String>` for classification
+- `is_orchestrator()` now checks if tags contain "orchestrator"
+- `OrchestrationTarget::Tagged("orchestrator")` replaces the old `OrchestrationTarget::Orchestrator`
+- Multiple tags per session enable nuanced routing (e.g., "orchestrator", "primary", "evaluator")
 
 ## Benefits
 
@@ -22,80 +35,77 @@ Currently these are only accessible via the daemon protocol (ClientMessage::Send
 - Eliminates need for shell command workarounds for agent communication
 - Provides structured, typed communication between agents
 
-## Existing Protocol Types
+## Current Protocol Types (Post-FEAT-028)
 
 From `ccmux-protocol/src/messages.rs`:
 
 ```rust
-pub enum OrchestrationMessage {
-    StatusUpdate {
-        session_id: Uuid,
-        status: WorkerStatus,
-        message: Option<String>,
-    },
-    TaskAssignment {
-        task_id: Uuid,
-        description: String,
-        files: Vec<String>,
-    },
-    TaskComplete {
-        task_id: Uuid,
-        success: bool,
-        summary: String,
-    },
-    HelpRequest {
-        session_id: Uuid,
-        context: String,
-    },
-    Broadcast {
-        from_session_id: Uuid,
-        message: String,
-    },
-    SyncRequest,
+/// Generic orchestration message with user-defined semantics
+/// Allows workflows to define their own message types and payloads
+pub struct OrchestrationMessage {
+    /// User-defined message type identifier (e.g., "status_update", "task.assigned", "gas_town.auction")
+    pub msg_type: String,
+    /// Message payload as JSON - structure is defined by the workflow
+    pub payload: serde_json::Value,
 }
 
-pub enum WorkerStatus {
-    Idle,
-    Working,
-    WaitingForInput,
-    Blocked,
-    Complete,
-    Error,
-}
-
+/// Target for orchestration messages (FEAT-028 tag-based routing)
 pub enum OrchestrationTarget {
-    Orchestrator,
+    /// Send to sessions with a specific tag (e.g., "orchestrator", "worker")
+    Tagged(String),
+    /// Send to specific session by ID
     Session(Uuid),
+    /// Broadcast to all sessions in same repo
     Broadcast,
+    /// Send to sessions in specific worktree
     Worktree(String),
 }
 ```
+
+**Note**: The old enum-based `OrchestrationMessage` with fixed variants (StatusUpdate, TaskAssignment, etc.) has been replaced with a flexible `msg_type` + `payload` structure. Workflows define their own message semantics.
+
+### Common Message Type Conventions
+
+While the protocol is now generic, these are common conventions:
+- `status.update` - Worker status changes (idle, working, blocked, etc.)
+- `task.assigned` - Task assignment from orchestrator
+- `task.complete` - Task completion notification
+- `help.request` - Worker requesting orchestrator assistance
+- `sync.request` - Request state synchronization
 
 ## Implementation Tasks
 
 ### Section 1: Core MCP Tool
 
 - [ ] Add `ccmux_send_orchestration` MCP tool in `ccmux-server/src/mcp/tools.rs`
-- [ ] Define schema for target parameter:
-  - `{orchestrator: true}` - Send to orchestrator session
+- [ ] Define schema for target parameter (FEAT-028 tag-based routing):
+  - `{tag: "orchestrator"}` - Send to sessions tagged "orchestrator"
+  - `{tag: "worker"}` - Send to sessions tagged "worker"
   - `{session: "uuid"}` - Send to specific session
   - `{broadcast: true}` - Broadcast to all sessions in same repo
   - `{worktree: "path"}` - Send to sessions in specific worktree
-- [ ] Define schema for message parameter matching OrchestrationMessage variants
+- [ ] Define schema for message parameter with `msg_type` and `payload` fields
 - [ ] Add handler that constructs and sends ClientMessage::SendOrchestration to daemon
+
+### Section 1b: Tag Management Tools
+
+- [ ] Add `ccmux_set_tags` MCP tool to add/remove tags on a session
+- [ ] Add `ccmux_get_tags` MCP tool to retrieve session tags
+- [ ] Allow orchestrator to self-identify by adding "orchestrator" tag
 
 ### Section 2: Convenience Tools
 
-- [ ] Add `ccmux_report_status(status, message)` - shorthand for StatusUpdate
+- [ ] Add `ccmux_report_status(status, message)` - shorthand for status.update message
   - Auto-fills session_id from current session context
   - status: one of "idle", "working", "waiting_for_input", "blocked", "complete", "error"
   - message: optional string
-- [ ] Add `ccmux_request_help(context)` - shorthand for HelpRequest
+  - Automatically targets `Tagged("orchestrator")`
+- [ ] Add `ccmux_request_help(context)` - shorthand for help.request message
   - Auto-fills session_id from current session context
-  - Automatically targets Orchestrator
-- [ ] Add `ccmux_broadcast(message)` - shorthand for Broadcast
+  - Automatically targets `Tagged("orchestrator")`
+- [ ] Add `ccmux_broadcast(message)` - shorthand for broadcast message
   - Auto-fills from_session_id from current session context
-  - Automatically uses Broadcast target
+  - Automatically uses `Broadcast` target
 
 ### Section 3: Subscription/Notification
 
@@ -127,102 +137,81 @@ pub enum OrchestrationTarget {
 - [ ] All tests passing
 - [ ] Documentation updated
 
-## Tool Schema Design
+## Tool Schema Design (Updated for FEAT-028)
 
 ### ccmux_send_orchestration
 
 ```json
 {
   "name": "ccmux_send_orchestration",
-  "description": "Send orchestration message to other sessions",
+  "description": "Send orchestration message to other sessions using tag-based routing",
   "inputSchema": {
     "type": "object",
     "properties": {
       "target": {
         "oneOf": [
-          {"type": "object", "properties": {"orchestrator": {"const": true}}, "required": ["orchestrator"]},
+          {"type": "object", "properties": {"tag": {"type": "string", "description": "Send to sessions with this tag (e.g., 'orchestrator', 'worker')"}}, "required": ["tag"]},
           {"type": "object", "properties": {"session": {"type": "string", "format": "uuid"}}, "required": ["session"]},
           {"type": "object", "properties": {"broadcast": {"const": true}}, "required": ["broadcast"]},
           {"type": "object", "properties": {"worktree": {"type": "string"}}, "required": ["worktree"]}
         ]
       },
-      "message": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "status_update": {
-                "type": "object",
-                "properties": {
-                  "status": {"enum": ["idle", "working", "waiting_for_input", "blocked", "complete", "error"]},
-                  "message": {"type": "string"}
-                },
-                "required": ["status"]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "task_assignment": {
-                "type": "object",
-                "properties": {
-                  "task_id": {"type": "string", "format": "uuid"},
-                  "description": {"type": "string"},
-                  "files": {"type": "array", "items": {"type": "string"}}
-                },
-                "required": ["task_id", "description", "files"]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "task_complete": {
-                "type": "object",
-                "properties": {
-                  "task_id": {"type": "string", "format": "uuid"},
-                  "success": {"type": "boolean"},
-                  "summary": {"type": "string"}
-                },
-                "required": ["task_id", "success", "summary"]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "help_request": {
-                "type": "object",
-                "properties": {
-                  "context": {"type": "string"}
-                },
-                "required": ["context"]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "broadcast": {
-                "type": "object",
-                "properties": {
-                  "message": {"type": "string"}
-                },
-                "required": ["message"]
-              }
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "sync_request": {"const": true}
-            }
-          }
-        ]
+      "msg_type": {
+        "type": "string",
+        "description": "Message type identifier (e.g., 'status.update', 'task.assigned', 'gas_town.auction')"
+      },
+      "payload": {
+        "type": "object",
+        "description": "Message payload - structure defined by the workflow/message type"
       }
     },
-    "required": ["target", "message"]
+    "required": ["target", "msg_type", "payload"]
+  }
+}
+```
+
+### ccmux_set_tags (New - Tag Management)
+
+```json
+{
+  "name": "ccmux_set_tags",
+  "description": "Add or remove tags on a session for routing purposes",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "session": {
+        "type": "string",
+        "description": "Session UUID or name. Uses active session if omitted."
+      },
+      "add": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Tags to add (e.g., ['orchestrator', 'primary'])"
+      },
+      "remove": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Tags to remove"
+      }
+    }
+  }
+}
+```
+
+### ccmux_get_tags (New - Tag Query)
+
+```json
+{
+  "name": "ccmux_get_tags",
+  "description": "Get tags from a session",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "session": {
+        "type": "string",
+        "description": "Session UUID or name. Uses active session if omitted."
+      }
+    }
   }
 }
 ```
@@ -232,7 +221,7 @@ pub enum OrchestrationTarget {
 ```json
 {
   "name": "ccmux_report_status",
-  "description": "Report current session status to orchestrator",
+  "description": "Report current session status to orchestrator (sends to sessions tagged 'orchestrator')",
   "inputSchema": {
     "type": "object",
     "properties": {
@@ -250,9 +239,16 @@ pub enum OrchestrationTarget {
 }
 ```
 
+## Dependencies
+
+- **FEAT-028** (Orchestration Flexibility Refactor): COMPLETED - Tag-based routing now available
+- **FEAT-050** (Session Metadata Storage): COMPLETED - Can be used for additional orchestration state
+
 ## Notes
 
 - The daemon already handles SendOrchestration messages, so this is primarily an MCP surface layer
 - Need to determine how to get current session context for auto-fill features
 - Consider rate limiting for broadcast messages
 - Error handling should surface NoRepository and NoRecipients errors clearly
+- Tags are stored in `Session.tags: HashSet<String>` - need to expose via MCP
+- Consider using FEAT-050's metadata storage for orchestration state that doesn't fit in tags

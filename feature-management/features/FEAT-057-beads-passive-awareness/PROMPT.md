@@ -142,11 +142,34 @@ no_daemon_default = false
 
 ## Dependencies
 
-None (uses existing env var infrastructure from FEAT-047)
+- **FEAT-047** (ccmux_set_environment): COMPLETED - Environment variable infrastructure
+- **FEAT-050** (Session Metadata Storage): COMPLETED - Can store beads detection state in session metadata
+
+## Leveraging Completed Features
+
+### FEAT-050 Session Metadata (Completed)
+
+The `ccmux_set_metadata` and `ccmux_get_metadata` tools can be used to store beads detection state:
+
+```rust
+// When beads is detected, store in session metadata
+session.set_metadata("beads.root", beads_dir.to_string_lossy());
+session.set_metadata("beads.detected", "true");
+
+// Query beads state
+if let Some(root) = session.get_metadata("beads.root") {
+    // Pane is in beads-tracked repo
+}
+```
+
+This enables:
+- Persistent beads state across session restarts
+- MCP tools to query beads awareness without file system checks
+- Integration with FEAT-058/059 beads features
 
 ## Notes
 
 - Detection should be async to avoid blocking pane creation
 - Consider caching beads root detection results for performance
 - Future enhancement: could expose beads awareness via MCP tool
-- Consider whether beads metadata should persist in session state
+- Beads metadata can persist in session state via FEAT-050

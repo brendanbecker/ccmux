@@ -13,14 +13,49 @@
 
 Core terminal multiplexer features complete. Four features remain in backlog focused on agent orchestration and beads integration.
 
+**Recent Completions (2026-01-11)**:
+- FEAT-028: Tag-based routing (replaces binary orchestrator/worker model)
+- FEAT-036: Session-aware MCP commands (auto-defaults, pane/window naming)
+- FEAT-050: Session metadata storage (arbitrary key-value metadata)
+- FEAT-056: User priority lockout for MCP focus control
+
 ### Backlog Features
 
-| ID | Title | Component | Priority | Notes |
-|----|-------|-----------|----------|-------|
-| FEAT-048 | Expose orchestration protocol via MCP tools | ccmux-server (MCP) | P2 | Agent-to-agent orchestration API surface (depends on FEAT-028) |
-| FEAT-057 | Beads Passive Awareness | ccmux-server | P2 | Auto-detect .beads/ and configure env vars |
-| FEAT-058 | Beads Query Integration | ccmux-server, ccmux-client | P3 | TUI visibility into beads work queue via daemon socket |
-| FEAT-059 | Beads Workflow Integration | ccmux-server, ccmux-protocol | P3 | Pane-issue correlation, audit trails, recovery hints |
+| ID | Title | Component | Priority | Status | Notes |
+|----|-------|-----------|----------|--------|-------|
+| FEAT-048 | Expose orchestration protocol via MCP tools | ccmux-server (MCP) | P2 | **Ready** | UNBLOCKED - FEAT-028 complete. Now uses tag-based routing. |
+| FEAT-057 | Beads Passive Awareness | ccmux-server | P2 | **Ready** | Can use FEAT-050 metadata for state storage |
+| FEAT-058 | Beads Query Integration | ccmux-server, ccmux-client | P3 | Blocked | Depends on FEAT-057. Can leverage FEAT-050/028 |
+| FEAT-059 | Beads Workflow Integration | ccmux-server, ccmux-protocol | P3 | Blocked | SCOPE REDUCED - FEAT-050 provides core infrastructure |
+
+### Backlog Dependencies
+
+```
+FEAT-048 (Ready)
+  |-- FEAT-028 (complete) - Tag-based routing
+  |-- FEAT-050 (complete) - Metadata storage
+
+FEAT-057 (Ready)
+  |-- FEAT-047 (complete) - Environment variables
+  |-- FEAT-050 (complete) - Metadata storage
+
+FEAT-058 (Blocked)
+  |-- FEAT-057 (not started) - Beads detection
+  |-- FEAT-050 (complete) - Metadata caching
+  |-- FEAT-028 (complete) - Orchestration notifications
+
+FEAT-059 (Blocked)
+  |-- FEAT-057 (not started) - Beads detection
+  |-- FEAT-058 (not started) - Daemon communication
+  |-- FEAT-050 (complete) - Issue tracking infrastructure
+  |-- FEAT-028 (complete) - Orchestration integration
+```
+
+### Implementation Priority
+
+1. **FEAT-048** or **FEAT-057** - Both ready, no blocking dependencies
+2. **FEAT-058** - After FEAT-057
+3. **FEAT-059** - After FEAT-058 (scope significantly reduced by FEAT-050)
 
 ## Completed Features
 

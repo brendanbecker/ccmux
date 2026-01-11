@@ -360,13 +360,50 @@ fn default_auto_discover() -> bool { true }
 
 ## Dependencies
 
-- FEAT-057 (Beads Passive Awareness) - for `.beads/` detection infrastructure
+- **FEAT-057** (Beads Passive Awareness): Required - for `.beads/` detection infrastructure
+- **FEAT-050** (Session Metadata Storage): COMPLETED - Can cache beads state in session metadata
+
+## Leveraging Completed Features
+
+### FEAT-050 Session Metadata (Completed)
+
+Cache beads daemon connection state and ready counts in session metadata:
+
+```rust
+// Cache beads state for quick status bar updates
+session.set_metadata("beads.daemon_available", "true");
+session.set_metadata("beads.ready_count", "3");
+session.set_metadata("beads.last_refresh", timestamp.to_string());
+
+// MCP tools can query cached state
+let ready_count = session.get_metadata("beads.ready_count")
+    .and_then(|s| s.parse::<usize>().ok())
+    .unwrap_or(0);
+```
+
+This enables:
+- Fast status bar updates without daemon round-trips
+- MCP tools to query beads state efficiently
+- Persistence across brief disconnections
+
+### FEAT-028 Tag-based Routing (Completed)
+
+The MCP tools in Part 4 can use tag-based routing to notify orchestrators of beads state:
+
+```rust
+// When ready count changes, notify orchestrators
+let msg = OrchestrationMessage::new("beads.ready_count_changed", json!({
+    "pane_id": pane_id,
+    "ready_count": ready_count
+}));
+send_orchestration(OrchestrationTarget::Tagged("orchestrator".to_string()), msg);
+```
 
 ## Notes
 
 - Beads daemon uses Unix socket RPC - need to understand the protocol
 - Status bar real estate is limited - keep indicator concise
-- Consider caching ready count to avoid frequent daemon queries
+- Consider caching ready count to avoid frequent daemon queries (use FEAT-050 metadata)
 - Panel should load quickly - async fetch while showing "Loading..."
 - MCP tools are lower priority than TUI integration
 - Future enhancement: Task claiming directly from panel

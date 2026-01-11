@@ -432,9 +432,60 @@ auto_detect_issue = true
 
 ## Dependencies
 
-- **FEAT-057** (Beads Passive Awareness): For `.beads/` directory detection
-- **FEAT-058** (Beads Query Integration): For daemon communication to get issue status
-- **FEAT-050** (Session Metadata Storage): For storing issue assignment in pane metadata
+- **FEAT-057** (Beads Passive Awareness): Required - For `.beads/` directory detection
+- **FEAT-058** (Beads Query Integration): Required - For daemon communication to get issue status
+- **FEAT-050** (Session Metadata Storage): COMPLETED - Foundation for storing issue assignments
+
+## Leveraging Completed Features
+
+### FEAT-050 Session Metadata (Completed)
+
+FEAT-050 provides the exact infrastructure needed for pane-issue correlation. The implementation can use existing MCP tools:
+
+```rust
+// Assign issue to pane via metadata
+ccmux_set_metadata(session, "beads.current_issue", "bd-456")
+ccmux_set_metadata(session, "beads.assigned_at", "2026-01-11T10:30:00Z")
+
+// Query assignment
+let issue = ccmux_get_metadata(session, "beads.current_issue")
+```
+
+**Implementation Simplification**: Much of the proposed `PaneWorkflowState` struct can be implemented using the existing metadata system rather than new dedicated fields:
+
+| Proposed Field | Metadata Key |
+|----------------|--------------|
+| `current_issue_id` | `beads.current_issue` |
+| `assigned_at` | `beads.assigned_at` |
+| `issue_history` | `beads.issue_history` (JSON array) |
+
+This means:
+- **Reduced implementation scope** - Use existing metadata infrastructure
+- **MCP tools already exist** - `ccmux_set_metadata`, `ccmux_get_metadata`
+- **Persistence handled** - Session metadata persists with session state
+
+### FEAT-028 Tag-based Routing (Completed)
+
+The orchestration integration (Section 6) can use tag-based routing:
+
+```rust
+// StatusUpdate with issue assignment
+let msg = OrchestrationMessage::new("status.update", json!({
+    "session_id": session_id,
+    "status": "working",
+    "current_issue_id": "bd-456"
+}));
+send_orchestration(OrchestrationTarget::Tagged("orchestrator".to_string()), msg);
+```
+
+### Scope Reduction
+
+Given FEAT-050's completion, consider these scope reductions:
+
+1. **Section 1 (Core Data Structures)**: Simplify - use metadata instead of new structs
+2. **Section 2 (MCP Assignment Tools)**: May just be thin wrappers around `ccmux_set_metadata`
+3. **Section 5 (Query Tools)**: Can use `ccmux_get_metadata` with iteration
+4. **Section 6 (Orchestration Integration)**: Already supported via FEAT-028
 
 ## Benefits
 
