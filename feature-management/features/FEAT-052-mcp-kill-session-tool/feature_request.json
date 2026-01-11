@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-052",
+  "title": "Add ccmux_kill_session MCP tool",
+  "component": "ccmux-server (MCP)",
+  "priority": "P1",
+  "status": "new",
+  "type": "enhancement",
+  "created_date": "2026-01-10",
+  "updated_date": "2026-01-10",
+  "assigned_to": null,
+  "tags": ["mcp", "session-management", "orchestration"],
+  "estimated_effort": "small",
+  "dependencies": [],
+  "description": "Expose the existing DestroySession protocol message as an MCP tool so agents can terminate sessions programmatically. This enables orchestration patterns like Gas Town's worker management, which currently uses tmux kill-session. The capability already exists in the daemon via ClientMessage::DestroySession { session_id: Uuid } but is not exposed via MCP.",
+  "business_value": "high",
+  "technical_complexity": "low",
+  "user_impact": "Enables programmatic session lifecycle management for multi-agent orchestration workflows"
+}

@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-048",
+  "title": "Expose orchestration protocol via MCP tools",
+  "component": "ccmux-server",
+  "priority": "P2",
+  "status": "new",
+  "type": "new_feature",
+  "created_date": "2026-01-10",
+  "updated_date": "2026-01-10",
+  "assigned_to": null,
+  "tags": ["orchestration", "claude-code", "enhancement"],
+  "estimated_effort": "medium",
+  "dependencies": [],
+  "description": "Add MCP tools for the existing orchestration message types (StatusUpdate, TaskAssignment, TaskComplete, HelpRequest, Broadcast, SyncRequest), enabling agents to communicate directly without going through shell commands. This exposes the existing OrchestrationMessage and OrchestrationTarget types from ccmux-protocol/src/messages.rs as first-class MCP tools.",
+  "business_value": "high",
+  "technical_complexity": "medium",
+  "user_impact": "Agents become first-class participants in orchestration rather than passive recipients of nudges. This is the 'Orchestrator API Surface' that enables true agent-to-agent coordination."
+}

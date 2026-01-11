@@ -5,20 +5,26 @@
 
 ## Summary Statistics
 
-- **Total Features**: 46
+- **Total Features**: 52
 - **Completed**: 44
-- **Backlog**: 2
+- **Backlog**: 8
 
 ## Current Status
 
-All planned features for MVP and post-MVP have been implemented. Two features remain in backlog for future consideration.
+All planned features for MVP and post-MVP have been implemented. Eight features remain in backlog for future consideration.
 
 ### Backlog Features
 
-| ID | Title | Component | Notes |
-|----|-------|-----------|-------|
-| FEAT-028 | Orchestration Flexibility Refactor | ccmux-protocol | Generalize orchestrator/worker to tag-based roles |
-| FEAT-036 | Session-Aware MCP Commands | ccmux-server (MCP) | May overlap with FEAT-043 (session rename) |
+| ID | Title | Component | Priority | Notes |
+|----|-------|-----------|----------|-------|
+| FEAT-052 | Add ccmux_kill_session MCP tool | ccmux-server (MCP) | P1 | Blocking Gas Town integration |
+| FEAT-047 | Add ccmux_set_environment MCP tool | ccmux-server (MCP) | P1 | Blocking Gas Town integration |
+| FEAT-028 | Orchestration Flexibility Refactor | ccmux-protocol | P2 | Generalize orchestrator/worker to tag-based roles |
+| FEAT-036 | Session-Aware MCP Commands | ccmux-server (MCP) | P2 | May overlap with FEAT-043 (session rename) |
+| FEAT-048 | Expose orchestration protocol via MCP tools | ccmux-server (MCP) | P2 | Agent-to-agent orchestration API surface |
+| FEAT-049 | tmux-compatible CLI wrapper (ccmux-compat) | ccmux-compat | P2 | Drop-in tmux replacement for Gas Town integration |
+| FEAT-050 | Session Metadata Storage | ccmux-server (MCP) | P3 | Arbitrary key-value metadata on sessions for agent identity |
+| FEAT-051 | Add ccmux_get_environment MCP tool | ccmux-server (MCP) | P2 | Pairs with set_environment for full parity |
 
 ## Completed Features
 
