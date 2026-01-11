@@ -748,6 +748,13 @@ impl McpBridge {
             _ => SplitDirection::Horizontal, // "vertical" or default = side-by-side
         };
 
+        // BUG-025 FIX: Store user's requested direction to return in response
+        // (not the daemon's internal direction representation)
+        let user_direction = match direction.as_deref() {
+            Some("horizontal") | Some("h") => "horizontal",
+            _ => "vertical", // default is vertical
+        };
+
         self.send_to_daemon(ClientMessage::CreatePaneWithOptions {
             session_filter: session,
             window_filter: window,
@@ -764,14 +771,14 @@ impl McpBridge {
                 session_id,
                 session_name,
                 window_id,
-                direction,
+                direction: _, // Ignore daemon's direction, use user's requested direction
             } => {
                 let result = serde_json::json!({
                     "pane_id": pane_id.to_string(),
                     "session_id": session_id.to_string(),
                     "session": session_name,
                     "window_id": window_id.to_string(),
-                    "direction": direction,
+                    "direction": user_direction,
                     "status": "created"
                 });
 
@@ -924,6 +931,12 @@ impl McpBridge {
             _ => SplitDirection::Horizontal, // "vertical" or default = side-by-side
         };
 
+        // BUG-025 FIX: Store user's requested direction to return in response
+        let user_direction = match direction.as_deref() {
+            Some("horizontal") | Some("h") => "horizontal",
+            _ => "vertical", // default is vertical
+        };
+
         self.send_to_daemon(ClientMessage::SplitPane {
             pane_id,
             direction: split_direction,
@@ -941,7 +954,7 @@ impl McpBridge {
                 session_id,
                 session_name,
                 window_id,
-                direction,
+                direction: _, // Ignore daemon's direction, use user's requested direction
             } => {
                 let result = serde_json::json!({
                     "new_pane_id": new_pane_id.to_string(),
@@ -949,7 +962,7 @@ impl McpBridge {
                     "session_id": session_id.to_string(),
                     "session": session_name,
                     "window_id": window_id.to_string(),
-                    "direction": direction,
+                    "direction": user_direction,
                 });
 
                 let json = serde_json::to_string_pretty(&result)
