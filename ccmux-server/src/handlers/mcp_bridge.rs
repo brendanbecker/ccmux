@@ -656,6 +656,7 @@ impl HandlerContext {
         // Create default pane
         let pane = window.create_pane();
         let pane_id = pane.id();
+        let pane_info = pane.to_info();
 
         // Initialize the parser
         let pane = match window.get_pane_mut(pane_id) {
@@ -716,11 +717,19 @@ impl HandlerContext {
 
         info!("Window {} created in session {} with pane {}", window_id, session_name, pane_id);
 
-        HandlerResult::Response(ServerMessage::WindowCreatedWithDetails {
-            window_id,
-            pane_id,
-            session_name,
-        })
+        // Return response to MCP client and broadcast to TUI clients (BUG-032)
+        HandlerResult::ResponseWithBroadcast {
+            response: ServerMessage::WindowCreatedWithDetails {
+                window_id,
+                pane_id,
+                session_name,
+            },
+            session_id,
+            broadcast: ServerMessage::PaneCreated {
+                pane: pane_info,
+                direction: SplitDirection::Vertical, // Default direction for new window pane
+            },
+        }
     }
 
     /// Handle SplitPane - split an existing pane
@@ -779,6 +788,7 @@ impl HandlerContext {
 
         let new_pane = window.create_pane();
         let new_pane_id = new_pane.id();
+        let new_pane_info = new_pane.to_info();
 
         // Initialize the parser for the new pane
         let pane = match window.get_pane_mut(new_pane_id) {
@@ -849,14 +859,22 @@ impl HandlerContext {
             pane_id, new_pane_id, direction_str, ratio
         );
 
-        HandlerResult::Response(ServerMessage::PaneSplit {
-            new_pane_id,
-            original_pane_id: pane_id,
+        // Return response to MCP client and broadcast to TUI clients (BUG-032)
+        HandlerResult::ResponseWithBroadcast {
+            response: ServerMessage::PaneSplit {
+                new_pane_id,
+                original_pane_id: pane_id,
+                session_id,
+                session_name,
+                window_id,
+                direction: direction_str.to_string(),
+            },
             session_id,
-            session_name,
-            window_id,
-            direction: direction_str.to_string(),
-        })
+            broadcast: ServerMessage::PaneCreated {
+                pane: new_pane_info,
+                direction,
+            },
+        }
     }
 
     /// Handle ResizePaneDelta - resize a pane by delta fraction
@@ -875,8 +893,8 @@ impl HandlerContext {
 
         let session_manager = self.session_manager.read().await;
 
-        // Find the pane
-        let (_, _, pane) = match session_manager.find_pane(pane_id) {
+        // Find the pane and capture session_id for broadcast (BUG-032)
+        let (session, _, pane) = match session_manager.find_pane(pane_id) {
             Some(found) => found,
             None => {
                 return HandlerContext::error(
@@ -886,6 +904,7 @@ impl HandlerContext {
             }
         };
 
+        let session_id = session.id();
         let (current_cols, current_rows) = pane.dimensions();
 
         // Drop read lock before taking write lock
@@ -920,11 +939,20 @@ impl HandlerContext {
             pane_id, current_cols, current_rows, new_cols, new_rows, delta
         );
 
-        HandlerResult::Response(ServerMessage::PaneResized {
-            pane_id,
-            new_cols,
-            new_rows,
-        })
+        // Return response to MCP client and broadcast to TUI clients (BUG-032)
+        HandlerResult::ResponseWithBroadcast {
+            response: ServerMessage::PaneResized {
+                pane_id,
+                new_cols,
+                new_rows,
+            },
+            session_id,
+            broadcast: ServerMessage::PaneResized {
+                pane_id,
+                new_cols,
+                new_rows,
+            },
+        }
     }
 
     /// Handle CreateLayout - create a complex layout declaratively
@@ -949,7 +977,8 @@ impl HandlerContext {
 
         // Phase 1: Create panes while holding session_manager lock
         // Collect PTY configs for spawning after releasing lock
-        let (session_id, session_name, window_id, pane_ids, pty_configs) = {
+        // BUG-032: Also collect PaneInfo for TUI broadcast
+        let (session_id, session_name, window_id, pane_ids, pane_infos, pty_configs) = {
             let mut session_manager = self.session_manager.write().await;
 
             // Find or use first session
@@ -1027,7 +1056,9 @@ impl HandlerContext {
             };
 
             // Parse and create layout, collecting PTY configs for later spawning
+            // BUG-032: Also collect PaneInfo for TUI broadcast
             let mut pane_ids = Vec::new();
+            let mut pane_infos = Vec::new();
             let mut pty_configs = Vec::new();
             let result = Self::create_layout_panes(
                 &mut session_manager,
@@ -1036,6 +1067,7 @@ impl HandlerContext {
                 window_id,
                 &layout,
                 &mut pane_ids,
+                &mut pane_infos,
                 &mut pty_configs,
             );
 
@@ -1043,7 +1075,7 @@ impl HandlerContext {
                 return HandlerContext::error(ErrorCode::InvalidOperation, e);
             }
 
-            (session_id, session_name, window_id, pane_ids, pty_configs)
+            (session_id, session_name, window_id, pane_ids, pane_infos, pty_configs)
         }; // session_manager lock released here
 
         // Phase 2: Spawn PTYs without holding session_manager lock (BUG-028 fix)
@@ -1070,18 +1102,38 @@ impl HandlerContext {
             session_name, window_id, pane_ids.len()
         );
 
-        HandlerResult::Response(ServerMessage::LayoutCreated {
-            session_id,
-            session_name,
-            window_id,
-            pane_ids,
-        })
+        // Return response to MCP client and broadcast to TUI clients (BUG-032)
+        // Broadcast PaneCreated for the first pane to notify TUI of layout changes
+        if let Some(first_pane_info) = pane_infos.into_iter().next() {
+            HandlerResult::ResponseWithBroadcast {
+                response: ServerMessage::LayoutCreated {
+                    session_id,
+                    session_name,
+                    window_id,
+                    pane_ids,
+                },
+                session_id,
+                broadcast: ServerMessage::PaneCreated {
+                    pane: first_pane_info,
+                    direction: SplitDirection::Vertical, // Default direction for layout panes
+                },
+            }
+        } else {
+            // No panes created - shouldn't happen but handle gracefully
+            HandlerResult::Response(ServerMessage::LayoutCreated {
+                session_id,
+                session_name,
+                window_id,
+                pane_ids,
+            })
+        }
     }
 
     /// Recursively create panes from layout specification (Phase 1 of create_layout)
     ///
     /// This is a synchronous function that creates panes and collects PTY configs.
     /// It does NOT spawn PTYs - that happens in Phase 2 after the lock is released.
+    /// BUG-032: Also collects PaneInfo for TUI broadcast.
     fn create_layout_panes(
         session_manager: &mut SessionManager,
         session_id: Uuid,
@@ -1089,6 +1141,7 @@ impl HandlerContext {
         window_id: Uuid,
         layout: &serde_json::Value,
         pane_ids: &mut Vec<Uuid>,
+        pane_infos: &mut Vec<ccmux_protocol::PaneInfo>,
         pty_configs: &mut Vec<(Uuid, PtyConfig)>,
     ) -> Result<(), String> {
         // Check if this is a simple pane definition
@@ -1107,12 +1160,14 @@ impl HandlerContext {
 
             let pane = window.create_pane();
             let pane_id = pane.id();
+            let pane_info = pane.to_info();
 
             // Initialize parser
             let pane = window.get_pane_mut(pane_id).ok_or("Pane disappeared")?;
             pane.init_parser();
 
             pane_ids.push(pane_id);
+            pane_infos.push(pane_info);
 
             // Get session environment for PTY config
             let session_env = session_manager
@@ -1153,6 +1208,7 @@ impl HandlerContext {
                     window_id,
                     nested_layout,
                     pane_ids,
+                    pane_infos,
                     pty_configs,
                 )?;
             }
@@ -1756,13 +1812,19 @@ mod tests {
             .await;
 
         match result {
-            HandlerResult::Response(ServerMessage::WindowCreatedWithDetails {
-                session_name,
+            HandlerResult::ResponseWithBroadcast {
+                response: ServerMessage::WindowCreatedWithDetails {
+                    session_name,
+                    ..
+                },
+                broadcast: ServerMessage::PaneCreated { pane, .. },
                 ..
-            }) => {
+            } => {
                 assert_eq!(session_name, "test");
+                // Verify broadcast contains pane info (BUG-032)
+                assert!(pane.id != Uuid::nil());
             }
-            _ => panic!("Expected WindowCreatedWithDetails response"),
+            _ => panic!("Expected WindowCreatedWithDetails response with broadcast"),
         }
     }
 
@@ -2007,6 +2069,188 @@ mod tests {
         );
     }
 
+    // ==================== BUG-032: Split Pane Broadcast Tests ====================
+
+    /// Test that MCP split_pane broadcasts PaneCreated to TUI clients
+    #[tokio::test]
+    async fn test_mcp_split_pane_broadcasts_to_tui() {
+        let session_manager = Arc::new(RwLock::new(SessionManager::new()));
+        let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
+        let registry = Arc::new(ClientRegistry::new());
+        let config = Arc::new(crate::config::AppConfig::default());
+        let user_priority = Arc::new(UserPriorityManager::new());
+        let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+        ));
+        let (pane_closed_tx, _) = mpsc::channel(10);
+
+        // Create a session with a pane
+        let (session_id, pane_id) = {
+            let mut sm = session_manager.write().await;
+            let session = sm.create_session("test-session").unwrap();
+            let session_id = session.id();
+
+            let session = sm.get_session_mut(session_id).unwrap();
+            let window = session.create_window(Some("main".to_string()));
+            let window_id = window.id();
+            let window = session.get_window_mut(window_id).unwrap();
+            let pane_id = window.create_pane().id();
+
+            (session_id, pane_id)
+        };
+
+        // Register TUI client and attach to session
+        let (tui_tx, mut tui_rx) = mpsc::channel(10);
+        let tui_client_id = registry.register_client(tui_tx);
+        registry.attach_to_session(tui_client_id, session_id);
+
+        // Register MCP client (not attached)
+        let (mcp_tx, _mcp_rx) = mpsc::channel(10);
+        let mcp_client_id = registry.register_client(mcp_tx);
+
+        // Create handler context for MCP client
+        let mcp_ctx = HandlerContext::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+            Arc::clone(&config),
+            mcp_client_id,
+            pane_closed_tx,
+            Arc::clone(&command_executor),
+            Arc::clone(&user_priority),
+        );
+
+        // MCP splits the pane
+        let result = mcp_ctx
+            .handle_split_pane(pane_id, SplitDirection::Horizontal, 0.5, None, None, false)
+            .await;
+
+        // Extract broadcast info
+        let (broadcast_session_id, broadcast_msg) = match result {
+            HandlerResult::ResponseWithBroadcast {
+                session_id: sid,
+                broadcast,
+                response: ServerMessage::PaneSplit { new_pane_id, .. },
+                ..
+            } => {
+                assert!(new_pane_id != Uuid::nil());
+                (sid, broadcast)
+            }
+            _ => panic!("Expected ResponseWithBroadcast with PaneSplit"),
+        };
+
+        // Verify session_id matches
+        assert_eq!(broadcast_session_id, session_id);
+
+        // Broadcast to TUI
+        let broadcast_count = registry
+            .broadcast_to_session_except(broadcast_session_id, mcp_client_id, broadcast_msg)
+            .await;
+
+        assert_eq!(broadcast_count, 1, "Should broadcast to TUI client");
+
+        // Verify TUI received PaneCreated
+        match tui_rx.try_recv() {
+            Ok(ServerMessage::PaneCreated { pane, direction }) => {
+                assert!(pane.id != Uuid::nil());
+                assert_eq!(direction, SplitDirection::Horizontal);
+            }
+            msg => panic!("Expected PaneCreated, got {:?}", msg),
+        }
+    }
+
+    /// Test that MCP resize_pane_delta broadcasts PaneResized to TUI clients
+    #[tokio::test]
+    async fn test_mcp_resize_pane_broadcasts_to_tui() {
+        let session_manager = Arc::new(RwLock::new(SessionManager::new()));
+        let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
+        let registry = Arc::new(ClientRegistry::new());
+        let config = Arc::new(crate::config::AppConfig::default());
+        let user_priority = Arc::new(UserPriorityManager::new());
+        let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+        ));
+        let (pane_closed_tx, _) = mpsc::channel(10);
+
+        // Create a session with a pane
+        let (session_id, pane_id) = {
+            let mut sm = session_manager.write().await;
+            let session = sm.create_session("test-session").unwrap();
+            let session_id = session.id();
+
+            let session = sm.get_session_mut(session_id).unwrap();
+            let window = session.create_window(Some("main".to_string()));
+            let window_id = window.id();
+            let window = session.get_window_mut(window_id).unwrap();
+            let pane_id = window.create_pane().id();
+
+            (session_id, pane_id)
+        };
+
+        // Register TUI client and attach to session
+        let (tui_tx, mut tui_rx) = mpsc::channel(10);
+        let tui_client_id = registry.register_client(tui_tx);
+        registry.attach_to_session(tui_client_id, session_id);
+
+        // Register MCP client (not attached)
+        let (mcp_tx, _mcp_rx) = mpsc::channel(10);
+        let mcp_client_id = registry.register_client(mcp_tx);
+
+        // Create handler context for MCP client
+        let mcp_ctx = HandlerContext::new(
+            Arc::clone(&session_manager),
+            Arc::clone(&pty_manager),
+            Arc::clone(&registry),
+            Arc::clone(&config),
+            mcp_client_id,
+            pane_closed_tx,
+            Arc::clone(&command_executor),
+            Arc::clone(&user_priority),
+        );
+
+        // MCP resizes the pane
+        let result = mcp_ctx.handle_resize_pane_delta(pane_id, 0.2).await;
+
+        // Extract broadcast info
+        let (broadcast_session_id, broadcast_msg) = match result {
+            HandlerResult::ResponseWithBroadcast {
+                session_id: sid,
+                broadcast,
+                response: ServerMessage::PaneResized { pane_id: pid, .. },
+                ..
+            } => {
+                assert_eq!(pid, pane_id);
+                (sid, broadcast)
+            }
+            _ => panic!("Expected ResponseWithBroadcast with PaneResized"),
+        };
+
+        // Verify session_id matches
+        assert_eq!(broadcast_session_id, session_id);
+
+        // Broadcast to TUI
+        let broadcast_count = registry
+            .broadcast_to_session_except(broadcast_session_id, mcp_client_id, broadcast_msg)
+            .await;
+
+        assert_eq!(broadcast_count, 1, "Should broadcast to TUI client");
+
+        // Verify TUI received PaneResized
+        match tui_rx.try_recv() {
+            Ok(ServerMessage::PaneResized { pane_id: pid, new_cols, new_rows }) => {
+                assert_eq!(pid, pane_id);
+                // Verify dimensions changed (original is 80x24, delta is 0.2 so scale is 1.2)
+                assert!(new_cols > 0);
+                assert!(new_rows > 0);
+            }
+            msg => panic!("Expected PaneResized, got {:?}", msg),
+        }
+    }
+
     // ==================== FEAT-048: Orchestration Tag Tests ====================
 
     #[tokio::test]
@@ -2168,13 +2412,19 @@ mod tests {
         let result = ctx.handle_create_layout(Some("test".to_string()), None, layout).await;
 
         match result {
-            HandlerResult::Response(ServerMessage::LayoutCreated { pane_ids, .. }) => {
+            HandlerResult::ResponseWithBroadcast {
+                response: ServerMessage::LayoutCreated { pane_ids, .. },
+                broadcast: ServerMessage::PaneCreated { pane, .. },
+                ..
+            } => {
                 assert_eq!(pane_ids.len(), 1, "Should create exactly 1 pane");
+                // Verify broadcast contains pane info (BUG-032)
+                assert!(pane.id != Uuid::nil());
             }
             HandlerResult::Response(ServerMessage::Error { code, message }) => {
                 panic!("Layout creation failed: {:?} - {}", code, message);
             }
-            _ => panic!("Expected LayoutCreated response"),
+            _ => panic!("Expected LayoutCreated response with broadcast"),
         }
     }
 
@@ -2196,13 +2446,19 @@ mod tests {
         let result = ctx.handle_create_layout(Some("test".to_string()), None, layout).await;
 
         match result {
-            HandlerResult::Response(ServerMessage::LayoutCreated { pane_ids, .. }) => {
+            HandlerResult::ResponseWithBroadcast {
+                response: ServerMessage::LayoutCreated { pane_ids, .. },
+                broadcast: ServerMessage::PaneCreated { pane, .. },
+                ..
+            } => {
                 assert_eq!(pane_ids.len(), 2, "Should create exactly 2 panes");
+                // Verify broadcast contains pane info (BUG-032)
+                assert!(pane.id != Uuid::nil());
             }
             HandlerResult::Response(ServerMessage::Error { code, message }) => {
                 panic!("Layout creation failed: {:?} - {}", code, message);
             }
-            _ => panic!("Expected LayoutCreated response"),
+            _ => panic!("Expected LayoutCreated response with broadcast"),
         }
     }
 
@@ -2237,13 +2493,19 @@ mod tests {
         let result = ctx.handle_create_layout(Some("test".to_string()), None, layout).await;
 
         match result {
-            HandlerResult::Response(ServerMessage::LayoutCreated { pane_ids, .. }) => {
+            HandlerResult::ResponseWithBroadcast {
+                response: ServerMessage::LayoutCreated { pane_ids, .. },
+                broadcast: ServerMessage::PaneCreated { pane, .. },
+                ..
+            } => {
                 assert_eq!(pane_ids.len(), 3, "Should create exactly 3 panes");
+                // Verify broadcast contains pane info (BUG-032)
+                assert!(pane.id != Uuid::nil());
             }
             HandlerResult::Response(ServerMessage::Error { code, message }) => {
                 panic!("Layout creation failed: {:?} - {}", code, message);
             }
-            _ => panic!("Expected LayoutCreated response"),
+            _ => panic!("Expected LayoutCreated response with broadcast"),
         }
     }
 }
