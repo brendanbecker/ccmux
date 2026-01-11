@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-11
 
 ## Summary Statistics
-- Total Bugs: 27
-- Open: 0
+- Total Bugs: 28
+- Open: 1
 - Resolved: 26
 - Deprecated: 1
 
@@ -13,7 +13,7 @@
 
 | ID | Description | Priority | Status |
 |----|-------------|----------|--------|
-| *None* | All bugs resolved! | - | - |
+| BUG-028 | Daemon crashes on `ccmux_create_layout` with nested layout | P0 | Open |
 
 ## Bug Status
 
@@ -60,6 +60,7 @@ See `feature-management/completed/` for resolved work items.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-11 | BUG-028 | Created | Daemon crashes on ccmux_create_layout with nested layout spec |
 | 2026-01-11 | BUG-027 | Resolved | Fixed: filter broadcast messages in recv_response_from_daemon |
 | 2026-01-11 | BUG-026 | Resolved | Fixed: broadcast focus changes to TUI clients |
 | 2026-01-11 | BUG-025 | Resolved | Fixed: return user's requested direction in response |

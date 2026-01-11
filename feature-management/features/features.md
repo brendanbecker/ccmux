@@ -5,13 +5,13 @@
 
 ## Summary Statistics
 
-- **Total Features**: 59
+- **Total Features**: 60
 - **Completed**: 55
-- **Backlog**: 4
+- **Backlog**: 5
 
 ## Current Status
 
-Core terminal multiplexer features complete. Four features remain in backlog focused on agent orchestration and beads integration.
+Core terminal multiplexer features complete. Five features remain in backlog focused on agent orchestration, reliability, and beads integration.
 
 **Recent Completions (2026-01-11)**:
 - FEAT-028: Tag-based routing (replaces binary orchestrator/worker model)
@@ -23,6 +23,7 @@ Core terminal multiplexer features complete. Four features remain in backlog foc
 
 | ID | Title | Component | Priority | Status | Notes |
 |----|-------|-----------|----------|--------|-------|
+| FEAT-060 | MCP Daemon Auto-Recovery | ccmux-server (MCP) | P1 | **Ready** | Triggered by BUG-028. Adds reconnection + state recovery. |
 | FEAT-048 | Expose orchestration protocol via MCP tools | ccmux-server (MCP) | P2 | **Ready** | UNBLOCKED - FEAT-028 complete. Now uses tag-based routing. |
 | FEAT-057 | Beads Passive Awareness | ccmux-server | P2 | **Ready** | Can use FEAT-050 metadata for state storage |
 | FEAT-058 | Beads Query Integration | ccmux-server, ccmux-client | P3 | Blocked | Depends on FEAT-057. Can leverage FEAT-050/028 |
@@ -31,6 +32,10 @@ Core terminal multiplexer features complete. Four features remain in backlog foc
 ### Backlog Dependencies
 
 ```
+FEAT-060 (Ready) - P1 Priority
+  |-- No blocking dependencies
+  |-- Related: BUG-028 (trigger), FEAT-018 (base MCP)
+
 FEAT-048 (Ready)
   |-- FEAT-028 (complete) - Tag-based routing
   |-- FEAT-050 (complete) - Metadata storage
@@ -53,9 +58,10 @@ FEAT-059 (Blocked)
 
 ### Implementation Priority
 
-1. **FEAT-048** or **FEAT-057** - Both ready, no blocking dependencies
-2. **FEAT-058** - After FEAT-057
-3. **FEAT-059** - After FEAT-058 (scope significantly reduced by FEAT-050)
+1. **FEAT-060** - P1, improves reliability for agent workflows
+2. **FEAT-048** or **FEAT-057** - Both ready, no blocking dependencies
+3. **FEAT-058** - After FEAT-057
+4. **FEAT-059** - After FEAT-058 (scope significantly reduced by FEAT-050)
 
 ## Completed Features
 

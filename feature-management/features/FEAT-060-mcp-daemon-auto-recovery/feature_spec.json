@@ -1,0 +1,24 @@
+{
+  "id": "FEAT-060",
+  "title": "MCP Daemon Auto-Recovery",
+  "priority": "P1",
+  "status": "backlog",
+  "component": "ccmux-server",
+  "subcomponent": "mcp",
+  "created_date": "2026-01-11",
+  "created_by": "claude-qa-demo",
+  "type": "enhancement",
+  "effort_estimate": "medium",
+  "dependencies": [],
+  "blocks": [],
+  "related_bugs": ["BUG-028"],
+  "related_features": ["FEAT-018", "FEAT-016"],
+  "tags": ["reliability", "mcp", "agent-experience"],
+  "acceptance_criteria": [
+    "Daemon crash detected within 3 seconds",
+    "Auto-reconnect succeeds when daemon restarts",
+    "Structured error returned when reconnect fails",
+    "ccmux_connection_status tool implemented",
+    "QA demo can continue after daemon restart"
+  ]
+}

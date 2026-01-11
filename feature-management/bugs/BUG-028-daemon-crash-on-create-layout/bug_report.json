@@ -1,0 +1,24 @@
+{
+  "id": "BUG-028",
+  "title": "Daemon Crashes on ccmux_create_layout",
+  "priority": "P0",
+  "severity": "critical",
+  "status": "open",
+  "component": "daemon",
+  "subcomponent": "mcp/create_layout",
+  "reported_date": "2026-01-11",
+  "reported_by": "claude-qa-demo",
+  "environment": {
+    "platform": "linux-wsl2",
+    "branch": "main"
+  },
+  "reproduction_rate": "100%",
+  "blocking": true,
+  "affects_features": ["FEAT-049-declarative-layouts"],
+  "symptoms": [
+    "MCP error -32603: Daemon connection lost",
+    "All subsequent MCP calls fail",
+    "Daemon process appears to crash"
+  ],
+  "workaround": "Restart ccmux daemon (loses sessions)"
+}
