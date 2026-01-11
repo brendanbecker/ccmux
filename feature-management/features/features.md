@@ -5,13 +5,13 @@
 
 ## Summary Statistics
 
-- **Total Features**: 55
+- **Total Features**: 56
 - **Completed**: 50
-- **Backlog**: 5
+- **Backlog**: 6
 
 ## Current Status
 
-All Gas Town integration features have been implemented. Five features remain in backlog for future consideration.
+All Gas Town integration features have been implemented. Six features remain in backlog for future consideration.
 
 ### Backlog Features
 
@@ -21,6 +21,7 @@ All Gas Town integration features have been implemented. Five features remain in
 | FEAT-028 | Orchestration Flexibility Refactor | ccmux-protocol | P2 | Generalize orchestrator/worker to tag-based roles |
 | FEAT-036 | Session-Aware MCP Commands | ccmux-server (MCP) | P2 | May overlap with FEAT-043 (session rename) |
 | FEAT-048 | Expose orchestration protocol via MCP tools | ccmux-server (MCP) | P2 | Agent-to-agent orchestration API surface |
+| FEAT-056 | User Priority Lockout for MCP Focus Control | ccmux-server, ccmux-client, ccmux-protocol | P2 | Prevent MCP focus ops from conflicting with user commands |
 | FEAT-050 | Session Metadata Storage | ccmux-server (MCP) | P3 | Arbitrary key-value metadata on sessions for agent identity |
 
 ## Completed Features
