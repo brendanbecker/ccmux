@@ -319,6 +319,7 @@ pub fn render_status_bar(status_bar: &StatusBar, area: Rect, buf: &mut Buffer) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_status_bar_new() {
@@ -348,6 +349,7 @@ mod tests {
             attached_clients: 1,
             worktree: None,
             tags: std::collections::HashSet::new(),
+            metadata: HashMap::new(),
         };
 
         bar.set_session(Some(session.clone()));
@@ -449,6 +451,7 @@ mod tests {
             attached_clients: 1,
             worktree: None,
             tags: std::collections::HashSet::new(),
+            metadata: HashMap::new(),
         }));
 
         let spans = bar.left_section();

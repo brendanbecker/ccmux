@@ -1505,7 +1505,9 @@ impl App {
             | ServerMessage::LayoutCreated { .. }
             | ServerMessage::SessionDestroyed { .. }
             | ServerMessage::EnvironmentSet { .. }
-            | ServerMessage::EnvironmentList { .. } => {
+            | ServerMessage::EnvironmentList { .. }
+            | ServerMessage::MetadataSet { .. }
+            | ServerMessage::MetadataList { .. } => {
                 // These messages are for the MCP bridge, not the TUI client
             }
         }

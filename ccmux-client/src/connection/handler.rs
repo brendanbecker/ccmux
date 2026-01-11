@@ -73,6 +73,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -193,6 +194,7 @@ mod tests {
                 attached_clients: 0,
                 worktree: None,
                 tags: std::collections::HashSet::new(),
+                metadata: HashMap::new(),
             }],
         });
 

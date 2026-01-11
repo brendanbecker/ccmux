@@ -46,6 +46,7 @@ pub mod scrollback;
 pub mod types;
 pub mod wal;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -536,6 +537,7 @@ mod tests {
             windows: Vec::new(),
             active_window_id: None,
             created_at: 12345,
+            metadata: HashMap::new(),
         };
 
         let path = manager.create_checkpoint(vec![session]).unwrap();
@@ -655,6 +657,7 @@ mod tests {
             }],
             active_window_id: Some(window_id),
             created_at: 0,
+            metadata: HashMap::new(),
         }];
 
         manager.create_checkpoint(sessions.clone()).unwrap();

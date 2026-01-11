@@ -1245,6 +1245,115 @@ impl HandlerContext {
             environment,
         })
     }
+
+    /// Handle SetMetadata - set metadata on a session
+    pub async fn handle_set_metadata(
+        &self,
+        session_filter: String,
+        key: String,
+        value: String,
+    ) -> HandlerResult {
+        info!(
+            "SetMetadata request from {}: session={}, key={}",
+            self.client_id, session_filter, key
+        );
+
+        let mut session_manager = self.session_manager.write().await;
+
+        // Find the session by UUID or name
+        let session_id = if let Ok(uuid) = Uuid::parse_str(&session_filter) {
+            if session_manager.get_session(uuid).is_some() {
+                uuid
+            } else {
+                return HandlerContext::error(
+                    ErrorCode::SessionNotFound,
+                    format!("Session {} not found", session_filter),
+                );
+            }
+        } else {
+            // Try by name
+            match session_manager.get_session_by_name(&session_filter) {
+                Some(session) => session.id(),
+                None => {
+                    return HandlerContext::error(
+                        ErrorCode::SessionNotFound,
+                        format!("Session '{}' not found", session_filter),
+                    );
+                }
+            }
+        };
+
+        // Get the session and set the metadata
+        let session_name = if let Some(session) = session_manager.get_session_mut(session_id) {
+            session.set_metadata(&key, &value);
+            session.name().to_string()
+        } else {
+            return HandlerContext::error(
+                ErrorCode::SessionNotFound,
+                format!("Session {} not found", session_id),
+            );
+        };
+
+        HandlerResult::Response(ServerMessage::MetadataSet {
+            session_id,
+            session_name,
+            key,
+            value,
+        })
+    }
+
+    /// Handle GetMetadata - get metadata from a session
+    pub async fn handle_get_metadata(
+        &self,
+        session_filter: String,
+        key: Option<String>,
+    ) -> HandlerResult {
+        debug!(
+            "GetMetadata request from {}: session={}, key={:?}",
+            self.client_id, session_filter, key
+        );
+
+        let session_manager = self.session_manager.read().await;
+
+        // Find the session by UUID or name
+        let session = if let Ok(uuid) = Uuid::parse_str(&session_filter) {
+            session_manager.get_session(uuid)
+        } else {
+            session_manager.get_session_by_name(&session_filter)
+        };
+
+        let session = match session {
+            Some(s) => s,
+            None => {
+                return HandlerContext::error(
+                    ErrorCode::SessionNotFound,
+                    format!("Session '{}' not found", session_filter),
+                );
+            }
+        };
+
+        let session_id = session.id();
+        let session_name = session.name().to_string();
+
+        // Get metadata - either specific key or all
+        let metadata = if let Some(ref k) = key {
+            // Get single key
+            let mut meta = std::collections::HashMap::new();
+            if let Some(v) = session.get_metadata(k) {
+                meta.insert(k.clone(), v.clone());
+            }
+            meta
+        } else {
+            // Get all
+            session.all_metadata().clone()
+        };
+
+        HandlerResult::Response(ServerMessage::MetadataList {
+            session_id,
+            session_name,
+            metadata,
+        })
+    }
 }
 
 #[cfg(test)]

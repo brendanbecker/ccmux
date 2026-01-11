@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Split direction for creating panes
@@ -36,6 +37,9 @@ pub struct SessionInfo {
     /// Tags for session classification and routing (e.g., "orchestrator", "worker", "evaluator")
     #[serde(default)]
     pub tags: HashSet<String>,
+    /// Arbitrary key-value metadata for application use
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
 }
 
 impl SessionInfo {
@@ -746,7 +750,8 @@ mod tests {
             window_count: 2,
             attached_clients: 1,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         assert_eq!(session.id, id);
@@ -765,7 +770,8 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         assert_eq!(session.attached_clients, 0);
@@ -780,7 +786,8 @@ mod tests {
             window_count: 1,
             attached_clients: 5,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         assert_eq!(session.attached_clients, 5);
@@ -795,7 +802,8 @@ mod tests {
             window_count: 3,
             attached_clients: 2,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         let cloned = session.clone();
@@ -813,7 +821,8 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         let session2 = SessionInfo {
@@ -823,7 +832,8 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         let session3 = SessionInfo {
@@ -833,7 +843,8 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         assert_eq!(session1, session2);
@@ -849,7 +860,8 @@ mod tests {
             window_count: 0,
             attached_clients: 0,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         let debug = format!("{:?}", session);
@@ -964,7 +976,8 @@ mod tests {
             window_count: 3,
             attached_clients: 1,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         let serialized = bincode::serialize(&session).unwrap();
@@ -1384,6 +1397,7 @@ mod tests {
                 is_main: true,
             }),
             tags,
+            metadata: HashMap::new(),
         };
 
         assert!(session.worktree.is_some());
@@ -1399,7 +1413,8 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         assert!(session.worktree.is_none());
@@ -1416,6 +1431,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             tags: HashSet::new(),
+            metadata: HashMap::new(),
         };
 
         // Initially no tags
@@ -1455,6 +1471,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             tags,
+            metadata: HashMap::new(),
         };
 
         let cloned = session.clone();
@@ -1474,7 +1491,8 @@ mod tests {
                 branch: Some("feature".to_string()),
                 is_main: false,
             }),
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         let serialized = bincode::serialize(&session).unwrap();

@@ -7,6 +7,7 @@
 
 use ccmux_protocol::PaneState;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Current checkpoint format version
@@ -56,6 +57,9 @@ pub struct SessionSnapshot {
     pub active_window_id: Option<Uuid>,
     /// Creation timestamp (Unix seconds)
     pub created_at: u64,
+    /// Arbitrary key-value metadata (backward compatible with empty default)
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
 }
 
 /// Snapshot of a window for persistence
@@ -208,6 +212,13 @@ pub enum WalEntry {
         sequence: u64,
         timestamp: u64,
     },
+
+    /// Session metadata changed
+    SessionMetadataSet {
+        session_id: Uuid,
+        key: String,
+        value: String,
+    },
 }
 
 impl WalEntry {
@@ -289,6 +300,7 @@ mod tests {
             windows: Vec::new(),
             active_window_id: None,
             created_at: 12345,
+            metadata: HashMap::new(),
         });
 
         let serialized = bincode::serialize(&checkpoint).unwrap();
@@ -316,6 +328,7 @@ mod tests {
             }],
             active_window_id: None,
             created_at: 1000,
+            metadata: HashMap::new(),
         };
 
         let serialized = bincode::serialize(&snapshot).unwrap();
@@ -421,6 +434,7 @@ mod tests {
             windows: Vec::new(),
             active_window_id: None,
             created_at: 0,
+            metadata: HashMap::new(),
         });
 
         assert!(state.has_sessions());

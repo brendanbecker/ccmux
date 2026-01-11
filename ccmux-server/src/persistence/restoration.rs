@@ -5,6 +5,7 @@
 //! - Spawning new PTYs for each pane
 //! - Handling failures gracefully with detailed status reporting
 
+use std::collections::HashMap;
 use std::path::Path;
 
 use tracing::{debug, error, info, warn};
@@ -445,6 +446,7 @@ mod tests {
             }],
             active_window_id: Some(window_id),
             created_at: 12345,
+            metadata: HashMap::new(),
         }
     }
 
@@ -738,6 +740,7 @@ mod tests {
             }],
             active_window_id: Some(window_id),
             created_at: 0,
+            metadata: HashMap::new(),
         };
 
         let state = RecoveryState {
@@ -798,6 +801,7 @@ mod tests {
             }],
             active_window_id: Some(window_id),
             created_at: 12345,
+            metadata: HashMap::new(),
         };
 
         let state = RecoveryState {
@@ -866,6 +870,7 @@ mod tests {
             }],
             active_window_id: Some(window_id),
             created_at: 0,
+            metadata: HashMap::new(),
         };
 
         let state = RecoveryState {

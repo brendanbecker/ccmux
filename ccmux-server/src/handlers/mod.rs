@@ -266,6 +266,20 @@ impl HandlerContext {
                 key,
             } => self.handle_get_environment(session_filter, key).await,
 
+            ClientMessage::SetMetadata {
+                session_filter,
+                key,
+                value,
+            } => {
+                self.handle_set_metadata(session_filter, key, value)
+                    .await
+            }
+
+            ClientMessage::GetMetadata {
+                session_filter,
+                key,
+            } => self.handle_get_metadata(session_filter, key).await,
+
             // User priority lock handlers (FEAT-056)
             ClientMessage::UserCommandModeEntered { timeout_ms } => {
                 self.handle_user_command_mode_entered(timeout_ms)

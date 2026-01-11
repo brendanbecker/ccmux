@@ -1,6 +1,7 @@
 //! Client-server message types
 
 use serde::{Deserialize, Serialize};
+
 use uuid::Uuid;
 
 use crate::types::*;
@@ -280,6 +281,24 @@ pub enum ClientMessage {
         key: Option<String>,
     },
 
+    /// Set metadata on a session (for MCP bridge)
+    SetMetadata {
+        /// Session filter (name or ID)
+        session_filter: String,
+        /// Metadata key
+        key: String,
+        /// Metadata value
+        value: String,
+    },
+
+    /// Get session metadata (for MCP bridge)
+    GetMetadata {
+        /// Session filter (name or ID)
+        session_filter: String,
+        /// Specific key to get (None = get all)
+        key: Option<String>,
+    },
+
     // ==================== User Priority Lock Messages (FEAT-056) ====================
 
     /// User entered command mode (prefix key pressed)
@@ -514,6 +533,22 @@ pub enum ServerMessage {
         environment: std::collections::HashMap<String, String>,
     },
 
+    /// Metadata was set on a session (for MCP bridge)
+    MetadataSet {
+        session_id: Uuid,
+        session_name: String,
+        key: String,
+        value: String,
+    },
+
+    /// Session metadata (for MCP bridge)
+    MetadataList {
+        session_id: Uuid,
+        session_name: String,
+        /// All metadata (or single requested key)
+        metadata: std::collections::HashMap<String, String>,
+    },
+
     // ==================== Focus Change Broadcasts (BUG-026) ====================
 
     /// Pane focus changed - broadcast to TUI clients
@@ -581,7 +616,7 @@ pub enum ErrorCode {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashSet;
+    use std::collections::{HashMap, HashSet};
 
     #[test]
     fn test_client_message_connect() {
@@ -779,7 +814,8 @@ mod tests {
                 window_count: 2,
                 attached_clients: 1,
                 worktree: None,
-                tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
             },
             SessionInfo {
                 id: Uuid::new_v4(),
@@ -788,7 +824,8 @@ mod tests {
                 window_count: 1,
                 attached_clients: 0,
                 worktree: None,
-                tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
             },
         ];
 
@@ -812,7 +849,8 @@ mod tests {
             window_count: 0,
             attached_clients: 1,
             worktree: None,
-            tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
         };
 
         let msg = ServerMessage::SessionCreated {
@@ -839,7 +877,8 @@ mod tests {
                 window_count: 1,
                 attached_clients: 1,
                 worktree: None,
-                tags: HashSet::new(),
+tags: HashSet::new(),
+                    metadata: HashMap::new(),
             },
             windows: vec![WindowInfo {
                 id: window_id,

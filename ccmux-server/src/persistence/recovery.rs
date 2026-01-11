@@ -141,6 +141,7 @@ impl RecoveryManager {
                     windows: Vec::new(),
                     active_window_id: None,
                     created_at,
+                    metadata: HashMap::new(),
                 };
 
                 session_map.insert(id, sessions.len());
@@ -330,6 +331,13 @@ impl RecoveryManager {
             WalEntry::CheckpointMarker { sequence, .. } => {
                 // Checkpoint markers are used for WAL replay positioning
                 debug!("Encountered: CheckpointMarker sequence={}", sequence);
+            }
+
+            WalEntry::SessionMetadataSet { session_id, key, value } => {
+                if let Some(&idx) = session_map.get(&session_id) {
+                    sessions[idx].metadata.insert(key.clone(), value.clone());
+                    debug!("Applied: SessionMetadataSet {} key={}", session_id, key);
+                }
             }
         }
 
