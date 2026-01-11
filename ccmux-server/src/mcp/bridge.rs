@@ -404,6 +404,12 @@ impl McpBridge {
                 let layout = arguments["layout"].clone();
                 self.tool_create_layout(session, window, layout).await
             }
+            "ccmux_kill_session" => {
+                let session = arguments["session"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'session' parameter".into()))?;
+                self.tool_kill_session(session).await
+            }
             _ => Err(McpError::UnknownTool(name.into())),
         }
     }
@@ -939,6 +945,59 @@ impl McpBridge {
                     "window_id": window_id.to_string(),
                     "pane_ids": pane_ids.iter().map(|id| id.to_string()).collect::<Vec<_>>(),
                     "pane_count": pane_ids.len(),
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_kill_session(&mut self, session_filter: &str) -> Result<ToolResult, McpError> {
+        // Try to parse as UUID first, otherwise resolve by name
+        let session_id = if let Ok(uuid) = Uuid::parse_str(session_filter) {
+            uuid
+        } else {
+            // Need to list sessions and find by name
+            self.send_to_daemon(ClientMessage::ListSessions).await?;
+            match self.recv_from_daemon().await? {
+                ServerMessage::SessionList { sessions } => {
+                    sessions
+                        .iter()
+                        .find(|s| s.name == session_filter)
+                        .map(|s| s.id)
+                        .ok_or_else(|| {
+                            McpError::InvalidParams(format!(
+                                "Session '{}' not found",
+                                session_filter
+                            ))
+                        })?
+                }
+                ServerMessage::Error { code, message } => {
+                    return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
+                }
+                msg => return Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+            }
+        };
+
+        self.send_to_daemon(ClientMessage::DestroySession { session_id })
+            .await?;
+
+        match self.recv_from_daemon().await? {
+            ServerMessage::SessionDestroyed {
+                session_id,
+                session_name,
+            } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "message": "Session killed",
+                    "session_id": session_id.to_string(),
+                    "session_name": session_name,
                 });
 
                 let json = serde_json::to_string_pretty(&result)

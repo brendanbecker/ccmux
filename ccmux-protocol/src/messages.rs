@@ -432,6 +432,12 @@ pub enum ServerMessage {
         /// All panes created as part of the layout
         pane_ids: Vec<Uuid>,
     },
+
+    /// Session was destroyed/killed (for MCP bridge)
+    SessionDestroyed {
+        session_id: Uuid,
+        session_name: String,
+    },
 }
 
 /// Entry in the pane list (for MCP bridge)
