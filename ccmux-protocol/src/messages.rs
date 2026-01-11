@@ -7,58 +7,51 @@ use crate::types::*;
 
 // ==================== Orchestration Types ====================
 
-/// Messages for cross-session orchestration
+/// Generic orchestration message with user-defined semantics
+///
+/// This is a flexible message format that allows workflows to define their own
+/// message types and payloads. The `msg_type` field is a user-defined string
+/// that identifies the message type (e.g., "status_update", "task_assignment",
+/// "gas_town.auction"). The `payload` field contains the message data as JSON.
+///
+/// # Example
+/// ```rust
+/// use ccmux_protocol::OrchestrationMessage;
+/// use serde_json::json;
+///
+/// let msg = OrchestrationMessage {
+///     msg_type: "workflow.task_assigned".to_string(),
+///     payload: json!({
+///         "task_id": "abc123",
+///         "description": "Fix the bug",
+///         "files": ["src/main.rs"]
+///     }),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum OrchestrationMessage {
-    /// Status update from a worker session
-    StatusUpdate {
-        session_id: Uuid,
-        status: WorkerStatus,
-        message: Option<String>,
-    },
-    /// Task assignment from orchestrator
-    TaskAssignment {
-        task_id: Uuid,
-        description: String,
-        files: Vec<String>,
-    },
-    /// Task completion notification
-    TaskComplete {
-        task_id: Uuid,
-        success: bool,
-        summary: String,
-    },
-    /// Request for help/escalation
-    HelpRequest {
-        session_id: Uuid,
-        context: String,
-    },
-    /// Broadcast message to all sessions
-    Broadcast {
-        from_session_id: Uuid,
-        message: String,
-    },
-    /// Sync request (ask all sessions to report status)
-    SyncRequest,
+pub struct OrchestrationMessage {
+    /// User-defined message type identifier (e.g., "status_update", "task.assigned")
+    pub msg_type: String,
+    /// Message payload as JSON - structure is defined by the workflow
+    pub payload: serde_json::Value,
 }
 
-/// Worker session status
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum WorkerStatus {
-    Idle,
-    Working,
-    WaitingForInput,
-    Blocked,
-    Complete,
-    Error,
+impl OrchestrationMessage {
+    /// Create a new orchestration message
+    pub fn new(msg_type: impl Into<String>, payload: serde_json::Value) -> Self {
+        Self {
+            msg_type: msg_type.into(),
+            payload,
+        }
+    }
 }
 
 /// Target for orchestration messages
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum OrchestrationTarget {
-    /// Send to orchestrator session
-    Orchestrator,
-    /// Send to specific session
+    /// Send to sessions with a specific tag
+    Tagged(String),
+    /// Send to specific session by ID
     Session(Uuid),
     /// Broadcast to all sessions in same repo
     Broadcast,
@@ -553,6 +546,7 @@ pub enum ErrorCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn test_client_message_connect() {
@@ -750,7 +744,7 @@ mod tests {
                 window_count: 2,
                 attached_clients: 1,
                 worktree: None,
-                is_orchestrator: false,
+                tags: HashSet::new(),
             },
             SessionInfo {
                 id: Uuid::new_v4(),
@@ -759,7 +753,7 @@ mod tests {
                 window_count: 1,
                 attached_clients: 0,
                 worktree: None,
-                is_orchestrator: false,
+                tags: HashSet::new(),
             },
         ];
 
@@ -783,7 +777,7 @@ mod tests {
             window_count: 0,
             attached_clients: 1,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         let msg = ServerMessage::SessionCreated {
@@ -810,7 +804,7 @@ mod tests {
                 window_count: 1,
                 attached_clients: 1,
                 worktree: None,
-                is_orchestrator: false,
+                tags: HashSet::new(),
             },
             windows: vec![WindowInfo {
                 id: window_id,
@@ -1298,147 +1292,120 @@ mod tests {
     // ==================== Orchestration Message Tests ====================
 
     #[test]
-    fn test_orchestration_message_status_update() {
-        let session_id = Uuid::new_v4();
-        let msg = OrchestrationMessage::StatusUpdate {
-            session_id,
-            status: WorkerStatus::Working,
-            message: Some("Processing files".to_string()),
+    fn test_orchestration_message_new() {
+        use serde_json::json;
+
+        let msg = OrchestrationMessage::new(
+            "status.update",
+            json!({"status": "working", "message": "Processing files"}),
+        );
+
+        assert_eq!(msg.msg_type, "status.update");
+        assert_eq!(msg.payload["status"], "working");
+        assert_eq!(msg.payload["message"], "Processing files");
+    }
+
+    #[test]
+    fn test_orchestration_message_struct_creation() {
+        use serde_json::json;
+
+        let msg = OrchestrationMessage {
+            msg_type: "task.assigned".to_string(),
+            payload: json!({
+                "task_id": "abc123",
+                "description": "Fix the bug",
+                "files": ["src/main.rs", "src/lib.rs"]
+            }),
         };
 
-        if let OrchestrationMessage::StatusUpdate {
-            session_id: sid,
-            status,
-            message,
-        } = msg
-        {
-            assert_eq!(sid, session_id);
-            assert_eq!(status, WorkerStatus::Working);
-            assert_eq!(message, Some("Processing files".to_string()));
-        } else {
-            panic!("Wrong variant");
-        }
+        assert_eq!(msg.msg_type, "task.assigned");
+        assert!(msg.payload.is_object());
+        assert_eq!(msg.payload["files"].as_array().unwrap().len(), 2);
     }
 
     #[test]
-    fn test_orchestration_message_task_assignment() {
-        let task_id = Uuid::new_v4();
-        let msg = OrchestrationMessage::TaskAssignment {
-            task_id,
-            description: "Fix the login bug".to_string(),
-            files: vec!["src/auth.rs".to_string(), "src/login.rs".to_string()],
-        };
+    fn test_orchestration_message_clone() {
+        use serde_json::json;
 
-        if let OrchestrationMessage::TaskAssignment {
-            task_id: tid,
-            description,
-            files,
-        } = msg
-        {
-            assert_eq!(tid, task_id);
-            assert_eq!(description, "Fix the login bug");
-            assert_eq!(files.len(), 2);
-        } else {
-            panic!("Wrong variant");
-        }
+        let msg = OrchestrationMessage::new("sync.request", json!({}));
+        let cloned = msg.clone();
+
+        assert_eq!(msg, cloned);
     }
 
     #[test]
-    fn test_orchestration_message_task_complete() {
-        let task_id = Uuid::new_v4();
-        let msg = OrchestrationMessage::TaskComplete {
-            task_id,
-            success: true,
-            summary: "Bug fixed and tests pass".to_string(),
-        };
+    fn test_orchestration_message_equality() {
+        use serde_json::json;
 
-        if let OrchestrationMessage::TaskComplete {
-            task_id: tid,
-            success,
-            summary,
-        } = msg
-        {
-            assert_eq!(tid, task_id);
-            assert!(success);
-            assert_eq!(summary, "Bug fixed and tests pass");
-        } else {
-            panic!("Wrong variant");
-        }
+        let msg1 = OrchestrationMessage::new("test", json!({"key": "value"}));
+        let msg2 = OrchestrationMessage::new("test", json!({"key": "value"}));
+        let msg3 = OrchestrationMessage::new("test", json!({"key": "other"}));
+        let msg4 = OrchestrationMessage::new("other", json!({"key": "value"}));
+
+        assert_eq!(msg1, msg2);
+        assert_ne!(msg1, msg3);
+        assert_ne!(msg1, msg4);
     }
 
     #[test]
-    fn test_orchestration_message_help_request() {
-        let session_id = Uuid::new_v4();
-        let msg = OrchestrationMessage::HelpRequest {
-            session_id,
-            context: "Stuck on type inference".to_string(),
-        };
+    fn test_orchestration_message_with_nested_payload() {
+        use serde_json::json;
 
-        if let OrchestrationMessage::HelpRequest {
-            session_id: sid,
-            context,
-        } = msg
-        {
-            assert_eq!(sid, session_id);
-            assert_eq!(context, "Stuck on type inference");
-        } else {
-            panic!("Wrong variant");
-        }
-    }
-
-    #[test]
-    fn test_orchestration_message_broadcast() {
-        let from_session_id = Uuid::new_v4();
-        let msg = OrchestrationMessage::Broadcast {
-            from_session_id,
-            message: "All workers pause".to_string(),
-        };
-
-        if let OrchestrationMessage::Broadcast {
-            from_session_id: sid,
-            message,
-        } = msg
-        {
-            assert_eq!(sid, from_session_id);
-            assert_eq!(message, "All workers pause");
-        } else {
-            panic!("Wrong variant");
-        }
-    }
-
-    #[test]
-    fn test_orchestration_message_sync_request() {
-        let msg = OrchestrationMessage::SyncRequest;
-        assert_eq!(msg.clone(), OrchestrationMessage::SyncRequest);
-    }
-
-    #[test]
-    fn test_worker_status_all_variants() {
-        let statuses = [
-            WorkerStatus::Idle,
-            WorkerStatus::Working,
-            WorkerStatus::WaitingForInput,
-            WorkerStatus::Blocked,
-            WorkerStatus::Complete,
-            WorkerStatus::Error,
-        ];
-
-        assert_eq!(statuses.len(), 6);
-        for (i, status) in statuses.iter().enumerate() {
-            for (j, other) in statuses.iter().enumerate() {
-                if i == j {
-                    assert_eq!(status, other);
-                } else {
-                    assert_ne!(status, other);
+        let msg = OrchestrationMessage::new(
+            "complex.message",
+            json!({
+                "metadata": {
+                    "version": "1.0",
+                    "timestamp": 1234567890
+                },
+                "data": {
+                    "items": [1, 2, 3],
+                    "nested": {
+                        "deep": true
+                    }
                 }
-            }
+            }),
+        );
+
+        assert_eq!(msg.payload["metadata"]["version"], "1.0");
+        assert_eq!(msg.payload["data"]["nested"]["deep"], true);
+    }
+
+    #[test]
+    fn test_orchestration_message_with_null_payload() {
+        use serde_json::json;
+
+        let msg = OrchestrationMessage::new("ping", json!(null));
+        assert!(msg.payload.is_null());
+    }
+
+    #[test]
+    fn test_orchestration_message_debug() {
+        use serde_json::json;
+
+        let msg = OrchestrationMessage::new("debug.test", json!({"value": 42}));
+        let debug = format!("{:?}", msg);
+
+        assert!(debug.contains("OrchestrationMessage"));
+        assert!(debug.contains("debug.test"));
+    }
+
+    #[test]
+    fn test_orchestration_target_tagged() {
+        let target = OrchestrationTarget::Tagged("orchestrator".to_string());
+
+        if let OrchestrationTarget::Tagged(tag) = target {
+            assert_eq!(tag, "orchestrator");
+        } else {
+            panic!("Wrong variant");
         }
     }
 
     #[test]
-    fn test_orchestration_target_orchestrator() {
-        let target = OrchestrationTarget::Orchestrator;
-        assert_eq!(target.clone(), OrchestrationTarget::Orchestrator);
+    fn test_orchestration_target_tagged_clone() {
+        let target = OrchestrationTarget::Tagged("worker".to_string());
+        let cloned = target.clone();
+        assert_eq!(target, cloned);
     }
 
     #[test]
@@ -1471,13 +1438,26 @@ mod tests {
     }
 
     #[test]
+    fn test_orchestration_target_equality() {
+        let tagged1 = OrchestrationTarget::Tagged("test".to_string());
+        let tagged2 = OrchestrationTarget::Tagged("test".to_string());
+        let tagged3 = OrchestrationTarget::Tagged("other".to_string());
+        let broadcast = OrchestrationTarget::Broadcast;
+
+        assert_eq!(tagged1, tagged2);
+        assert_ne!(tagged1, tagged3);
+        assert_ne!(tagged1, broadcast);
+    }
+
+    #[test]
     fn test_client_message_send_orchestration() {
-        let target = OrchestrationTarget::Orchestrator;
-        let message = OrchestrationMessage::StatusUpdate {
-            session_id: Uuid::new_v4(),
-            status: WorkerStatus::Idle,
-            message: None,
-        };
+        use serde_json::json;
+
+        let target = OrchestrationTarget::Tagged("mayor".to_string());
+        let message = OrchestrationMessage::new(
+            "status.update",
+            json!({"status": "idle"}),
+        );
 
         let msg = ClientMessage::SendOrchestration {
             target: target.clone(),
@@ -1498,8 +1478,10 @@ mod tests {
 
     #[test]
     fn test_server_message_orchestration_received() {
+        use serde_json::json;
+
         let from_session_id = Uuid::new_v4();
-        let message = OrchestrationMessage::SyncRequest;
+        let message = OrchestrationMessage::new("sync.request", json!({}));
 
         let msg = ServerMessage::OrchestrationReceived {
             from_session_id,
