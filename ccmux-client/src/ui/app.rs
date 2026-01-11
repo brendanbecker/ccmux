@@ -79,6 +79,10 @@ pub struct App {
     panes: HashMap<Uuid, PaneInfo>,
     /// Active pane ID
     active_pane_id: Option<Uuid>,
+    /// Last (previously active) pane ID for Ctrl-b ; (tmux last-pane)
+    last_pane_id: Option<Uuid>,
+    /// Last (previously active) window ID for Ctrl-b l (tmux last-window)
+    last_window_id: Option<Uuid>,
     /// Available sessions (when in SessionSelect state)
     available_sessions: Vec<SessionInfo>,
     /// Selected session index in session list
@@ -114,6 +118,8 @@ impl App {
             windows: HashMap::new(),
             panes: HashMap::new(),
             active_pane_id: None,
+            last_pane_id: None,
+            last_window_id: None,
             available_sessions: Vec::new(),
             session_list_index: 0,
             terminal_size: (80, 24),
@@ -140,6 +146,8 @@ impl App {
             windows: HashMap::new(),
             panes: HashMap::new(),
             active_pane_id: None,
+            last_pane_id: None,
+            last_window_id: None,
             available_sessions: Vec::new(),
             session_list_index: 0,
             terminal_size: (80, 24),
@@ -543,6 +551,8 @@ impl App {
                 self.panes.clear();
                 self.pane_manager = PaneManager::new();
                 self.active_pane_id = None;
+                self.last_pane_id = None;
+                self.last_window_id = None;
                 self.layout = None;
                 self.pending_split_direction = None;
                 self.status_message = Some("Detached from session".to_string());
@@ -642,6 +652,10 @@ impl App {
             ClientCommand::FocusPane(index) => {
                 if let Some(pane) = self.panes.values().find(|p| p.index == index) {
                     let pane_id = pane.id;
+                    // Track last pane before switching (only if actually changing)
+                    if self.active_pane_id != Some(pane_id) {
+                        self.last_pane_id = self.active_pane_id;
+                    }
                     self.active_pane_id = Some(pane_id);
                     self.pane_manager.set_active(pane_id);
                     // Sync with layout manager
@@ -869,9 +883,95 @@ impl App {
                 self.cycle_window(-1);
             }
 
+            ClientCommand::LastWindow => {
+                if let Some(last_id) = self.last_window_id {
+                    // Get current window ID before switching
+                    let current_window_id = self
+                        .active_pane_id
+                        .and_then(|pid| self.panes.get(&pid))
+                        .map(|p| p.window_id);
+
+                    // Focus first pane in the last window
+                    if let Some(pane_id) = self.first_pane_in_window(last_id) {
+                        // Update last_window_id to current before switching
+                        self.last_window_id = current_window_id;
+                        self.active_pane_id = Some(pane_id);
+                        self.pane_manager.set_active(pane_id);
+                        if let Some(ref mut layout) = self.layout {
+                            layout.set_active_pane(pane_id);
+                        }
+                    }
+                } else {
+                    self.status_message = Some("No last window".to_string());
+                }
+            }
+
+            ClientCommand::LastPane => {
+                if let Some(last_id) = self.last_pane_id {
+                    if self.panes.contains_key(&last_id) {
+                        // Save current as last before switching
+                        let current = self.active_pane_id;
+                        self.last_pane_id = current;
+                        self.active_pane_id = Some(last_id);
+                        self.pane_manager.set_active(last_id);
+                        if let Some(ref mut layout) = self.layout {
+                            layout.set_active_pane(last_id);
+                        }
+                    } else {
+                        self.status_message = Some("Last pane no longer exists".to_string());
+                        self.last_pane_id = None;
+                    }
+                } else {
+                    self.status_message = Some("No last pane".to_string());
+                }
+            }
+
+            ClientCommand::ShowPaneNumbers => {
+                // Show pane numbers as a status message
+                // In tmux, this shows an overlay with pane numbers that can be selected
+                // For now, show a simple status with pane indices
+                let pane_info: Vec<String> = self
+                    .panes
+                    .values()
+                    .map(|p| format!("{}", p.index))
+                    .collect();
+                self.status_message = Some(format!(
+                    "Pane numbers: {} (use Ctrl-b 0-9 to select)",
+                    pane_info.join(", ")
+                ));
+            }
+
+            ClientCommand::SelectWindow(index) => {
+                // Find window by index (sorted order)
+                let mut window_ids: Vec<Uuid> = self.windows.keys().copied().collect();
+                window_ids.sort();
+
+                if let Some(&window_id) = window_ids.get(index) {
+                    // Track current window as last before switching
+                    let current_window_id = self
+                        .active_pane_id
+                        .and_then(|pid| self.panes.get(&pid))
+                        .map(|p| p.window_id);
+
+                    if current_window_id != Some(window_id) {
+                        self.last_window_id = current_window_id;
+                    }
+
+                    // Focus first pane in the window
+                    if let Some(pane_id) = self.first_pane_in_window(window_id) {
+                        self.active_pane_id = Some(pane_id);
+                        self.pane_manager.set_active(pane_id);
+                        if let Some(ref mut layout) = self.layout {
+                            layout.set_active_pane(pane_id);
+                        }
+                    }
+                } else {
+                    self.status_message = Some(format!("No window at index {}", index));
+                }
+            }
+
             // Commands not yet implemented
             ClientCommand::CloseWindow
-            | ClientCommand::SelectWindow(_)
             | ClientCommand::RenameWindow(_)
             | ClientCommand::RenameSession(_)
             | ClientCommand::ClearHistory
@@ -905,6 +1005,12 @@ impl App {
         };
 
         let new_pane_id = pane_ids[new_index];
+
+        // Track last pane before switching (only if actually changing)
+        if self.active_pane_id != Some(new_pane_id) {
+            self.last_pane_id = self.active_pane_id;
+        }
+
         self.active_pane_id = Some(new_pane_id);
         self.pane_manager.set_active(new_pane_id);
         // Sync with layout manager
@@ -941,6 +1047,11 @@ impl App {
         };
 
         let new_window_id = window_ids[new_index];
+
+        // Track last window before switching (only if actually changing)
+        if current_window_id != Some(new_window_id) {
+            self.last_window_id = current_window_id;
+        }
 
         // Focus first pane in the new window
         if let Some(pane_id) = self.first_pane_in_window(new_window_id) {
@@ -1281,6 +1392,8 @@ impl App {
                 self.panes.clear();
                 self.pane_manager = PaneManager::new();
                 self.active_pane_id = None;
+                self.last_pane_id = None;
+                self.last_window_id = None;
                 self.layout = None;
                 self.pending_split_direction = None;
                 self.state = AppState::SessionSelect;
