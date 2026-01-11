@@ -1,0 +1,64 @@
+{
+  "bug_id": "BUG-032",
+  "title": "MCP handlers missing TUI broadcasts for pane/window/layout operations",
+  "component": "ccmux-server",
+  "severity": "critical",
+  "priority": "P0",
+  "status": "new",
+  "reported_date": "2026-01-11",
+  "updated_date": "2026-01-11",
+  "assigned_to": null,
+  "tags": ["tui", "orchestration", "bug"],
+  "affected_versions": [],
+  "environment": "linux-wsl2",
+  "reproducibility": "always",
+  "description": "Multiple MCP handlers in ccmux-server/src/handlers/mcp_bridge.rs create panes, windows, or layouts but fail to broadcast state changes to TUI clients. This causes the TUI to become out of sync with the daemon's actual state - panes, windows, and layouts created via MCP are invisible in the TUI until a refresh or reconnect.",
+  "steps_to_reproduce": [
+    "Start ccmux TUI and attach to a session",
+    "From another Claude session or MCP client, call ccmux_split_pane on the current pane",
+    "Observe: The daemon shows 2 panes (verified via ccmux_list_panes)",
+    "Observe: The TUI still shows only 1 pane at full width",
+    "Try Ctrl+B o - the new pane is not accessible because TUI doesn't know about it"
+  ],
+  "expected_behavior": "All MCP handlers that modify session state (create panes, windows, layouts, resize panes) should broadcast the changes to connected TUI clients so the TUI renders the updated state immediately.",
+  "actual_behavior": "Four MCP handlers return only HandlerResult::Response without broadcasting to TUI clients: handle_split_pane, handle_create_window_with_options, handle_create_layout, and handle_resize_pane_delta. This leaves the TUI out of sync with the daemon.",
+  "evidence": {
+    "affected_handlers": [
+      {
+        "function": "handle_split_pane",
+        "line": 852,
+        "current_return": "HandlerResult::Response(ServerMessage::PaneSplit { ... })",
+        "required_return": "HandlerResult::ResponseWithBroadcast with PaneCreated",
+        "impact": "Split panes are created server-side but TUI never renders them"
+      },
+      {
+        "function": "handle_create_window_with_options",
+        "line": 719,
+        "current_return": "HandlerResult::Response(ServerMessage::WindowCreatedWithDetails { ... })",
+        "required_return": "HandlerResult::ResponseWithBroadcast with WindowCreated and PaneCreated",
+        "impact": "New windows created via MCP don't appear in TUI"
+      },
+      {
+        "function": "handle_create_layout",
+        "line": 1073,
+        "current_return": "HandlerResult::Response(ServerMessage::LayoutCreated { ... })",
+        "required_return": "HandlerResult::ResponseWithBroadcast with multiple PaneCreated messages",
+        "impact": "Complex layouts created via MCP don't render in TUI"
+      },
+      {
+        "function": "handle_resize_pane_delta",
+        "line": 923,
+        "current_return": "HandlerResult::Response(ServerMessage::PaneResized { ... })",
+        "required_return": "HandlerResult::ResponseWithBroadcast with PaneResized",
+        "impact": "Pane resize changes don't update TUI layout"
+      }
+    ],
+    "correct_pattern_reference": {
+      "function": "handle_create_pane_with_options",
+      "line": 447,
+      "code": "HandlerResult::ResponseWithBroadcast { response: ServerMessage::PaneCreatedWithDetails { ... }, session_id, broadcast: ServerMessage::PaneCreated { pane: pane_info, direction } }"
+    }
+  },
+  "root_cause": "These handlers were implemented to return responses to the MCP caller but forgot to also broadcast state changes to connected TUI clients. This is an oversight from when the handlers were originally written - they were likely added before the ResponseWithBroadcast pattern was established, or the broadcasts were accidentally omitted.",
+  "impact": "Core MCP-to-TUI integration is broken for pane splits, window creation, layout creation, and pane resizing. Users interacting via MCP (e.g., orchestrator agents) will see successful operations, but the TUI remains stale until reconnection."
+}

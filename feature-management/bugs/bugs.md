@@ -4,14 +4,19 @@
 **Last Updated**: 2026-01-11
 
 ## Summary Statistics
-- Total Bugs: 28
-- Open: 0
+- Total Bugs: 32
+- Open: 4
 - Resolved: 27
 - Deprecated: 1
 
 ## Active Bugs
 
-None - all bugs resolved!
+| ID | Description | Priority | Status | Component | Link |
+|----|-------------|----------|--------|-----------|------|
+| BUG-032 | MCP handlers missing TUI broadcasts for pane/window/layout ops | P0 | new | ccmux-server | [Link](BUG-032-mcp-handlers-missing-tui-broadcasts/) |
+| BUG-031 | Metadata not persisting across restarts | P1 | open | daemon | [Link](BUG-031-metadata-not-persisting-across-restarts/) |
+| BUG-030 | Daemon unresponsive after create_window | P0 | open | daemon | [Link](BUG-030-daemon-unresponsive-after-create-window/) |
+| BUG-029 | MCP response synchronization bug - responses lag by one call | P0 | open | daemon | [Link](BUG-029-create-window-unexpected-response/) |
 
 ## Bug Status
 
@@ -59,6 +64,10 @@ See `feature-management/completed/` for resolved work items.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-11 | BUG-032 | Created | MCP handlers missing TUI broadcasts for split_pane, create_window, create_layout, resize_pane |
+| 2026-01-11 | BUG-031 | Created | Metadata not persisting across daemon restarts |
+| 2026-01-11 | BUG-030 | Created | Daemon unresponsive after create_window operations |
+| 2026-01-11 | BUG-029 | Created | MCP response synchronization - responses lag by one call |
 | 2026-01-11 | BUG-028 | Created | Daemon crashes on ccmux_create_layout with nested layout spec |
 | 2026-01-11 | BUG-027 | Resolved | Fixed: filter broadcast messages in recv_response_from_daemon |
 | 2026-01-11 | BUG-026 | Resolved | Fixed: broadcast focus changes to TUI clients |
