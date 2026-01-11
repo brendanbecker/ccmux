@@ -1,19 +1,17 @@
 # Bug Reports
 
 **Project**: ccmux
-**Last Updated**: 2026-01-10
+**Last Updated**: 2026-01-11
 
 ## Summary Statistics
-- Total Bugs: 23
-- Open: 1
-- Resolved: 21
+- Total Bugs: 24
+- Open: 0
+- Resolved: 23
 - Deprecated: 1
 
 ## Active Bugs
 
-| ID | Description | Priority | Status | Component | Link |
-|----|-------------|----------|--------|-----------|------|
-| BUG-022 | Viewport gets stuck above bottom after subagent finishes | P2 | in_progress | tui | [Link](BUG-022-viewport-stuck-above-bottom-after-subagent/) |
+None - all bugs resolved!
 
 ## Bug Status
 
@@ -43,7 +41,9 @@ See `feature-management/completed/` for resolved work items.
 | BUG-019 | Claude detector UTF-8 panic causes TUI hang | P1 | Fixed - char boundary check |
 | BUG-020 | Session reattach creates client without PTY | P1 | Fixed (stream-a) - send scrollback on reattach |
 | BUG-021 | ccmux_rename_session missing from standalone MCP | P1 | Fixed |
-| BUG-023 | ccmux_create_session doesn't spawn shell in default pane | P1 | Fixed - added command param + output poller |
+| BUG-022 | Viewport stuck above bottom after subagent | P2 | Fixed - reset scroll position on resize (b567daf) |
+| BUG-023 | ccmux_create_session doesn't spawn shell | P1 | Fixed - added command param + output poller (1ac7e60) |
+| BUG-024 | Runaway pane spawning via sideband | P0 | Fixed - OSC escape sequence format (5da1697) |
 
 ### Deprecated Bugs
 
@@ -55,6 +55,8 @@ See `feature-management/completed/` for resolved work items.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-11 | BUG-024 | Resolved | Fixed: OSC escape sequence format prevents grep triggering commands |
+| 2026-01-11 | BUG-022 | Resolved | Fixed: reset scroll position on resize to prevent viewport offset |
 | 2026-01-10 | BUG-023 | Resolved | Fixed: added command param + output poller to create_session handler |
 | 2026-01-10 | BUG-023 | Created | ccmux_create_session MCP tool doesn't spawn shell - needs command param |
 | 2026-01-10 | BUG-022 | Created | Viewport stuck above bottom after subagent - fix implemented, awaiting verification |
