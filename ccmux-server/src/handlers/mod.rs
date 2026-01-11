@@ -297,6 +297,15 @@ impl HandlerContext {
             }
 
             ClientMessage::UserCommandModeExited => self.handle_user_command_mode_exited(),
+
+            // Beads query handlers (FEAT-058)
+            ClientMessage::RequestBeadsStatus { pane_id } => {
+                self.handle_request_beads_status(pane_id).await
+            }
+
+            ClientMessage::RequestBeadsReadyList { pane_id } => {
+                self.handle_request_beads_ready_list(pane_id).await
+            }
         }
     }
 
@@ -312,6 +321,63 @@ impl HandlerContext {
     fn handle_user_command_mode_exited(&self) -> HandlerResult {
         self.user_priority.release_lock(self.client_id);
         HandlerResult::NoResponse
+    }
+
+    // ==================== Beads Query Handlers (FEAT-058) ====================
+
+    /// Handle request for beads status (daemon availability, ready count)
+    async fn handle_request_beads_status(&self, pane_id: Uuid) -> HandlerResult {
+        use crate::beads::BeadsClient;
+        use ccmux_protocol::types::BeadsStatus;
+        use std::path::PathBuf;
+
+        // Get the pane's working directory
+        let cwd: PathBuf = {
+            let session_mgr = self.session_manager.read().await;
+            session_mgr
+                .find_pane(pane_id)
+                .and_then(|(_, _, pane)| pane.cwd().map(PathBuf::from))
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+        };
+
+        // Get config for timeout
+        let timeout_ms = self.config.beads.query.socket_timeout;
+
+        // Try to create a beads client and get status
+        let status = if let Some(client) = BeadsClient::new(&cwd, timeout_ms) {
+            client.get_status(Some(10)).await // Limit to 10 for status bar
+        } else {
+            BeadsStatus::unavailable()
+        };
+
+        HandlerResult::Response(ServerMessage::BeadsStatusUpdate { pane_id, status })
+    }
+
+    /// Handle request for full beads ready list (for panel display)
+    async fn handle_request_beads_ready_list(&self, pane_id: Uuid) -> HandlerResult {
+        use crate::beads::BeadsClient;
+        use std::path::PathBuf;
+
+        // Get the pane's working directory
+        let cwd: PathBuf = {
+            let session_mgr = self.session_manager.read().await;
+            session_mgr
+                .find_pane(pane_id)
+                .and_then(|(_, _, pane)| pane.cwd().map(PathBuf::from))
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_default())
+        };
+
+        // Get config for timeout
+        let timeout_ms = self.config.beads.query.socket_timeout;
+
+        // Try to create a beads client and get tasks
+        let tasks = if let Some(client) = BeadsClient::new(&cwd, timeout_ms) {
+            client.query_ready(Some(100)).await.unwrap_or_default() // Limit to 100 for panel
+        } else {
+            Vec::new()
+        };
+
+        HandlerResult::Response(ServerMessage::BeadsReadyList { pane_id, tasks })
     }
 
     /// Create an error response

@@ -504,6 +504,7 @@ mod tests {
             auto_detect: true,
             auto_set_beads_dir: true,
             no_daemon_default: true,
+            query: crate::config::BeadsQueryConfig::default(),
         };
         let beads_dir = PathBuf::from("/path/to/repo/.beads");
 
@@ -522,6 +523,7 @@ mod tests {
             auto_detect: true,
             auto_set_beads_dir: true,
             no_daemon_default: false,
+            query: crate::config::BeadsQueryConfig::default(),
         };
         let beads_dir = PathBuf::from("/path/to/repo/.beads");
 
@@ -540,6 +542,7 @@ mod tests {
             auto_detect: true,
             auto_set_beads_dir: false,
             no_daemon_default: true,
+            query: crate::config::BeadsQueryConfig::default(),
         };
         let beads_dir = PathBuf::from("/path/to/repo/.beads");
 
@@ -555,6 +558,7 @@ mod tests {
             auto_detect: false,
             auto_set_beads_dir: false,
             no_daemon_default: false,
+            query: crate::config::BeadsQueryConfig::default(),
         };
         let beads_dir = PathBuf::from("/path/to/repo/.beads");
 

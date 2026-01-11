@@ -64,6 +64,8 @@ pub struct StatusBar {
     tick_count: u64,
     /// Whether the current pane is in a beads-tracked repo (FEAT-057)
     is_beads_tracked: bool,
+    /// Beads ready task count (FEAT-058): None = unavailable, Some(n) = n tasks ready
+    beads_ready_count: Option<usize>,
 }
 
 impl StatusBar {
@@ -79,6 +81,7 @@ impl StatusBar {
             show_hints: true,
             tick_count: 0,
             is_beads_tracked: false,
+            beads_ready_count: None,
         }
     }
 
@@ -137,6 +140,20 @@ impl StatusBar {
         self.is_beads_tracked
     }
 
+    /// Set beads ready count (FEAT-058)
+    ///
+    /// * `None` - daemon unavailable or not in a beads repo
+    /// * `Some(0)` - no tasks ready (shown in green)
+    /// * `Some(n)` - n tasks ready (shown in yellow)
+    pub fn set_beads_ready_count(&mut self, count: Option<usize>) {
+        self.beads_ready_count = count;
+    }
+
+    /// Get beads ready count
+    pub fn beads_ready_count(&self) -> Option<usize> {
+        self.beads_ready_count
+    }
+
     /// Update tick count for animations
     pub fn tick(&mut self) {
         self.tick_count = self.tick_count.wrapping_add(1);
@@ -165,13 +182,34 @@ impl StatusBar {
             spans.push(Span::styled(pane_text, Style::default().fg(Color::White)));
         }
 
-        // FEAT-057: Beads indicator
+        // FEAT-057/058: Beads indicator with ready count
         if self.is_beads_tracked {
             spans.push(Span::raw("|"));
-            spans.push(Span::styled(
-                " beads ",
-                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
-            ));
+
+            // Show ready count if available, otherwise just "beads"
+            match self.beads_ready_count {
+                Some(0) => {
+                    // No tasks ready - show in green
+                    spans.push(Span::styled(
+                        " bd:0 ",
+                        Style::default().fg(Color::Green),
+                    ));
+                }
+                Some(count) => {
+                    // Tasks ready - show count in yellow
+                    spans.push(Span::styled(
+                        format!(" bd:{} ", count),
+                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    ));
+                }
+                None => {
+                    // Daemon not available or no status yet - show base indicator
+                    spans.push(Span::styled(
+                        " beads ",
+                        Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+                    ));
+                }
+            }
         }
 
         spans
@@ -583,5 +621,96 @@ mod tests {
         let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
 
         assert!(!text.contains("beads"), "Status bar should not show beads indicator when not tracked");
+    }
+
+    // ==================== FEAT-058 Beads Ready Count Tests ====================
+
+    #[test]
+    fn test_beads_ready_count_default_none() {
+        let bar = StatusBar::new();
+        assert!(bar.beads_ready_count().is_none());
+    }
+
+    #[test]
+    fn test_set_beads_ready_count() {
+        let mut bar = StatusBar::new();
+
+        bar.set_beads_ready_count(Some(5));
+        assert_eq!(bar.beads_ready_count(), Some(5));
+
+        bar.set_beads_ready_count(Some(0));
+        assert_eq!(bar.beads_ready_count(), Some(0));
+
+        bar.set_beads_ready_count(None);
+        assert!(bar.beads_ready_count().is_none());
+    }
+
+    #[test]
+    fn test_left_section_with_beads_ready_count() {
+        let mut bar = StatusBar::new();
+        bar.set_session(Some(SessionInfo {
+            id: uuid::Uuid::new_v4(),
+            name: "my-session".to_string(),
+            created_at: 0,
+            window_count: 1,
+            attached_clients: 1,
+            worktree: None,
+            tags: std::collections::HashSet::new(),
+            metadata: HashMap::new(),
+        }));
+        bar.set_beads_tracked(true);
+        bar.set_beads_ready_count(Some(3));
+
+        let spans = bar.left_section();
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+
+        assert!(text.contains("bd:3"), "Status bar should show 'bd:3' when 3 tasks ready");
+        // Should NOT show "beads" when count is available
+        assert!(!text.contains("beads"), "Should show 'bd:N' instead of 'beads' when count available");
+    }
+
+    #[test]
+    fn test_left_section_with_zero_ready_count() {
+        let mut bar = StatusBar::new();
+        bar.set_session(Some(SessionInfo {
+            id: uuid::Uuid::new_v4(),
+            name: "my-session".to_string(),
+            created_at: 0,
+            window_count: 1,
+            attached_clients: 1,
+            worktree: None,
+            tags: std::collections::HashSet::new(),
+            metadata: HashMap::new(),
+        }));
+        bar.set_beads_tracked(true);
+        bar.set_beads_ready_count(Some(0));
+
+        let spans = bar.left_section();
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+
+        assert!(text.contains("bd:0"), "Status bar should show 'bd:0' when no tasks ready");
+    }
+
+    #[test]
+    fn test_left_section_beads_no_daemon() {
+        let mut bar = StatusBar::new();
+        bar.set_session(Some(SessionInfo {
+            id: uuid::Uuid::new_v4(),
+            name: "my-session".to_string(),
+            created_at: 0,
+            window_count: 1,
+            attached_clients: 1,
+            worktree: None,
+            tags: std::collections::HashSet::new(),
+            metadata: HashMap::new(),
+        }));
+        bar.set_beads_tracked(true);
+        bar.set_beads_ready_count(None); // Daemon unavailable
+
+        let spans = bar.left_section();
+        let text: String = spans.iter().map(|s| s.content.as_ref()).collect();
+
+        // Falls back to basic "beads" indicator
+        assert!(text.contains("beads"), "Should show 'beads' when daemon unavailable");
     }
 }

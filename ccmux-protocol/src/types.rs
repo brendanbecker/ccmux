@@ -253,6 +253,92 @@ pub struct ReplyResult {
     pub bytes_written: usize,
 }
 
+// ==================== Beads Query Types (FEAT-058) ====================
+
+/// A task from the beads daemon work queue
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct BeadsTask {
+    /// Task ID (e.g., "BUG-042", "FEAT-015")
+    pub id: String,
+    /// Task title/summary
+    pub title: String,
+    /// Priority level (0 = highest, higher = lower priority)
+    pub priority: i32,
+    /// Current status (e.g., "open", "in_progress")
+    pub status: String,
+    /// Issue type (e.g., "bug", "feature")
+    pub issue_type: String,
+    /// Assigned user (if any)
+    pub assignee: Option<String>,
+    /// Labels attached to the task
+    #[serde(default)]
+    pub labels: Vec<String>,
+}
+
+impl BeadsTask {
+    /// Check if this task has a specific label
+    pub fn has_label(&self, label: &str) -> bool {
+        self.labels.iter().any(|l| l.eq_ignore_ascii_case(label))
+    }
+
+    /// Get a short display string for the task
+    pub fn short_display(&self) -> String {
+        format!("{} P{} {}", self.id, self.priority, self.title)
+    }
+}
+
+/// Beads daemon status for a pane's repository
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct BeadsStatus {
+    /// Whether the daemon is available and responding
+    pub daemon_available: bool,
+    /// Number of ready tasks (no blockers)
+    pub ready_count: usize,
+    /// Ready tasks (may be limited/summarized)
+    #[serde(default)]
+    pub ready_tasks: Vec<BeadsTask>,
+    /// Unix timestamp of last successful refresh
+    pub last_refresh: Option<u64>,
+    /// Error message if daemon unavailable
+    pub error: Option<String>,
+}
+
+impl BeadsStatus {
+    /// Create a status indicating daemon is unavailable
+    pub fn unavailable() -> Self {
+        Self {
+            daemon_available: false,
+            ready_count: 0,
+            ready_tasks: Vec::new(),
+            last_refresh: None,
+            error: None,
+        }
+    }
+
+    /// Create a status with an error message
+    pub fn with_error(error: impl Into<String>) -> Self {
+        Self {
+            daemon_available: false,
+            ready_count: 0,
+            ready_tasks: Vec::new(),
+            last_refresh: None,
+            error: Some(error.into()),
+        }
+    }
+
+    /// Create a successful status with tasks
+    pub fn with_tasks(tasks: Vec<BeadsTask>, timestamp: u64) -> Self {
+        let ready_count = tasks.len();
+        Self {
+            daemon_available: true,
+            ready_count,
+            ready_tasks: tasks,
+            last_refresh: Some(timestamp),
+            error: None,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1498,5 +1584,196 @@ tags: HashSet::new(),
         let serialized = bincode::serialize(&session).unwrap();
         let deserialized: SessionInfo = bincode::deserialize(&serialized).unwrap();
         assert_eq!(session, deserialized);
+    }
+
+    // ==================== BeadsTask Tests (FEAT-058) ====================
+
+    #[test]
+    fn test_beads_task_creation() {
+        let task = BeadsTask {
+            id: "BUG-042".to_string(),
+            title: "Fix login timeout".to_string(),
+            priority: 1,
+            status: "open".to_string(),
+            issue_type: "bug".to_string(),
+            assignee: Some("alice@example.com".to_string()),
+            labels: vec!["auth".to_string(), "urgent".to_string()],
+        };
+
+        assert_eq!(task.id, "BUG-042");
+        assert_eq!(task.priority, 1);
+        assert!(task.assignee.is_some());
+        assert_eq!(task.labels.len(), 2);
+    }
+
+    #[test]
+    fn test_beads_task_has_label() {
+        let task = BeadsTask {
+            id: "FEAT-015".to_string(),
+            title: "Add dark mode".to_string(),
+            priority: 2,
+            status: "open".to_string(),
+            issue_type: "feature".to_string(),
+            assignee: None,
+            labels: vec!["UI".to_string(), "enhancement".to_string()],
+        };
+
+        assert!(task.has_label("ui")); // Case insensitive
+        assert!(task.has_label("UI"));
+        assert!(task.has_label("enhancement"));
+        assert!(!task.has_label("bug"));
+    }
+
+    #[test]
+    fn test_beads_task_short_display() {
+        let task = BeadsTask {
+            id: "BUG-042".to_string(),
+            title: "Fix login timeout".to_string(),
+            priority: 1,
+            status: "open".to_string(),
+            issue_type: "bug".to_string(),
+            assignee: None,
+            labels: vec![],
+        };
+
+        let display = task.short_display();
+        assert!(display.contains("BUG-042"));
+        assert!(display.contains("P1"));
+        assert!(display.contains("Fix login timeout"));
+    }
+
+    #[test]
+    fn test_beads_task_clone() {
+        let task = BeadsTask {
+            id: "TEST-001".to_string(),
+            title: "Test task".to_string(),
+            priority: 0,
+            status: "open".to_string(),
+            issue_type: "test".to_string(),
+            assignee: Some("bob".to_string()),
+            labels: vec!["test".to_string()],
+        };
+
+        let cloned = task.clone();
+        assert_eq!(task, cloned);
+    }
+
+    #[test]
+    fn test_beads_task_serde() {
+        let task = BeadsTask {
+            id: "FEAT-100".to_string(),
+            title: "New feature".to_string(),
+            priority: 2,
+            status: "in_progress".to_string(),
+            issue_type: "feature".to_string(),
+            assignee: Some("dev@example.com".to_string()),
+            labels: vec!["backend".to_string()],
+        };
+
+        let serialized = bincode::serialize(&task).unwrap();
+        let deserialized: BeadsTask = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(task, deserialized);
+    }
+
+    // ==================== BeadsStatus Tests (FEAT-058) ====================
+
+    #[test]
+    fn test_beads_status_default() {
+        let status = BeadsStatus::default();
+
+        assert!(!status.daemon_available);
+        assert_eq!(status.ready_count, 0);
+        assert!(status.ready_tasks.is_empty());
+        assert!(status.last_refresh.is_none());
+        assert!(status.error.is_none());
+    }
+
+    #[test]
+    fn test_beads_status_unavailable() {
+        let status = BeadsStatus::unavailable();
+
+        assert!(!status.daemon_available);
+        assert_eq!(status.ready_count, 0);
+        assert!(status.error.is_none());
+    }
+
+    #[test]
+    fn test_beads_status_with_error() {
+        let status = BeadsStatus::with_error("Connection refused");
+
+        assert!(!status.daemon_available);
+        assert_eq!(status.error, Some("Connection refused".to_string()));
+    }
+
+    #[test]
+    fn test_beads_status_with_tasks() {
+        let tasks = vec![
+            BeadsTask {
+                id: "BUG-001".to_string(),
+                title: "First bug".to_string(),
+                priority: 1,
+                status: "open".to_string(),
+                issue_type: "bug".to_string(),
+                assignee: None,
+                labels: vec![],
+            },
+            BeadsTask {
+                id: "FEAT-002".to_string(),
+                title: "Second feature".to_string(),
+                priority: 2,
+                status: "open".to_string(),
+                issue_type: "feature".to_string(),
+                assignee: None,
+                labels: vec![],
+            },
+        ];
+
+        let status = BeadsStatus::with_tasks(tasks.clone(), 1704067200);
+
+        assert!(status.daemon_available);
+        assert_eq!(status.ready_count, 2);
+        assert_eq!(status.ready_tasks.len(), 2);
+        assert_eq!(status.last_refresh, Some(1704067200));
+        assert!(status.error.is_none());
+    }
+
+    #[test]
+    fn test_beads_status_clone() {
+        let status = BeadsStatus::with_tasks(vec![], 1234567890);
+        let cloned = status.clone();
+        assert_eq!(status, cloned);
+    }
+
+    #[test]
+    fn test_beads_status_serde() {
+        let status = BeadsStatus {
+            daemon_available: true,
+            ready_count: 5,
+            ready_tasks: vec![BeadsTask {
+                id: "TEST-001".to_string(),
+                title: "Test".to_string(),
+                priority: 1,
+                status: "open".to_string(),
+                issue_type: "test".to_string(),
+                assignee: None,
+                labels: vec![],
+            }],
+            last_refresh: Some(1704067200),
+            error: None,
+        };
+
+        let serialized = bincode::serialize(&status).unwrap();
+        let deserialized: BeadsStatus = bincode::deserialize(&serialized).unwrap();
+        assert_eq!(status, deserialized);
+    }
+
+    #[test]
+    fn test_beads_status_equality() {
+        let status1 = BeadsStatus::unavailable();
+        let status2 = BeadsStatus::unavailable();
+        let status3 = BeadsStatus::with_error("error");
+
+        assert_eq!(status1, status2);
+        assert_ne!(status1, status3);
     }
 }
