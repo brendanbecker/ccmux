@@ -1,8 +1,9 @@
 # Task Breakdown: BUG-020
 
 **Work Item**: [BUG-020: Session Reattach from Session Manager Creates Client Without PTY](PROMPT.md)
-**Status**: Not Started
+**Status**: Resolved
 **Last Updated**: 2026-01-10
+**Resolution**: Fixed in commit 8f53895 - Server now sends scrollback content on session reattach
 
 ## Prerequisites
 

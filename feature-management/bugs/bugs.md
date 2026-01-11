@@ -5,9 +5,9 @@
 
 ## Summary Statistics
 - Total Bugs: 16
-- New: 10
+- New: 9
 - In Progress: 0
-- Resolved: 5
+- Resolved: 6
 - Deprecated: 1
 
 ## Bugs by Priority
@@ -16,29 +16,7 @@
 
 *No open P0 bugs*
 
-### P1 - High Priority (7)
-
-#### BUG-020: Session reattach from session manager creates client without PTY [NEW]
-
-**Status**: New
-**Filed**: 2026-01-10
-**Component**: ccmux-server
-**Directory**: [BUG-020-session-reattach-no-pty](BUG-020-session-reattach-no-pty/)
-
-**Description**:
-When a user selects an existing session from the session manager/session selection UI, it creates an additional client connection to the session but the client doesn't get a PTY. The user cannot interact with the terminal - they see the pane but can't type or see output.
-
-**Symptoms**:
-- Selecting an existing session from session manager UI
-- Client appears to connect (additional client registered)
-- No PTY is assigned/visible to the new client
-- Cannot interact with the terminal pane
-
-**Suspected Root Cause**:
-May be related to how session attachment handles PTY reader cloning or output poller registration. The attach handler may not be properly connecting the new client to the existing PTY output stream.
-
-**Impact**:
-Session reattachment via session manager is broken. Users cannot reconnect to existing sessions through the UI.
+### P1 - High Priority (6)
 
 #### BUG-016: PTY output not routed to pane state - breaks Claude detection and MCP read_pane [NEW]
 
@@ -220,6 +198,22 @@ Shift+Tab keystrokes are silently dropped instead of being sent to the PTY. Prog
 **Resolution**:
 Added `KeyCode::BackTab => Some(b"\x1b[Z".to_vec())` to `keys.rs`.
 
+#### BUG-020: Session reattach from session manager creates client without PTY [RESOLVED]
+
+**Status**: Resolved
+**Filed**: 2026-01-10
+**Resolved**: 2026-01-10
+**Component**: ccmux-server
+
+**Description**:
+When a user selects an existing session from the session manager/session selection UI, it creates an additional client connection to the session but the client doesn't get a PTY. The user cannot interact with the terminal - they see the pane but can't type or see output.
+
+**Root Cause**:
+PTY output poller only broadcasts new output, not historical data. When a client reattaches, it connects to the session but receives no scrollback content.
+
+**Resolution**:
+Added `HandlerResult::ResponseWithFollowUp` variant for multi-message responses. Updated `handle_attach_session` to collect and send pane scrollback content immediately after the Attached message. Fixed in commit 8f53895.
+
 ### P2 - Medium Priority (5)
 
 #### BUG-015: Layout doesn't recalculate when panes are closed - remaining pane stays at partial size [NEW]
@@ -357,6 +351,7 @@ Used `tempfile::TempDir` for test isolation in ensure_dir tests.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-10 | BUG-020 | Resolved | Fixed in commit 8f53895 - send scrollback on reattach |
 | 2026-01-10 | BUG-020 | Filed | Session reattach from session manager creates client without PTY |
 | 2026-01-10 | BUG-018 | Filed | TUI pane interaction failure - can't see input bar or interact with pane |
 | 2026-01-10 | BUG-017 | Filed | MCP send_input doesn't handle Enter key |
