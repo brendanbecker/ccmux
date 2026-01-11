@@ -189,11 +189,20 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 
 ## Active Worktrees
 
-**None** - All worktrees merged and cleaned up. Create new worktrees as needed:
+Three parallel streams for bug fixes and features:
 
+| Stream | Path | Branch | Work Items | Focus |
+|--------|------|--------|------------|-------|
+| **A** | `ccmux-stream-a/` | `fix/bug-027-response-routing` | BUG-027 (P0) | MCP response routing |
+| **B** | `ccmux-stream-b/` | `fix/bug-025-026-mcp-handlers` | BUG-025, BUG-026 | MCP handler fixes |
+| **C** | `ccmux-stream-c/` | `feat/feat-055-tmux-keybinds` | FEAT-055 (P1) | TUI keybindings |
+
+Each worktree has a `SESSION.md` (gitignored) with detailed instructions.
+
+**To start a worker:**
 ```bash
-# Example: Create worktree for BUG-027
-git worktree add ../ccmux-bug027 -b fix/bug-027-response-routing
+cd /home/becker/projects/tools/ccmux-stream-X
+cat SESSION.md  # Read instructions
 ```
 
 ### Recently Merged (2026-01-11) - This Session
