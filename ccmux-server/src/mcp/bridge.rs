@@ -485,6 +485,25 @@ impl McpBridge {
                 let key = arguments["key"].as_str().map(String::from);
                 self.tool_get_environment(session, key).await
             }
+            "ccmux_set_metadata" => {
+                let session = arguments["session"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'session' parameter".into()))?;
+                let key = arguments["key"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'key' parameter".into()))?;
+                let value = arguments["value"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'value' parameter".into()))?;
+                self.tool_set_metadata(session, key, value).await
+            }
+            "ccmux_get_metadata" => {
+                let session = arguments["session"]
+                    .as_str()
+                    .ok_or_else(|| McpError::InvalidParams("Missing 'session' parameter".into()))?;
+                let key = arguments["key"].as_str().map(String::from);
+                self.tool_get_metadata(session, key).await
+            }
             _ => Err(McpError::UnknownTool(name.into())),
         }
     }
@@ -505,6 +524,7 @@ impl McpBridge {
                             "window_count": s.window_count,
                             "attached_clients": s.attached_clients,
                             "created_at": s.created_at,
+                            "metadata": s.metadata,
                         })
                     })
                     .collect();
@@ -1159,6 +1179,79 @@ impl McpBridge {
                     "session_id": session_id.to_string(),
                     "session_name": session_name,
                     "environment": environment,
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_set_metadata(
+        &mut self,
+        session_filter: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<ToolResult, McpError> {
+        self.send_to_daemon(ClientMessage::SetMetadata {
+            session_filter: session_filter.to_string(),
+            key: key.to_string(),
+            value: value.to_string(),
+        })
+        .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::MetadataSet {
+                session_id,
+                session_name,
+                key,
+                value,
+            } => {
+                let result = serde_json::json!({
+                    "success": true,
+                    "session_id": session_id.to_string(),
+                    "session_name": session_name,
+                    "key": key,
+                    "value": value,
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
+
+    async fn tool_get_metadata(
+        &mut self,
+        session_filter: &str,
+        key: Option<String>,
+    ) -> Result<ToolResult, McpError> {
+        self.send_to_daemon(ClientMessage::GetMetadata {
+            session_filter: session_filter.to_string(),
+            key,
+        })
+        .await?;
+
+        match self.recv_response_from_daemon().await? {
+            ServerMessage::MetadataList {
+                session_id,
+                session_name,
+                metadata,
+            } => {
+                let result = serde_json::json!({
+                    "session_id": session_id.to_string(),
+                    "session_name": session_name,
+                    "metadata": metadata,
                 });
 
                 let json = serde_json::to_string_pretty(&result)

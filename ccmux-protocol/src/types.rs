@@ -1,6 +1,7 @@
 //! Shared data types for ccmux protocol
 
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Split direction for creating panes
@@ -33,6 +34,9 @@ pub struct SessionInfo {
     pub worktree: Option<WorktreeInfo>,
     /// Whether this is the orchestrator session
     pub is_orchestrator: bool,
+    /// Arbitrary key-value metadata for application use
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
 }
 
 /// Window information
@@ -718,6 +722,7 @@ mod tests {
             attached_clients: 1,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         assert_eq!(session.id, id);
@@ -737,6 +742,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         assert_eq!(session.attached_clients, 0);
@@ -752,6 +758,7 @@ mod tests {
             attached_clients: 5,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         assert_eq!(session.attached_clients, 5);
@@ -767,6 +774,7 @@ mod tests {
             attached_clients: 2,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         let cloned = session.clone();
@@ -785,6 +793,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         let session2 = SessionInfo {
@@ -795,6 +804,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         let session3 = SessionInfo {
@@ -805,6 +815,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         assert_eq!(session1, session2);
@@ -821,6 +832,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         let debug = format!("{:?}", session);
@@ -935,6 +947,7 @@ mod tests {
             attached_clients: 1,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         let serialized = bincode::serialize(&session).unwrap();
@@ -1351,6 +1364,7 @@ mod tests {
                 is_main: true,
             }),
             is_orchestrator: true,
+            metadata: HashMap::new(),
         };
 
         assert!(session.worktree.is_some());
@@ -1367,6 +1381,7 @@ mod tests {
             attached_clients: 0,
             worktree: None,
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         assert!(session.worktree.is_none());
@@ -1387,6 +1402,7 @@ mod tests {
                 is_main: false,
             }),
             is_orchestrator: false,
+            metadata: HashMap::new(),
         };
 
         let serialized = bincode::serialize(&session).unwrap();

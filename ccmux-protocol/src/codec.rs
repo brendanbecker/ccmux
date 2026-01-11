@@ -145,6 +145,7 @@ fn encode_message<T: serde::Serialize>(item: &T, dst: &mut BytesMut) -> Result<(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
     use uuid::Uuid;
 
     #[test]
@@ -302,6 +303,7 @@ mod tests {
                     attached_clients: 0,
                     worktree: None,
                     is_orchestrator: false,
+                    metadata: HashMap::new(),
                 }],
             },
             ServerMessage::SessionCreated {
@@ -313,6 +315,7 @@ mod tests {
                     attached_clients: 1,
                     worktree: None,
                     is_orchestrator: false,
+                    metadata: HashMap::new(),
                 },
             },
             ServerMessage::Attached {
@@ -324,6 +327,7 @@ mod tests {
                     attached_clients: 1,
                     worktree: None,
                     is_orchestrator: false,
+                    metadata: HashMap::new(),
                 },
                 windows: vec![WindowInfo {
                     id: window_id,

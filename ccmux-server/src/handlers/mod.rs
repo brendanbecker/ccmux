@@ -249,6 +249,20 @@ impl HandlerContext {
                 session_filter,
                 key,
             } => self.handle_get_environment(session_filter, key).await,
+
+            ClientMessage::SetMetadata {
+                session_filter,
+                key,
+                value,
+            } => {
+                self.handle_set_metadata(session_filter, key, value)
+                    .await
+            }
+
+            ClientMessage::GetMetadata {
+                session_filter,
+                key,
+            } => self.handle_get_metadata(session_filter, key).await,
         }
     }
 

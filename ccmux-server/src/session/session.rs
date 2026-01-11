@@ -29,6 +29,8 @@ pub struct Session {
     is_orchestrator: bool,
     /// Session-level environment variables (inherited by new panes)
     environment: HashMap<String, String>,
+    /// Arbitrary key-value metadata for application use
+    metadata: HashMap<String, String>,
 }
 
 impl Session {
@@ -45,6 +47,7 @@ impl Session {
             worktree: None,
             is_orchestrator: false,
             environment: HashMap::new(),
+            metadata: HashMap::new(),
         }
     }
 
@@ -63,6 +66,31 @@ impl Session {
             worktree: None,
             is_orchestrator: false,
             environment: HashMap::new(),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Restore a session with metadata from persisted state
+    ///
+    /// Used during crash recovery to recreate session with original ID and metadata.
+    pub fn restore_with_metadata(
+        id: Uuid,
+        name: impl Into<String>,
+        created_at: u64,
+        metadata: HashMap<String, String>,
+    ) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            windows: HashMap::new(),
+            window_order: Vec::new(),
+            active_window_id: None,
+            attached_clients: 0,
+            created_at: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(created_at),
+            worktree: None,
+            is_orchestrator: false,
+            environment: HashMap::new(),
+            metadata,
         }
     }
 
@@ -168,6 +196,26 @@ impl Session {
         &self.environment
     }
 
+    /// Set a metadata value on this session
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.metadata.insert(key.into(), value.into());
+    }
+
+    /// Remove a metadata key from this session
+    pub fn remove_metadata(&mut self, key: &str) -> Option<String> {
+        self.metadata.remove(key)
+    }
+
+    /// Get a metadata value
+    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+        self.metadata.get(key)
+    }
+
+    /// Get all session metadata
+    pub fn all_metadata(&self) -> &HashMap<String, String> {
+        &self.metadata
+    }
+
     /// Create a new window
     pub fn create_window(&mut self, name: Option<String>) -> &Window {
         let index = self.windows.len();
@@ -263,6 +311,7 @@ impl Session {
                 is_main: w.is_main,
             }),
             is_orchestrator: self.is_orchestrator,
+            metadata: self.metadata.clone(),
         }
     }
 }

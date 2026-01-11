@@ -254,6 +254,7 @@ impl Server {
                     windows,
                     active_window_id: session.active_window_id(),
                     created_at: session.created_at_unix(),
+                    metadata: session.all_metadata().clone(),
                 }
             })
             .collect()
@@ -349,6 +350,7 @@ impl Server {
                     windows,
                     active_window_id: session.active_window_id(),
                     created_at: session.created_at_unix(),
+                    metadata: session.all_metadata().clone(),
                 }
             })
             .collect()
