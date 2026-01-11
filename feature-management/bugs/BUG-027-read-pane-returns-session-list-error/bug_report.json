@@ -1,0 +1,12 @@
+{
+  "id": "BUG-027",
+  "title": "MCP response types swapped between handlers (async routing bug)",
+  "priority": "P0",
+  "severity": "critical",
+  "status": "open",
+  "component": "mcp-server",
+  "created": "2026-01-11",
+  "reporter": "QA-demo-orchestrator",
+  "description": "Responses routed to wrong handlers - read_pane gets SessionList, list_panes gets PaneContent",
+  "tags": ["mcp", "async", "routing", "blocking", "critical"]
+}
