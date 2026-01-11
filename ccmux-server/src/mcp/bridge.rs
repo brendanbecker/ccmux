@@ -328,7 +328,8 @@ impl McpBridge {
             "ccmux_create_session" => {
                 let name = arguments["name"].as_str().map(String::from);
                 let command = arguments["command"].as_str().map(String::from);
-                self.tool_create_session(name, command).await
+                let cwd = arguments["cwd"].as_str().map(String::from);
+                self.tool_create_session(name, command, cwd).await
             }
             "ccmux_create_window" => {
                 let session = arguments["session"].as_str().map(String::from);
@@ -557,8 +558,9 @@ impl McpBridge {
         &mut self,
         name: Option<String>,
         command: Option<String>,
+        cwd: Option<String>,
     ) -> Result<ToolResult, McpError> {
-        self.send_to_daemon(ClientMessage::CreateSessionWithOptions { name, command })
+        self.send_to_daemon(ClientMessage::CreateSessionWithOptions { name, command, cwd })
             .await?;
 
         match self.recv_from_daemon().await? {

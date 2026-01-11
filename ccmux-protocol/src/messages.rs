@@ -195,6 +195,8 @@ pub enum ClientMessage {
         name: Option<String>,
         /// Command to run in the default pane (default: $SHELL or /bin/sh)
         command: Option<String>,
+        /// Working directory for the session
+        cwd: Option<String>,
     },
 
     /// Create a new window with options (for MCP bridge)

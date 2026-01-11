@@ -446,8 +446,9 @@ impl HandlerContext {
         &self,
         name: Option<String>,
         command: Option<String>,
+        cwd: Option<String>,
     ) -> HandlerResult {
-        info!("CreateSessionWithOptions request from {} (name: {:?}, command: {:?})", self.client_id, name, command);
+        info!("CreateSessionWithOptions request from {} (name: {:?}, command: {:?}, cwd: {:?})", self.client_id, name, command, cwd);
 
         let mut session_manager = self.session_manager.write().await;
 
@@ -512,12 +513,15 @@ impl HandlerContext {
 
         // Spawn PTY for the default pane
         let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
-        let config = if let Some(ref cmd) = command {
+        let mut config = if let Some(ref cmd) = command {
             // Wrap user command in shell to handle arguments and shell syntax
             PtyConfig::command("sh").with_arg("-c").with_arg(cmd)
         } else {
             PtyConfig::command(&shell)
         };
+        if let Some(ref cwd) = cwd {
+            config = config.with_cwd(cwd);
+        }
 
         {
             let mut pty_manager = self.pty_manager.write().await;
@@ -891,7 +895,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_session_with_options() {
         let ctx = create_test_context();
-        let result = ctx.handle_create_session_with_options(Some("my-session".to_string()), None).await;
+        let result = ctx.handle_create_session_with_options(Some("my-session".to_string()), None, None).await;
 
         match result {
             HandlerResult::Response(ServerMessage::SessionCreatedWithDetails {
@@ -907,7 +911,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_session_with_auto_name() {
         let ctx = create_test_context();
-        let result = ctx.handle_create_session_with_options(None, None).await;
+        let result = ctx.handle_create_session_with_options(None, None, None).await;
 
         match result {
             HandlerResult::Response(ServerMessage::SessionCreatedWithDetails {
