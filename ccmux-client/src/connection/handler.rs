@@ -192,7 +192,7 @@ mod tests {
                 window_count: 1,
                 attached_clients: 0,
                 worktree: None,
-                is_orchestrator: false,
+                tags: std::collections::HashSet::new(),
             }],
         });
 

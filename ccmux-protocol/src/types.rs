@@ -1,5 +1,7 @@
 //! Shared data types for ccmux protocol
 
+use std::collections::HashSet;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -31,8 +33,26 @@ pub struct SessionInfo {
     pub attached_clients: usize,
     /// Associated worktree (if any)
     pub worktree: Option<WorktreeInfo>,
-    /// Whether this is the orchestrator session
-    pub is_orchestrator: bool,
+    /// Tags for session classification and routing (e.g., "orchestrator", "worker", "evaluator")
+    #[serde(default)]
+    pub tags: HashSet<String>,
+}
+
+impl SessionInfo {
+    /// Check if session has a specific tag
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.contains(tag)
+    }
+
+    /// Add a tag to the session
+    pub fn add_tag(&mut self, tag: impl Into<String>) {
+        self.tags.insert(tag.into());
+    }
+
+    /// Remove a tag from the session
+    pub fn remove_tag(&mut self, tag: &str) -> bool {
+        self.tags.remove(tag)
+    }
 }
 
 /// Window information
@@ -717,7 +737,7 @@ mod tests {
             window_count: 2,
             attached_clients: 1,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         assert_eq!(session.id, id);
@@ -736,7 +756,7 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         assert_eq!(session.attached_clients, 0);
@@ -751,7 +771,7 @@ mod tests {
             window_count: 1,
             attached_clients: 5,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         assert_eq!(session.attached_clients, 5);
@@ -766,7 +786,7 @@ mod tests {
             window_count: 3,
             attached_clients: 2,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         let cloned = session.clone();
@@ -784,7 +804,7 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         let session2 = SessionInfo {
@@ -794,7 +814,7 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         let session3 = SessionInfo {
@@ -804,7 +824,7 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         assert_eq!(session1, session2);
@@ -820,7 +840,7 @@ mod tests {
             window_count: 0,
             attached_clients: 0,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         let debug = format!("{:?}", session);
@@ -934,7 +954,7 @@ mod tests {
             window_count: 3,
             attached_clients: 1,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         let serialized = bincode::serialize(&session).unwrap();
@@ -1339,6 +1359,9 @@ mod tests {
 
     #[test]
     fn test_session_info_with_worktree() {
+        let mut tags = HashSet::new();
+        tags.insert("orchestrator".to_string());
+
         let session = SessionInfo {
             id: Uuid::new_v4(),
             name: "test".to_string(),
@@ -1350,11 +1373,11 @@ mod tests {
                 branch: Some("main".to_string()),
                 is_main: true,
             }),
-            is_orchestrator: true,
+            tags,
         };
 
         assert!(session.worktree.is_some());
-        assert!(session.is_orchestrator);
+        assert!(session.has_tag("orchestrator"));
     }
 
     #[test]
@@ -1366,11 +1389,66 @@ mod tests {
             window_count: 1,
             attached_clients: 0,
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         assert!(session.worktree.is_none());
-        assert!(!session.is_orchestrator);
+        assert!(!session.has_tag("orchestrator"));
+    }
+
+    #[test]
+    fn test_session_info_tags() {
+        let mut session = SessionInfo {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            created_at: 0,
+            window_count: 0,
+            attached_clients: 0,
+            worktree: None,
+            tags: HashSet::new(),
+        };
+
+        // Initially no tags
+        assert!(!session.has_tag("worker"));
+        assert!(session.tags.is_empty());
+
+        // Add a tag
+        session.add_tag("worker");
+        assert!(session.has_tag("worker"));
+        assert_eq!(session.tags.len(), 1);
+
+        // Add another tag
+        session.add_tag("evaluator");
+        assert!(session.has_tag("evaluator"));
+        assert_eq!(session.tags.len(), 2);
+
+        // Remove a tag
+        assert!(session.remove_tag("worker"));
+        assert!(!session.has_tag("worker"));
+        assert_eq!(session.tags.len(), 1);
+
+        // Removing non-existent tag returns false
+        assert!(!session.remove_tag("nonexistent"));
+    }
+
+    #[test]
+    fn test_session_info_tags_clone() {
+        let mut tags = HashSet::new();
+        tags.insert("tag1".to_string());
+        tags.insert("tag2".to_string());
+
+        let session = SessionInfo {
+            id: Uuid::new_v4(),
+            name: "test".to_string(),
+            created_at: 0,
+            window_count: 0,
+            attached_clients: 0,
+            worktree: None,
+            tags,
+        };
+
+        let cloned = session.clone();
+        assert_eq!(session.tags, cloned.tags);
     }
 
     #[test]
@@ -1386,7 +1464,7 @@ mod tests {
                 branch: Some("feature".to_string()),
                 is_main: false,
             }),
-            is_orchestrator: false,
+            tags: HashSet::new(),
         };
 
         let serialized = bincode::serialize(&session).unwrap();

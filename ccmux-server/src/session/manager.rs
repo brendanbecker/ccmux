@@ -309,7 +309,7 @@ impl SessionManager {
 
             if let Some(worktree) = worktrees.into_iter().find(|w| w.path == worktree_root) {
                 let is_orchestrator = worktree.is_main;
-                session.set_worktree(worktree, is_orchestrator);
+                session.set_worktree_with_orchestrator(worktree, is_orchestrator);
             }
         }
 
@@ -896,8 +896,8 @@ mod tests {
             is_main: true,
         };
 
-        manager.get_session_mut(session1_id).unwrap().set_worktree(worktree.clone(), true);
-        manager.get_session_mut(session2_id).unwrap().set_worktree(worktree, false);
+        manager.get_session_mut(session1_id).unwrap().set_worktree_with_orchestrator(worktree.clone(), true);
+        manager.get_session_mut(session2_id).unwrap().set_worktree_with_orchestrator(worktree, false);
 
         // Both sessions should be found for the worktree
         let sessions = manager.sessions_for_worktree(&worktree_path);

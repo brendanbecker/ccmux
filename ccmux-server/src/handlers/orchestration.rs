@@ -43,30 +43,30 @@ impl HandlerContext {
 
         // Route based on target
         let delivered_count = match target {
-            OrchestrationTarget::Orchestrator => {
-                // Find the orchestrator session and send to its clients
-                let orchestrator_session = session_manager
-                    .list_sessions()
-                    .iter()
-                    .find(|s| s.is_orchestrator())
-                    .map(|s| s.id());
+            OrchestrationTarget::Tagged(ref tag) => {
+                // Find sessions with the specified tag and send to their clients
+                let mut total_delivered = 0;
 
-                match orchestrator_session {
-                    Some(session_id) => {
-                        if session_id == sender_session_id {
-                            debug!("Orchestrator sending to itself, skipping");
-                            0
-                        } else {
-                            self.registry
-                                .broadcast_to_session(session_id, outbound_message)
-                                .await
-                        }
+                for session in session_manager.list_sessions() {
+                    let session_id = session.id();
+                    if session_id == sender_session_id {
+                        continue;
                     }
-                    None => {
-                        debug!("No orchestrator session found");
-                        0
+
+                    if session.has_tag(tag) {
+                        let count = self
+                            .registry
+                            .broadcast_to_session(session_id, outbound_message.clone())
+                            .await;
+                        total_delivered += count;
                     }
                 }
+
+                if total_delivered == 0 {
+                    debug!("No sessions found with tag '{}'", tag);
+                }
+
+                total_delivered
             }
 
             OrchestrationTarget::Session(session_id) => {
@@ -148,7 +148,7 @@ mod tests {
     use crate::pty::PtyManager;
     use crate::registry::ClientRegistry;
     use crate::session::SessionManager;
-    use ccmux_protocol::WorkerStatus;
+    use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::{mpsc, RwLock};
     use uuid::Uuid;
@@ -172,11 +172,10 @@ mod tests {
     }
 
     fn create_test_message() -> OrchestrationMessage {
-        OrchestrationMessage::StatusUpdate {
-            session_id: Uuid::new_v4(),
-            status: WorkerStatus::Idle,
-            message: Some("Ready".to_string()),
-        }
+        OrchestrationMessage::new(
+            "status.update",
+            json!({"status": "idle", "message": "Ready"}),
+        )
     }
 
     #[tokio::test]
@@ -272,10 +271,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_send_orchestration_to_orchestrator_not_found() {
+    async fn test_send_orchestration_to_tagged_not_found() {
         let ctx = create_test_context();
 
-        // Create and attach to a session (not marked as orchestrator)
+        // Create and attach to a session (without orchestrator tag)
         let session_id = {
             let mut session_manager = ctx.session_manager.write().await;
             session_manager.create_session("worker").unwrap().id()
@@ -284,12 +283,15 @@ mod tests {
 
         let message = create_test_message();
         let result = ctx
-            .handle_send_orchestration(OrchestrationTarget::Orchestrator, message)
+            .handle_send_orchestration(
+                OrchestrationTarget::Tagged("orchestrator".to_string()),
+                message,
+            )
             .await;
 
         match result {
             HandlerResult::Response(ServerMessage::OrchestrationDelivered { delivered_count }) => {
-                // No orchestrator session exists
+                // No session with orchestrator tag exists
                 assert_eq!(delivered_count, 0);
             }
             _ => panic!("Expected OrchestrationDelivered response"),
@@ -360,6 +362,62 @@ mod tests {
         }
 
         // Verify recipient got the message
+        let received = rx.try_recv().expect("Should have received message");
+        match received {
+            ServerMessage::OrchestrationReceived {
+                from_session_id,
+                message: received_message,
+            } => {
+                assert_eq!(from_session_id, sender_session_id);
+                assert_eq!(received_message, message);
+            }
+            _ => panic!("Expected OrchestrationReceived message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_send_orchestration_to_tagged_with_recipient() {
+        let ctx = create_test_context();
+
+        // Create sender session (worker) and attach
+        let sender_session_id = {
+            let mut session_manager = ctx.session_manager.write().await;
+            let session_id = session_manager.create_session("worker").unwrap().id();
+            session_manager.get_session_mut(session_id).unwrap().add_tag("worker");
+            session_id
+        };
+        ctx.registry.attach_to_session(ctx.client_id, sender_session_id);
+
+        // Create orchestrator session with a client
+        let orchestrator_session_id = {
+            let mut session_manager = ctx.session_manager.write().await;
+            let session_id = session_manager.create_session("orchestrator").unwrap().id();
+            session_manager.get_session_mut(session_id).unwrap().add_tag("orchestrator");
+            session_id
+        };
+
+        // Register an orchestrator client
+        let (tx, mut rx) = mpsc::channel(10);
+        let orchestrator_client_id = ctx.registry.register_client(tx);
+        ctx.registry
+            .attach_to_session(orchestrator_client_id, orchestrator_session_id);
+
+        let message = create_test_message();
+        let result = ctx
+            .handle_send_orchestration(
+                OrchestrationTarget::Tagged("orchestrator".to_string()),
+                message.clone(),
+            )
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::OrchestrationDelivered { delivered_count }) => {
+                assert_eq!(delivered_count, 1);
+            }
+            _ => panic!("Expected OrchestrationDelivered response"),
+        }
+
+        // Verify orchestrator got the message
         let received = rx.try_recv().expect("Should have received message");
         match received {
             ServerMessage::OrchestrationReceived {

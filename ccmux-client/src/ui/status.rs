@@ -347,7 +347,7 @@ mod tests {
             window_count: 1,
             attached_clients: 1,
             worktree: None,
-            is_orchestrator: false,
+            tags: std::collections::HashSet::new(),
         };
 
         bar.set_session(Some(session.clone()));
@@ -448,7 +448,7 @@ mod tests {
             window_count: 1,
             attached_clients: 1,
             worktree: None,
-            is_orchestrator: false,
+            tags: std::collections::HashSet::new(),
         }));
 
         let spans = bar.left_section();

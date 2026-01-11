@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::SystemTime;
 use uuid::Uuid;
 use ccmux_protocol::{SessionInfo, WorktreeInfo as ProtocolWorktreeInfo};
@@ -25,8 +25,8 @@ pub struct Session {
     created_at: SystemTime,
     /// Associated worktree (if any)
     worktree: Option<WorktreeInfo>,
-    /// Whether this is the orchestrator session
-    is_orchestrator: bool,
+    /// Tags for session classification and routing (e.g., "orchestrator", "worker", "evaluator")
+    tags: HashSet<String>,
     /// Session-level environment variables (inherited by new panes)
     environment: HashMap<String, String>,
 }
@@ -43,7 +43,7 @@ impl Session {
             attached_clients: 0,
             created_at: SystemTime::now(),
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
             environment: HashMap::new(),
         }
     }
@@ -61,7 +61,7 @@ impl Session {
             attached_clients: 0,
             created_at: SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(created_at),
             worktree: None,
-            is_orchestrator: false,
+            tags: HashSet::new(),
             environment: HashMap::new(),
         }
     }
@@ -135,14 +135,42 @@ impl Session {
         self.worktree.as_ref()
     }
 
-    /// Check if this session is the orchestrator
-    pub fn is_orchestrator(&self) -> bool {
-        self.is_orchestrator
+    /// Check if session has a specific tag
+    pub fn has_tag(&self, tag: &str) -> bool {
+        self.tags.contains(tag)
     }
 
-    /// Set worktree association
-    pub fn set_worktree(&mut self, worktree: WorktreeInfo, is_orchestrator: bool) {
-        self.is_orchestrator = is_orchestrator;
+    /// Check if this session has the orchestrator tag (convenience method)
+    pub fn is_orchestrator(&self) -> bool {
+        self.has_tag("orchestrator")
+    }
+
+    /// Get all tags for this session
+    pub fn tags(&self) -> &HashSet<String> {
+        &self.tags
+    }
+
+    /// Add a tag to this session
+    pub fn add_tag(&mut self, tag: impl Into<String>) {
+        self.tags.insert(tag.into());
+    }
+
+    /// Remove a tag from this session
+    pub fn remove_tag(&mut self, tag: &str) -> bool {
+        self.tags.remove(tag)
+    }
+
+    /// Set worktree association with tags
+    pub fn set_worktree(&mut self, worktree: WorktreeInfo, tags: HashSet<String>) {
+        self.tags = tags;
+        self.worktree = Some(worktree);
+    }
+
+    /// Set worktree association (legacy convenience method)
+    pub fn set_worktree_with_orchestrator(&mut self, worktree: WorktreeInfo, is_orchestrator: bool) {
+        if is_orchestrator {
+            self.tags.insert("orchestrator".to_string());
+        }
         self.worktree = Some(worktree);
     }
 
@@ -262,7 +290,7 @@ impl Session {
                 branch: w.branch.clone(),
                 is_main: w.is_main,
             }),
-            is_orchestrator: self.is_orchestrator,
+            tags: self.tags.clone(),
         }
     }
 }
@@ -486,7 +514,7 @@ mod tests {
         assert_eq!(info.attached_clients, 1);
         assert!(info.created_at > 0);
         assert!(info.worktree.is_none());
-        assert!(!info.is_orchestrator);
+        assert!(info.tags.is_empty());
     }
 
     #[test]
@@ -498,7 +526,7 @@ mod tests {
         assert_eq!(info.window_count, 0);
         assert_eq!(info.attached_clients, 0);
         assert!(info.worktree.is_none());
-        assert!(!info.is_orchestrator);
+        assert!(info.tags.is_empty());
     }
 
     #[test]
@@ -581,6 +609,7 @@ mod tests {
 
         assert!(session.worktree().is_none());
         assert!(!session.is_orchestrator());
+        assert!(session.tags().is_empty());
     }
 
     #[test]
@@ -596,7 +625,7 @@ mod tests {
             is_main: false,
         };
 
-        session.set_worktree(worktree.clone(), false);
+        session.set_worktree(worktree.clone(), HashSet::new());
 
         let wt = session.worktree().unwrap();
         assert_eq!(wt.path, PathBuf::from("/path/to/worktree"));
@@ -618,7 +647,9 @@ mod tests {
             is_main: true,
         };
 
-        session.set_worktree(worktree, true);
+        let mut tags = HashSet::new();
+        tags.insert("orchestrator".to_string());
+        session.set_worktree(worktree, tags);
 
         assert!(session.worktree().is_some());
         assert!(session.is_orchestrator());
@@ -637,7 +668,7 @@ mod tests {
             is_main: false,
         };
 
-        session.set_worktree(worktree, false);
+        session.set_worktree(worktree, HashSet::new());
 
         let info = session.to_info();
 
@@ -646,7 +677,7 @@ mod tests {
         assert_eq!(proto_wt.path, "/path/to/worktree");
         assert_eq!(proto_wt.branch, Some("feature-1".to_string()));
         assert!(!proto_wt.is_main);
-        assert!(!info.is_orchestrator);
+        assert!(info.tags.is_empty());
     }
 
     #[test]
@@ -662,11 +693,70 @@ mod tests {
             is_main: true,
         };
 
-        session.set_worktree(worktree, true);
+        let mut tags = HashSet::new();
+        tags.insert("orchestrator".to_string());
+        session.set_worktree(worktree, tags);
 
         let info = session.to_info();
 
         assert!(info.worktree.is_some());
-        assert!(info.is_orchestrator);
+        assert!(info.has_tag("orchestrator"));
+    }
+
+    // ==================== Tags Tests ====================
+
+    #[test]
+    fn test_session_tags_management() {
+        let mut session = Session::new("work");
+
+        // Initially no tags
+        assert!(session.tags().is_empty());
+        assert!(!session.has_tag("worker"));
+
+        // Add a tag
+        session.add_tag("worker");
+        assert!(session.has_tag("worker"));
+        assert_eq!(session.tags().len(), 1);
+
+        // Add another tag
+        session.add_tag("evaluator");
+        assert!(session.has_tag("evaluator"));
+        assert_eq!(session.tags().len(), 2);
+
+        // Remove a tag
+        assert!(session.remove_tag("worker"));
+        assert!(!session.has_tag("worker"));
+        assert_eq!(session.tags().len(), 1);
+
+        // Removing non-existent tag returns false
+        assert!(!session.remove_tag("nonexistent"));
+    }
+
+    #[test]
+    fn test_session_multiple_tags() {
+        use std::path::PathBuf;
+
+        let mut session = Session::new("multi-role");
+
+        let worktree = WorktreeInfo {
+            path: PathBuf::from("/path/to/repo"),
+            branch: Some("main".to_string()),
+            head: "abc123".to_string(),
+            is_main: true,
+        };
+
+        let mut tags = HashSet::new();
+        tags.insert("orchestrator".to_string());
+        tags.insert("primary".to_string());
+        session.set_worktree(worktree, tags);
+
+        assert!(session.has_tag("orchestrator"));
+        assert!(session.has_tag("primary"));
+        assert!(session.is_orchestrator());
+        assert_eq!(session.tags().len(), 2);
+
+        let info = session.to_info();
+        assert!(info.has_tag("orchestrator"));
+        assert!(info.has_tag("primary"));
     }
 }

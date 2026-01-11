@@ -1581,7 +1581,7 @@ impl App {
                         .as_ref()
                         .map(|w| format!(" [{}]", w.path))
                         .unwrap_or_default();
-                    let orchestrator_badge = if session.is_orchestrator { " ★" } else { "" };
+                    let orchestrator_badge = if session.has_tag("orchestrator") { " ★" } else { "" };
                     ListItem::new(format!(
                         "{}{} ({} windows, {} clients){}",
                         session.name,

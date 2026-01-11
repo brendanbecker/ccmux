@@ -11,7 +11,7 @@ pub mod types;
 pub use codec::{ClientCodec, CodecError, ServerCodec};
 pub use messages::{
     ClientMessage, ErrorCode, OrchestrationMessage, OrchestrationTarget, PaneListEntry,
-    ServerMessage, WorkerStatus,
+    ServerMessage,
 };
 pub use types::{
     ClaudeActivity, ClaudeState, Dimensions, PaneInfo, PaneState, PaneTarget, ReplyMessage,

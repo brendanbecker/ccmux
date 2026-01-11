@@ -1362,7 +1362,7 @@ mod tests {
     fn test_is_broadcast_message_orchestration_received() {
         let msg = ServerMessage::OrchestrationReceived {
             from_session_id: Uuid::new_v4(),
-            message: ccmux_protocol::OrchestrationMessage::SyncRequest,
+            message: ccmux_protocol::OrchestrationMessage::new("sync.request", serde_json::json!({})),
         };
         assert!(McpBridge::is_broadcast_message(&msg));
     }
