@@ -247,36 +247,81 @@ See [ADR-003](./ADR/003-session-isolation.md) for the full decision rationale.
 
 ### Protocol A: MCP Server
 
-ccmux exposes an MCP (Model Context Protocol) server that Claude can connect to.
+ccmux exposes an MCP (Model Context Protocol) server via the `mcp-bridge` subcommand. This allows Claude to control ccmux sessions programmatically.
 
-**Tools provided**:
-| Tool | Description |
-|------|-------------|
-| `ccmux_list_panes` | List all panes with metadata |
-| `ccmux_read_pane` | Read output buffer from pane |
-| `ccmux_create_pane` | Create a new pane |
-| `ccmux_send_input` | Send keystrokes to pane |
-| `ccmux_get_status` | Get pane state (shell, Claude, etc.) |
-
-**MCP Configuration** (in Claude's settings):
+**MCP Configuration** (add to `~/.claude/mcp.json`):
 ```json
 {
   "mcpServers": {
     "ccmux": {
-      "command": "ccmux",
-      "args": ["mcp-server"]
+      "command": "/path/to/ccmux-server",
+      "args": ["mcp-bridge"]
     }
   }
 }
 ```
 
-**Example tool call**:
+**Tools provided** (18 total):
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| **Sessions** | `ccmux_list_sessions` | List all sessions with metadata |
+| | `ccmux_create_session` | Create a new session |
+| | `ccmux_rename_session` | Rename a session for easier identification |
+| | `ccmux_select_session` | Switch to a different session |
+| **Windows** | `ccmux_list_windows` | List windows in a session |
+| | `ccmux_create_window` | Create a new window |
+| | `ccmux_select_window` | Switch to a different window |
+| **Panes** | `ccmux_list_panes` | List all panes with metadata |
+| | `ccmux_create_pane` | Create a new pane (split) |
+| | `ccmux_close_pane` | Close a pane |
+| | `ccmux_focus_pane` | Focus a specific pane |
+| **I/O** | `ccmux_read_pane` | Read output buffer from pane |
+| | `ccmux_send_input` | Send keystrokes to pane (use `\n` for Enter) |
+| | `ccmux_get_status` | Get pane state (shell, Claude, etc.) |
+| **Layouts** | `ccmux_create_layout` | Create complex layouts declaratively |
+| | `ccmux_split_pane` | Split a pane with custom ratio |
+| | `ccmux_resize_pane` | Resize a pane dynamically |
+
+**Example: Create a pane**:
 ```json
 {
   "tool": "ccmux_create_pane",
   "input": {
     "direction": "horizontal",
     "command": "npm test"
+  }
+}
+```
+
+**Example: Declarative layout** (via `ccmux_create_layout`):
+```json
+{
+  "layout": {
+    "direction": "horizontal",
+    "splits": [
+      {"ratio": 0.6, "layout": {"pane": {"command": "vim"}}},
+      {"ratio": 0.4, "layout": {
+        "direction": "vertical",
+        "splits": [
+          {"ratio": 0.5, "layout": {"pane": {"command": "claude"}}},
+          {"ratio": 0.5, "layout": {"pane": {"command": "cargo watch -x check"}}}
+        ]
+      }}
+    ]
+  }
+}
+```
+
+This creates a 60/40 horizontal split with vim on the left, and a vertical split on the right with Claude on top and cargo watch on bottom.
+
+**Example: Send input with Enter**:
+```json
+{
+  "tool": "ccmux_send_input",
+  "input": {
+    "pane_id": "abc-123",
+    "input": "ls -la\n"
   }
 }
 ```
