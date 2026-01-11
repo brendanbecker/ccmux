@@ -662,10 +662,11 @@ impl App {
             ClientCommand::CreateSession(name) => {
                 let session_name =
                     name.unwrap_or_else(|| format!("session-{}", Uuid::new_v4().as_simple()));
+                // Use CLI command only for first session, then clear it
                 self.connection
                     .send(ClientMessage::CreateSession {
                         name: session_name,
-                        command: self.session_command.clone(),
+                        command: self.session_command.take(),
                     })
                     .await?;
             }
@@ -841,11 +842,11 @@ impl App {
                 }
             }
             (KeyCode::Char('n'), KeyModifiers::NONE) => {
-                // Create new session
+                // Create new session (CLI command only applies to first session)
                 self.connection
                     .send(ClientMessage::CreateSession {
                         name: format!("session-{}", Uuid::new_v4().as_simple()),
-                        command: self.session_command.clone(),
+                        command: self.session_command.take(),
                     })
                     .await?;
             }
