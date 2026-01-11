@@ -1,0 +1,32 @@
+{
+  "id": "BUG-030",
+  "title": "Daemon Becomes Unresponsive After Certain MCP Operations",
+  "priority": "P0",
+  "severity": "critical",
+  "status": "open",
+  "component": "daemon",
+  "subcomponent": "mcp/error-handling",
+  "reported_date": "2026-01-11",
+  "reported_by": "claude-qa-demo",
+  "environment": {
+    "platform": "linux-wsl2",
+    "branch": "main"
+  },
+  "reproduction_rate": "100%",
+  "blocking": true,
+  "affects_features": ["daemon-stability", "mcp-server"],
+  "trigger_operations": [
+    "create_window",
+    "kill_session",
+    "create_layout"
+  ],
+  "symptoms": [
+    "MCP error -32001: AbortError: The operation was aborted",
+    "All MCP calls timeout after trigger",
+    "Daemon unresponsive to all commands",
+    "connection_status also fails"
+  ],
+  "workaround": "Restart daemon (loses all sessions)",
+  "related_bugs": ["BUG-029", "BUG-028"],
+  "root_cause_candidate": "Certain operations cause daemon to enter unrecoverable state, possibly related to response synchronization bug (BUG-029)"
+}

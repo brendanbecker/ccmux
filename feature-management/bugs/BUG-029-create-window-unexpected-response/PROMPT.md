@@ -1,0 +1,35 @@
+# BUG-029: ccmux_create_window Returns Unexpected SessionFocused Response
+
+## Summary
+Calling `ccmux_create_window` returns an error about an unexpected `SessionFocused` response instead of creating the window.
+
+## Steps to Reproduce
+
+1. Start ccmux and connect Claude Code
+2. Create a session: `ccmux_create_session` with name "dev-qa" - **succeeds**
+3. Select the session: `ccmux_select_session` - **succeeds**
+4. Call `ccmux_create_window` with session "dev-qa" and name "logs"
+5. Observe: MCP returns error about unexpected response
+
+## Expected Behavior
+- A new window named "logs" should be created in the dev-qa session
+- Response should include window_id and success status
+
+## Actual Behavior
+- Error returned: `MCP error -32603: Unexpected response: SessionFocused { session_id: 2eb65a90-5aee-42aa-9e47-e552cb78b6bc }`
+- No window created
+
+## Environment
+- ccmux version: current main branch
+- Platform: Linux (WSL2)
+- Triggered during: QA demo run
+
+## Impact
+- **Severity**: P1 - Window creation blocked
+- **Affected Component**: daemon, create_window handler
+- **Workaround**: None known - cannot create additional windows
+
+## Notes
+- The session was successfully selected immediately before this call
+- The error suggests the daemon is returning a SessionFocused message when it should return a WindowCreated message
+- May be a message routing/matching issue in the MCP handler

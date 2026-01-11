@@ -1,0 +1,28 @@
+{
+  "id": "BUG-029",
+  "title": "MCP Response Synchronization Bug - Responses Lag By One Call",
+  "priority": "P0",
+  "severity": "critical",
+  "status": "open",
+  "component": "daemon",
+  "subcomponent": "mcp-bridge/response-routing",
+  "reported_date": "2026-01-11",
+  "reported_by": "claude-qa-demo",
+  "environment": {
+    "platform": "linux-wsl2",
+    "branch": "main"
+  },
+  "reproduction_rate": "100%",
+  "blocking": true,
+  "affects_features": ["all-mcp-operations"],
+  "symptoms": [
+    "MCP error -32603: Unexpected response",
+    "Response N delivered to Call N+1",
+    "Operations succeed but wrong response type returned",
+    "Retry clears the queue and succeeds"
+  ],
+  "workaround": "Retry failed calls - operation usually succeeded, just got wrong response",
+  "root_cause_candidate": "Response queue FIFO offset or async race condition in mcp-bridge",
+  "related_bugs": ["BUG-028", "BUG-030"],
+  "notes": "Window WAS created successfully - confirmed by list_panes showing window 'logs'"
+}
