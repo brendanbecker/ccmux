@@ -261,7 +261,7 @@ ccmux exposes an MCP (Model Context Protocol) server via the `mcp-bridge` subcom
 }
 ```
 
-**Tools provided** (18 total):
+**Tools provided** (30 total):
 
 | Category | Tool | Description |
 |----------|------|-------------|
@@ -269,19 +269,32 @@ ccmux exposes an MCP (Model Context Protocol) server via the `mcp-bridge` subcom
 | | `ccmux_create_session` | Create a new session |
 | | `ccmux_rename_session` | Rename a session for easier identification |
 | | `ccmux_select_session` | Switch to a different session |
+| | `ccmux_kill_session` | Destroy a session |
 | **Windows** | `ccmux_list_windows` | List windows in a session |
 | | `ccmux_create_window` | Create a new window |
 | | `ccmux_select_window` | Switch to a different window |
+| | `ccmux_rename_window` | Rename a window |
 | **Panes** | `ccmux_list_panes` | List all panes with metadata |
 | | `ccmux_create_pane` | Create a new pane (split) |
 | | `ccmux_close_pane` | Close a pane |
 | | `ccmux_focus_pane` | Focus a specific pane |
+| | `ccmux_rename_pane` | Rename a pane |
 | **I/O** | `ccmux_read_pane` | Read output buffer from pane |
 | | `ccmux_send_input` | Send keystrokes to pane (use `\n` for Enter) |
 | | `ccmux_get_status` | Get pane state (shell, Claude, etc.) |
 | **Layouts** | `ccmux_create_layout` | Create complex layouts declaratively |
 | | `ccmux_split_pane` | Split a pane with custom ratio |
 | | `ccmux_resize_pane` | Resize a pane dynamically |
+| **Environment** | `ccmux_set_environment` | Set session environment variable |
+| | `ccmux_get_environment` | Get session environment variables |
+| **Metadata** | `ccmux_set_metadata` | Set session metadata |
+| | `ccmux_get_metadata` | Get session metadata |
+| **Orchestration** | `ccmux_send_orchestration` | Send orchestration message with tag-based routing |
+| | `ccmux_set_tags` | Add/remove tags on a session |
+| | `ccmux_get_tags` | Query session tags |
+| | `ccmux_report_status` | Report status to orchestrator sessions |
+| | `ccmux_request_help` | Request help from orchestrator |
+| | `ccmux_broadcast` | Broadcast message to all sessions |
 
 **Example: Create a pane**:
 ```json
@@ -322,6 +335,45 @@ This creates a 60/40 horizontal split with vim on the left, and a vertical split
   "input": {
     "pane_id": "abc-123",
     "input": "ls -la\n"
+  }
+}
+```
+
+**Example: Send orchestration message** (via `ccmux_send_orchestration`):
+```json
+{
+  "tool": "ccmux_send_orchestration",
+  "input": {
+    "target": {"tag": "orchestrator"},
+    "msg_type": "task.complete",
+    "payload": {"feature": "FEAT-048", "status": "done"}
+  }
+}
+```
+
+Target variants:
+- `{"tag": "orchestrator"}` - Send to sessions with specific tag
+- `{"session": "uuid"}` - Send to specific session by ID
+- `{"broadcast": true}` - Send to all sessions
+- `{"worktree": "/path"}` - Send to sessions in specific worktree
+
+**Example: Tag a session as orchestrator**:
+```json
+{
+  "tool": "ccmux_set_tags",
+  "input": {
+    "add": ["orchestrator", "primary"]
+  }
+}
+```
+
+**Example: Report status to orchestrator** (convenience tool):
+```json
+{
+  "tool": "ccmux_report_status",
+  "input": {
+    "status": "working",
+    "message": "Implementing FEAT-048"
   }
 }
 ```

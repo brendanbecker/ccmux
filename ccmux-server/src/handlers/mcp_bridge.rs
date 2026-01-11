@@ -1354,6 +1354,130 @@ impl HandlerContext {
             metadata,
         })
     }
+
+    // ==================== FEAT-048: Orchestration Tag Handlers ====================
+
+    /// Handle SetTags - add or remove tags on a session
+    pub async fn handle_set_tags(
+        &self,
+        session_filter: Option<String>,
+        add: Vec<String>,
+        remove: Vec<String>,
+    ) -> HandlerResult {
+        info!(
+            "SetTags request from {}: session={:?}, add={:?}, remove={:?}",
+            self.client_id, session_filter, add, remove
+        );
+
+        let mut session_manager = self.session_manager.write().await;
+
+        // Find the session by UUID or name
+        let session_id = if let Some(ref filter) = session_filter {
+            if let Ok(uuid) = Uuid::parse_str(filter) {
+                if session_manager.get_session(uuid).is_some() {
+                    uuid
+                } else {
+                    return HandlerContext::error(
+                        ErrorCode::SessionNotFound,
+                        format!("Session {} not found", filter),
+                    );
+                }
+            } else {
+                // Try by name
+                match session_manager.get_session_by_name(filter) {
+                    Some(session) => session.id(),
+                    None => {
+                        return HandlerContext::error(
+                            ErrorCode::SessionNotFound,
+                            format!("Session '{}' not found", filter),
+                        );
+                    }
+                }
+            }
+        } else {
+            // Use first session if not specified
+            match session_manager.list_sessions().first() {
+                Some(s) => s.id(),
+                None => {
+                    return HandlerContext::error(
+                        ErrorCode::SessionNotFound,
+                        "No sessions exist",
+                    );
+                }
+            }
+        };
+
+        // Get the session and modify tags
+        let (session_name, tags) = if let Some(session) = session_manager.get_session_mut(session_id) {
+            // Add tags
+            for tag in add {
+                session.add_tag(tag);
+            }
+            // Remove tags
+            for tag in &remove {
+                session.remove_tag(tag);
+            }
+            (session.name().to_string(), session.tags().clone())
+        } else {
+            return HandlerContext::error(
+                ErrorCode::SessionNotFound,
+                format!("Session {} not found", session_id),
+            );
+        };
+
+        HandlerResult::Response(ServerMessage::TagsSet {
+            session_id,
+            session_name,
+            tags,
+        })
+    }
+
+    /// Handle GetTags - get tags from a session
+    pub async fn handle_get_tags(
+        &self,
+        session_filter: Option<String>,
+    ) -> HandlerResult {
+        debug!(
+            "GetTags request from {}: session={:?}",
+            self.client_id, session_filter
+        );
+
+        let session_manager = self.session_manager.read().await;
+
+        // Find the session by UUID or name
+        let session = if let Some(ref filter) = session_filter {
+            if let Ok(uuid) = Uuid::parse_str(filter) {
+                session_manager.get_session(uuid)
+            } else {
+                session_manager.get_session_by_name(filter)
+            }
+        } else {
+            // Use first session if not specified
+            session_manager.list_sessions().first().copied()
+        };
+
+        let session = match session {
+            Some(s) => s,
+            None => {
+                return HandlerContext::error(
+                    ErrorCode::SessionNotFound,
+                    session_filter
+                        .map(|s| format!("Session '{}' not found", s))
+                        .unwrap_or_else(|| "No sessions exist".to_string()),
+                );
+            }
+        };
+
+        let session_id = session.id();
+        let session_name = session.name().to_string();
+        let tags = session.tags().clone();
+
+        HandlerResult::Response(ServerMessage::TagsList {
+            session_id,
+            session_name,
+            tags,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -1856,5 +1980,150 @@ mod tests {
             tui_rx.try_recv().is_err(),
             "TUI (attached to session B) should NOT receive broadcast for session A"
         );
+    }
+
+    // ==================== FEAT-048: Orchestration Tag Tests ====================
+
+    #[tokio::test]
+    async fn test_set_tags_no_sessions() {
+        let ctx = create_test_context();
+        let result = ctx
+            .handle_set_tags(None, vec!["worker".to_string()], vec![])
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::Error { code, .. }) => {
+                assert_eq!(code, ErrorCode::SessionNotFound);
+            }
+            _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set_tags_add_success() {
+        let ctx = create_test_context();
+        create_session_with_pane(&ctx).await;
+
+        let result = ctx
+            .handle_set_tags(None, vec!["orchestrator".to_string(), "primary".to_string()], vec![])
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::TagsSet {
+                session_name,
+                tags,
+                ..
+            }) => {
+                assert_eq!(session_name, "test");
+                assert!(tags.contains("orchestrator"));
+                assert!(tags.contains("primary"));
+                assert_eq!(tags.len(), 2);
+            }
+            _ => panic!("Expected TagsSet response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_set_tags_add_and_remove() {
+        let ctx = create_test_context();
+        create_session_with_pane(&ctx).await;
+
+        // First add some tags
+        ctx.handle_set_tags(None, vec!["a".to_string(), "b".to_string(), "c".to_string()], vec![])
+            .await;
+
+        // Now remove one and add another
+        let result = ctx
+            .handle_set_tags(None, vec!["d".to_string()], vec!["b".to_string()])
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::TagsSet { tags, .. }) => {
+                assert!(tags.contains("a"));
+                assert!(!tags.contains("b"));
+                assert!(tags.contains("c"));
+                assert!(tags.contains("d"));
+                assert_eq!(tags.len(), 3);
+            }
+            _ => panic!("Expected TagsSet response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_tags_no_sessions() {
+        let ctx = create_test_context();
+        let result = ctx.handle_get_tags(None).await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::Error { code, .. }) => {
+                assert_eq!(code, ErrorCode::SessionNotFound);
+            }
+            _ => panic!("Expected Error response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_tags_empty() {
+        let ctx = create_test_context();
+        create_session_with_pane(&ctx).await;
+
+        let result = ctx.handle_get_tags(None).await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::TagsList {
+                session_name,
+                tags,
+                ..
+            }) => {
+                assert_eq!(session_name, "test");
+                assert!(tags.is_empty());
+            }
+            _ => panic!("Expected TagsList response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_tags_with_tags() {
+        let ctx = create_test_context();
+        create_session_with_pane(&ctx).await;
+
+        // Add some tags first
+        ctx.handle_set_tags(None, vec!["worker".to_string(), "stream-a".to_string()], vec![])
+            .await;
+
+        let result = ctx.handle_get_tags(None).await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::TagsList {
+                session_name,
+                tags,
+                ..
+            }) => {
+                assert_eq!(session_name, "test");
+                assert!(tags.contains("worker"));
+                assert!(tags.contains("stream-a"));
+                assert_eq!(tags.len(), 2);
+            }
+            _ => panic!("Expected TagsList response"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_tags_by_name() {
+        let ctx = create_test_context();
+        create_session_with_pane(&ctx).await;
+
+        // Add tags
+        ctx.handle_set_tags(Some("test".to_string()), vec!["named".to_string()], vec![])
+            .await;
+
+        let result = ctx.handle_get_tags(Some("test".to_string())).await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::TagsList { tags, .. }) => {
+                assert!(tags.contains("named"));
+            }
+            _ => panic!("Expected TagsList response"),
+        }
     }
 }

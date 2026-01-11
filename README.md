@@ -34,7 +34,7 @@ A terminal multiplexer built in Rust that understands Claude Code. Unlike tmux, 
 | **Claude State Detection** | Automatically detects Claude's state: Idle, Thinking, ToolUse, Streaming, Complete |
 | **Session Isolation** | Each Claude pane gets its own `CLAUDE_CONFIG_DIR`, preventing conflicts between concurrent instances |
 | **Auto-Resume** | Claude conversations persist across server restarts and auto-resume |
-| **MCP Integration** | Claude can control ccmux via 18 MCP tools—create panes, run commands, read output |
+| **MCP Integration** | Claude can control ccmux via 30 MCP tools—create panes, run commands, orchestrate agents |
 | **Sideband Protocol** | Claude can emit `<ccmux:spawn>` commands in output to control the multiplexer |
 
 ### tmux-Compatible Experience
@@ -140,15 +140,18 @@ Claude Code can control ccmux sessions via MCP. Add to `~/.claude/mcp.json`:
 }
 ```
 
-### Available MCP Tools (18 total)
+### Available MCP Tools (30 total)
 
 | Category | Tools |
 |----------|-------|
-| **Sessions** | `ccmux_list_sessions`, `ccmux_create_session`, `ccmux_rename_session`, `ccmux_select_session` |
-| **Windows** | `ccmux_list_windows`, `ccmux_create_window`, `ccmux_select_window` |
-| **Panes** | `ccmux_list_panes`, `ccmux_create_pane`, `ccmux_close_pane`, `ccmux_focus_pane` |
+| **Sessions** | `ccmux_list_sessions`, `ccmux_create_session`, `ccmux_rename_session`, `ccmux_select_session`, `ccmux_kill_session` |
+| **Windows** | `ccmux_list_windows`, `ccmux_create_window`, `ccmux_select_window`, `ccmux_rename_window` |
+| **Panes** | `ccmux_list_panes`, `ccmux_create_pane`, `ccmux_close_pane`, `ccmux_focus_pane`, `ccmux_rename_pane` |
 | **I/O** | `ccmux_read_pane`, `ccmux_send_input`, `ccmux_get_status` |
 | **Layouts** | `ccmux_create_layout`, `ccmux_split_pane`, `ccmux_resize_pane` |
+| **Environment** | `ccmux_set_environment`, `ccmux_get_environment` |
+| **Metadata** | `ccmux_set_metadata`, `ccmux_get_metadata` |
+| **Orchestration** | `ccmux_send_orchestration`, `ccmux_set_tags`, `ccmux_get_tags`, `ccmux_report_status`, `ccmux_request_help`, `ccmux_broadcast` |
 
 ### Declarative Layouts
 

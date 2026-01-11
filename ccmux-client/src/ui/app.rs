@@ -1507,7 +1507,9 @@ impl App {
             | ServerMessage::EnvironmentSet { .. }
             | ServerMessage::EnvironmentList { .. }
             | ServerMessage::MetadataSet { .. }
-            | ServerMessage::MetadataList { .. } => {
+            | ServerMessage::MetadataList { .. }
+            | ServerMessage::TagsSet { .. }
+            | ServerMessage::TagsList { .. } => {
                 // These messages are for the MCP bridge, not the TUI client
             }
         }
