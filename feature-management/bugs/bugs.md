@@ -1,11 +1,11 @@
 # Bug Reports
 
 **Project**: ccmux
-**Last Updated**: 2026-01-11 (QA Demo Run)
+**Last Updated**: 2026-01-11
 
 ## Summary Statistics
-- Total Bugs: 37
-- Open: 9
+- Total Bugs: 39
+- Open: 11
 - Resolved: 27
 - Deprecated: 1
 
@@ -23,9 +23,11 @@
 | Cluster | Bugs | Risk | Key Insight |
 |---------|------|------|-------------|
 | **Protocol/Serialization** | BUG-033, BUG-035 | HIGH | JsonValue wrapper may break JSON access patterns |
-| **Session State Management** | BUG-034, BUG-036 | HIGH | State doesn't propagate across MCP bridge boundary |
+| **Session State Management** | BUG-034, BUG-036, BUG-040 | HIGH | State doesn't propagate across MCP bridge boundary |
 | **Broadcast Filtering** | BUG-036 | HIGH | BUG-029 fix may have over-filtered broadcasts |
 | **Operation Reliability** | BUG-035, BUG-037 | MEDIUM | State accumulates/corrupts over long sessions |
+| **Connection Management** | BUG-039 | HIGH | MCP bridge process lifecycle with Claude Code |
+| **Window Persistence** | BUG-040 | HIGH | Windows created but not persisted (suspected BUG-034 regression) |
 
 ## Paths Ruled Out
 
@@ -37,11 +39,14 @@
 
 | ID | Description | Priority | Status | Component | Link |
 |----|-------------|----------|--------|-----------|------|
+| BUG-040 | create_window returns success but doesn't create windows | P1 | new | mcp | [Link](BUG-040-create-window-returns-success-but-no-window/) |
+| BUG-039 | MCP tools hang intermittently through Claude Code | P1 | new | mcp-bridge | [Link](BUG-039-mcp-tools-hang-through-claude-code/) |
 | BUG-036 | Selection tools don't switch TUI view | P0 | new | daemon/TUI | [Link](BUG-036-selection-tools-dont-switch-tui-view/) |
 | BUG-035 | MCP handlers return wrong response types | P1 | new | daemon | [Link](BUG-035-mcp-handlers-return-wrong-response-types/) |
 | BUG-033 | create_layout rejects all layout formats | P1 | new | daemon | [Link](BUG-033-create-layout-validation-rejects-all-formats/) |
 | BUG-034 | create_window ignores selected session | P2 | new | daemon | [Link](BUG-034-create-window-ignores-selected-session/) |
 | BUG-037 | close_pane returns AbortError | P2 | new | daemon | [Link](BUG-037-close-pane-aborts/) |
+| BUG-038 | create_pane returns wrong response type | P1 | new | mcp | [Link](BUG-038-create-pane-returns-wrong-response-type/) |
 | BUG-032 | MCP handlers missing TUI broadcasts for pane/window/layout ops | P0 | new | ccmux-server | [Link](BUG-032-mcp-handlers-missing-tui-broadcasts/) |
 | BUG-031 | Metadata not persisting across restarts | P1 | open | daemon | [Link](BUG-031-metadata-not-persisting-across-restarts/) |
 | BUG-030 | Daemon unresponsive after create_window | P0 | fixed | daemon | [Link](BUG-030-daemon-unresponsive-after-create-window/) |
@@ -53,6 +58,8 @@
 |----------|-----|------|--------|----------|
 | **P0** | BUG-036 | HIGH | Low | **ULTRATHINK**: Check `is_broadcast_message()` filter - may fix BUG-034 too |
 | **P0** | BUG-033 | HIGH | Medium | **ULTRATHINK**: Verify JsonValue wrapper `.get()` compatibility |
+| **P1** | BUG-040 | HIGH | Medium | Trace create_window path - suspected BUG-034 fix regression |
+| **P1** | BUG-039 | HIGH | Medium | Investigate mcp-bridge process lifecycle and stdin/stdout handling |
 | **P1** | BUG-034 | HIGH | Medium | Session state propagation audit |
 | **P1** | BUG-035 | VERY HIGH | High | **ULTRATHINK**: State drift - needs stress testing to reproduce |
 | **P2** | BUG-037 | Medium | Low | Timeout/abort handling |
@@ -61,13 +68,42 @@
 
 | File | Issues | Notes |
 |------|--------|-------|
-| `ccmux-server/src/mcp/bridge.rs` | BUG-034, BUG-036 | **ULTRATHINK**: Session state + broadcast filtering (line 458-461) |
+| `ccmux-server/src/mcp/bridge.rs` | BUG-034, BUG-036, BUG-039 | **ULTRATHINK**: Session state + broadcast filtering (line 458-461), connection lifecycle |
 | `ccmux-server/src/handlers/mcp_bridge.rs` | BUG-033, BUG-035 | Layout validation + response types |
 | `ccmux-protocol/src/types.rs` | BUG-033 | JsonValue wrapper - verify Deref impl |
 | `ccmux-client/src/ui/app.rs` | BUG-036 | Selection broadcast handling (line 1541) |
-| `ccmux-server/src/mcp/handlers.rs` | BUG-034 | Session state usage |
+| `ccmux-server/src/mcp/handlers.rs` | BUG-034, BUG-040 | Session state usage, window creation |
+| `ccmux-server/src/session/manager.rs` | BUG-040 | Window creation and persistence |
 
 ## Bug Details
+
+### BUG-040: create_window Returns Success But Doesn't Create Windows (P1) - NEW
+**Status**: New - suspected regression from BUG-034 fix
+
+- `create_window` returns success with `window_id` and `pane_id`
+- But window is not actually persisted to session state
+- `list_sessions` shows unchanged `window_count`
+- `list_windows` does not include the new window
+
+**SUSPECTED ROOT CAUSE**: BUG-034 fix (commit 3e14861) modified create_window session handling. Windows may be created transiently but not added to the session's window collection.
+
+**RELATED**: BUG-034 (create_window ignores selected session)
+
+**Location**: `ccmux-server/src/mcp/handlers.rs`, `ccmux-server/src/session/manager.rs`
+
+### BUG-039: MCP Tools Hang Intermittently Through Claude Code (P1) - NEW
+**Status**: Investigation needed
+
+- MCP tool calls hang when invoked through Claude Code's MCP integration
+- Direct bash invocation works reliably every time
+- Multiple stale mcp-bridge processes accumulate (10+)
+- Daemon itself is running and responsive
+
+**SUSPECTED CAUSE**: Something about persistent MCP connections or connection pooling in Claude Code's MCP client may be causing issues. Possibly stale connections not being cleaned up properly.
+
+**INVESTIGATION**: Check mcp-bridge stdin/stdout handling, EOF detection, and process lifecycle.
+
+**Location**: `ccmux-server/src/mcp/bridge.rs`
 
 ### BUG-036: Selection Tools Don't Switch TUI View (P0) - ROOT CAUSE FOUND
 **Status**: Ready to implement fix
@@ -168,6 +204,8 @@ See `feature-management/completed/` for resolved work items.
 
 | Date | Bug ID | Action | Description |
 |------|--------|--------|-------------|
+| 2026-01-11 | BUG-040 | Created | create_window returns success but doesn't create windows (suspected BUG-034 regression) |
+| 2026-01-11 | BUG-039 | Created | MCP tools hang intermittently through Claude Code |
 | 2026-01-11 | BUG-037 | Created | close_pane returns AbortError |
 | 2026-01-11 | BUG-036 | Created | Selection tools don't switch TUI view (P0) |
 | 2026-01-11 | BUG-035 | Created | MCP handlers return wrong response types |
