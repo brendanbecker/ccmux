@@ -821,6 +821,10 @@ impl App {
                             pane.exit_copy_mode();
                             self.status_message = Some(format!("Yanked {} bytes to clipboard", len));
                         } else {
+                            // BUG-039 FIX: Always exit copy mode when yank is triggered,
+                            // even if there's no selection. The input handler has already
+                            // set its mode to Normal, so the pane must match.
+                            pane.exit_copy_mode();
                             self.status_message = Some("No selection to yank".to_string());
                         }
                     }
