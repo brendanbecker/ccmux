@@ -1,0 +1,18 @@
+{
+  "feature_id": "FEAT-069",
+  "title": "TLS/auth for direct TCP connections",
+  "component": "ccmux-server, ccmux-client",
+  "priority": "P3",
+  "status": "new",
+  "type": "enhancement",
+  "created_date": "2026-01-13",
+  "updated_date": "2026-01-13",
+  "assigned_to": null,
+  "tags": ["networking", "security", "tls", "authentication", "remote", "tcp"],
+  "estimated_effort": "large",
+  "dependencies": ["FEAT-066", "FEAT-067", "FEAT-068"],
+  "description": "Add native TLS encryption and authentication for direct TCP connections, eliminating the need for SSH tunnels in trusted network environments. This is Phase 4 (future enhancement) of remote peering support. While SSH tunnels (FEAT-068) provide secure remote access, they require SSH setup and add a layer of indirection. In some environments (e.g., trusted LANs, VPNs), users may prefer direct TLS connections. This requires implementing TLS using rustls and a simple authentication mechanism.",
+  "business_value": "medium",
+  "technical_complexity": "high",
+  "user_impact": "Provides an alternative to SSH tunnels for users in trusted network environments who prefer direct TLS connections. Simplifies setup in VPN/LAN scenarios while maintaining security through TLS encryption and shared-secret authentication. Optional feature for advanced use cases."
+}
