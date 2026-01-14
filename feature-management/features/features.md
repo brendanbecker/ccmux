@@ -5,9 +5,9 @@
 
 ## Summary Statistics
 
-- **Total Features**: 71
+- **Total Features**: 72
 - **Completed**: 58
-- **Backlog**: 13
+- **Backlog**: 14
 
 ## Current Status
 
@@ -23,6 +23,7 @@ Core terminal multiplexer features complete. Thirteen features remain in backlog
 - FEAT-056: User priority lockout for MCP focus control
 
 **Recent Additions (2026-01-13)**:
+- FEAT-074: Observability instrumentation (metrics, tracing, status)
 - FEAT-071: Per-pane Claude configuration on spawn (model selection, context limits, presets)
 - FEAT-070: gastown remote pane support via CCMUX_ADDR (enables hybrid Mayor/polecat orchestration)
 - FEAT-069: TLS/auth for direct TCP connections (Phase 4 of remote peering - future enhancement)
@@ -42,6 +43,7 @@ Core terminal multiplexer features complete. Thirteen features remain in backlog
 |----|-------|-----------|----------|--------|-------|
 | FEAT-063 | Add file-based logging to MCP bridge mode | ccmux-server | P1 | **Ready** | Enable file logging for mcp-bridge to debug BUG-039. Small change. |
 | FEAT-061 | Screen Redraw Command | ccmux-client | P2 | **Ready** | Keybind to force full screen redraw for display corruption recovery. |
+| FEAT-074 | Observability instrumentation (metrics, tracing, status) | ccmux-server | P2 | **Ready** | Structured logging, tracing, metrics, and status fields per OBSERVABILITY.md. |
 | FEAT-073 | Visibility dashboard (stuck detection, mailbox, graph pane) | ccmux-client | P2 | **Ready** | Terminal-native visibility dashboard for multi-agent oversight. |
 | FEAT-071 | Per-pane Claude configuration on spawn | ccmux-server, ccmux-protocol | P2 | **Ready** | Configure model, context limits per pane. Blocks FEAT-072. |
 | FEAT-066 | TCP listener support in daemon | ccmux-server | P2 | **Ready** | Optional TCP listener for remote workflows. Phase 1 of remote peering. Blocks FEAT-067. |
