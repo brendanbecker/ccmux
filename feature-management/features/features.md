@@ -42,6 +42,7 @@ Core terminal multiplexer features complete. Thirteen features remain in backlog
 |----|-------|-----------|----------|--------|-------|
 | FEAT-063 | Add file-based logging to MCP bridge mode | ccmux-server | P1 | **Ready** | Enable file logging for mcp-bridge to debug BUG-039. Small change. |
 | FEAT-061 | Screen Redraw Command | ccmux-client | P2 | **Ready** | Keybind to force full screen redraw for display corruption recovery. |
+| FEAT-073 | Visibility dashboard (stuck detection, mailbox, graph pane) | ccmux-client | P2 | **Ready** | Terminal-native visibility dashboard for multi-agent oversight. |
 | FEAT-071 | Per-pane Claude configuration on spawn | ccmux-server, ccmux-protocol | P2 | **Ready** | Configure model, context limits per pane. Blocks FEAT-072. |
 | FEAT-066 | TCP listener support in daemon | ccmux-server | P2 | **Ready** | Optional TCP listener for remote workflows. Phase 1 of remote peering. Blocks FEAT-067. |
 | FEAT-067 | Client TCP connection support | ccmux-client | P2 | **Ready** | TCP client connection capability. Phase 2 of remote peering. Blocks FEAT-068. |
