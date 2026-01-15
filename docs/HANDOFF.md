@@ -8,7 +8,7 @@
 **Current Stage**: Stage 7 (Post-MVP Stabilization & Enhancement)
 **Status**: Production-ready core, currently stabilizing extended MCP capabilities and adding agent-specific features.
 
-## Current State (2026-01-14)
+## Current State (2026-01-15)
 
 **Parallel Execution Mode**: Development is split into 3 streams to isolate risk and maximize throughput.
 
@@ -17,7 +17,7 @@
 | Stream | Focus | Worktree | Objective | Status |
 |--------|-------|----------|-----------|--------|
 | **Stream A** | Core Stability | `../ccmux-stream-a` | Modularize MCP bridge, fix state drift bugs. | Active (Refactor done) |
-| **Stream B** | UX / Safety | `../ccmux-stream-b` | Fix client crashes, implement Human Arbitration. | Active (Fixing BUG-041) |
+| **Stream B** | UX / Safety | `../ccmux-stream-b` | Fix client crashes, implement Human Arbitration. | Ready |
 | **Stream C** | Features | `../ccmux-stream-c` | Sideband Config, Sandboxing, Remote Peering. | Ready |
 
 ### Workflow: Continuous Integration
@@ -32,7 +32,7 @@ We use a "CI-in-worktree" pattern to keep branches short-lived and history clean
     *   Merge `main` into your stream branch to sync.
 5.  **Update Session**: Update `SESSION.md` in the worktree with the next task.
 
-## Recent Activity (2026-01-14)
+## Recent Activity (2026-01-15)
 
 ### Completed
 - **FEAT-064**: Refactor MCP bridge.rs into modular components (Stream A).
@@ -47,18 +47,20 @@ We use a "CI-in-worktree" pattern to keep branches short-lived and history clean
 - **FEAT-067**: Client TCP connection support (Stream C).
 - **FEAT-068**: SSH tunnel integration and documentation (Stream C).
 - **FEAT-070**: Gastown remote pane support (Stream C).
+- **FEAT-075**: Snapshot + replay resync API (Stream B).
 - **BUG-042**: Flatten Result nesting code smell (Stream A).
 - **Retro**: Conducted comprehensive retrospective, categorized backlog into streams.
 
 ### In Progress
-- **FEAT-075 (P2)**: Snapshot + replay resync API (Stream B).
+- **BUG-032 (P0)**: MCP handlers missing TUI broadcasts (Stream A).
+- **FEAT-082 (P2)**: Adaptive layout engine (Stream B).
 - **FEAT-073 (P2)**: Multi-tier routing logic (Stream C).
 
 ## Backlog Highlights
 
 ### High Priority (P0/P1)
-- **BUG-041**: Client crash on paste.
-- **BUG-036**: Selection tools don't switch TUI view.
+- **BUG-032**: MCP handlers missing TUI broadcasts.
+- **BUG-041**: Client crash on paste (Verified Fix, monitor).
 - **BUG-039**: MCP tools hang intermittently.
 - **BUG-033**: Layout validation too strict.
 
@@ -75,50 +77,26 @@ We use a "CI-in-worktree" pattern to keep branches short-lived and history clean
 
 ---
 
-## Session Log (2026-01-14) - Advanced Features & Remote Peering (Stream C)
+## Session Log (2026-01-15) - Advanced Features & User Experience
 
 ### Work Completed This Session
-1. **FEAT-080: Per-Pane/Session Configuration via Sideband Commands**
-   - Extended `SidebandParser` to support `config` attribute with JSON payload.
-   - Updated `AsyncCommandExecutor` to parse config, apply `env`, `cwd`, and `timeout_secs`.
-   - Implemented auto-kill logic for `timeout_secs`.
-   - Fixed `SidebandParser` regex to support mixed quotes (allowing JSON in attributes).
+1. **FEAT-070: Gastown remote pane support (Stream C)**
+   - Updated `ccmux-compat` CLI wrapper with `--addr` and `CCMUX_ADDR`.
+   - Implemented environment management in compat layer.
+   - Refactored client for generic `StreamTrait`.
 
-2. **FEAT-081: Landlock Integration (Sandboxing)**
-   - Created `ccmux-sandbox` helper binary using `landlock` crate.
-   - Implemented RO system, RW CWD/tmp/dev policy.
-   - Updated `ccmux-server` to wrap PTY commands when sandboxing requested.
+2. **FEAT-075: Snapshot + replay resync API (Stream B)**
+   - Implemented server-side event sequence tracking (commit_seq).
+   - Created `ReplayBuffer` for recent event retention.
+   - Implemented `GetEventsSince` handler and `StateSnapshot` fallback.
+   - Added client-side gap detection and automatic resync flow.
 
-3. **FEAT-071: Per-pane Claude configuration**
-   - Added `presets` support to `AppConfig`.
-   - Implemented resolved config writing to `.claude.json` in isolation dirs.
-   - Updated `ccmux_create_pane` MCP tool schema.
-
-4. **FEAT-066: TCP listener support in daemon (Phase 1)**
-   - Added `listen_tcp` to config and `--listen-tcp` CLI flag.
-   - Refactored server to support concurrent Unix and TCP listeners.
-
-5. **FEAT-067: Client TCP connection support (Phase 2)**
-   - Added `--addr` and `CCMUX_ADDR` support to `ccmux-client`.
-   - Refactored client connection to support `tcp://` and `unix://` URLs.
-
-6. **FEAT-068: SSH tunnel integration and documentation**
-   - Created `docs/REMOTE_ACCESS.md` guide.
-   - Updated `README.md` with Remote Access section.
-
-7. **FEAT-070: Gastown remote pane support**
-   - Updated `ccmux-compat` CLI wrapper to support `--addr` flag and `CCMUX_ADDR` env var.
-   - Implemented `set-environment` and `show-environment` commands in `ccmux-compat`.
-   - Refactored `ccmux-compat` client to support generic `StreamTrait` (Unix/TCP).
-   - Documented Gas Town integration and remote Claude presets in `docs/REMOTE_ACCESS.md`.
-
-### Commits Made
-- `9086333` - feat(sideband): implement FEAT-080 per-pane config and timeouts
-- `8497e08` - feat(advanced): implement FEAT-081 sandboxing and FEAT-071 per-pane claude config
-- `6b977a5` - feat(remote): implement FEAT-066 TCP listener support in daemon
-- `83fa28a` - feat(client): implement FEAT-067 client TCP connection support
-- `0525712` - docs: implement FEAT-068 SSH tunnel documentation
-- `64387fa` - feat(remote): implement FEAT-070 Gastown remote pane support
+3. **Stream Merges**
+   - Merged Stream C (FEAT-070) into main.
+   - Merged Stream B (FEAT-075) into main.
+   - Updated `SESSION.md` in both worktrees for next objectives.
 
 ### Next Steps
-- **FEAT-073**: Multi-tier routing logic.
+- **Stream A**: Resolve BUG-032.
+- **Stream B**: FEAT-082 (Adaptive Layout).
+- **Stream C**: FEAT-073 (Multi-tier Routing).
