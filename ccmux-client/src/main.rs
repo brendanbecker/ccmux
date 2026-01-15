@@ -46,39 +46,64 @@ async fn main() -> Result<()> {
 }
 
 async fn run_app(args: Args) -> Result<()> {
-    // Configure auto-start behavior based on CLI args
-    let auto_start_config = AutoStartConfig {
-        enabled: args.auto_start_enabled(),
-        timeout_ms: args.server_timeout,
-        ..Default::default()
+    // Resolve target alias if provided
+    let resolved_addr = if let Some(ref target) = args.target {
+        match config::resolve_remote(target) {
+            Some(resolved) => {
+                tracing::info!("Resolved target '{}' to '{}'", target, resolved);
+                Some(resolved)
+            }
+            None => {
+                let msg = format!("Unknown target alias: '{}'", target);
+                eprintln!("Error: {}", msg);
+                return Err(ccmux_utils::CcmuxError::Config(msg));
+            }
+        }
+    } else {
+        args.addr.clone()
     };
 
-    // Ensure server is running (auto-start if enabled)
-    match ensure_server_running(&auto_start_config).await {
-        Ok(ServerStartResult::AlreadyRunning) => {
-            tracing::info!("Server already running");
+    // Check if we are connecting to a custom address (TCP or custom Unix socket)
+    // If so, we skip auto-starting the default server instance
+    let use_custom_connection = resolved_addr.is_some() || args.socket.is_some();
+
+    if !use_custom_connection {
+        // Configure auto-start behavior based on CLI args
+        let auto_start_config = AutoStartConfig {
+            enabled: args.auto_start_enabled(),
+            timeout_ms: args.server_timeout,
+            ..Default::default()
+        };
+
+        // Ensure server is running (auto-start if enabled)
+        match ensure_server_running(&auto_start_config).await {
+            Ok(ServerStartResult::AlreadyRunning) => {
+                tracing::info!("Server already running");
+            }
+            Ok(ServerStartResult::Started) => {
+                tracing::info!("Server started automatically");
+            }
+            Ok(ServerStartResult::NotRunning) => {
+                // Auto-start disabled and server not running
+                eprintln!("Error: Server not running. Start it with 'ccmux-server' or run without --no-auto-start");
+                return Err(ccmux_utils::CcmuxError::ServerNotRunning {
+                    path: ccmux_utils::socket_path(),
+                });
+            }
+            Err(e) => {
+                eprintln!("Error: Failed to start server: {}", e);
+                return Err(e);
+            }
         }
-        Ok(ServerStartResult::Started) => {
-            tracing::info!("Server started automatically");
-        }
-        Ok(ServerStartResult::NotRunning) => {
-            // Auto-start disabled and server not running
-            eprintln!("Error: Server not running. Start it with 'ccmux-server' or run without --no-auto-start");
-            return Err(ccmux_utils::CcmuxError::ServerNotRunning {
-                path: ccmux_utils::socket_path(),
-            });
-        }
-        Err(e) => {
-            eprintln!("Error: Failed to start server: {}", e);
-            return Err(e);
-        }
+    } else {
+        tracing::info!("Connecting to custom address/socket, skipping default server auto-start");
     }
 
     // Load keybindings from config
     let quick_bindings = load_quick_bindings();
 
     // Create and run the app with optional custom connection
-    let mut app = if let Some(ref addr) = args.addr {
+    let mut app = if let Some(ref addr) = resolved_addr {
         App::with_addr(addr.clone())?
     } else if let Some(ref socket) = args.socket {
         App::with_socket_path(socket.clone())?

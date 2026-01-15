@@ -252,3 +252,4 @@ The project follows a multi-crate workspace structure:
 - `ccmux-session/` - Session/window/pane hierarchy
 - `ccmux-utils/` - Shared utilities
 - `ccmux-persistence/` - WAL-based crash recovery
+| FEAT-082 | Multi-tier routing logic | ccmux-client | P2 | new | [Link](features/FEAT-082-multi-tier-routing-logic/) |

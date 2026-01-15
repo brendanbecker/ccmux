@@ -38,6 +38,14 @@ pub struct Args {
     #[arg(long, env = "CCMUX_ADDR")]
     pub addr: Option<String>,
 
+    /// Connection target alias (from [remotes] config)
+    ///
+    /// Specifies a named remote target to connect to. Looks up the address in the
+    /// [remotes] section of ~/.config/ccmux/config.toml.
+    /// Overrides --addr if valid.
+    #[arg(long)]
+    pub target: Option<String>,
+
     /// Command to run in new sessions (overrides default_command from config)
     ///
     /// Example: ccmux claude --resume

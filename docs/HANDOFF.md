@@ -283,7 +283,7 @@ All prefix keybinds now match tmux defaults for muscle-memory compatibility.
 - `6b977a5` - feat(remote): implement FEAT-066 TCP listener support in daemon
 - `83fa28a` - feat(client): implement FEAT-067 client TCP connection support
 - `0525712` - docs: implement FEAT-068 SSH tunnel documentation
-- `6b977a5` - feat(remote): implement FEAT-070 Gastown remote pane support
+- `64387fa` - feat(remote): implement FEAT-070 Gastown remote pane support
 
 ### Next Steps
-- **FEAT-073**: Multi-tier routing logic.
+- **FEAT-082**: Multi-tier routing logic.
