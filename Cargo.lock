@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "ccmux-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "base64",
  "bincode",
@@ -181,7 +181,7 @@ dependencies = [
 
 [[package]]
 name = "ccmux-compat"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ccmux-protocol",
  "ccmux-utils",
@@ -201,7 +201,7 @@ dependencies = [
 
 [[package]]
 name = "ccmux-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "bincode",
  "bytes",
@@ -227,7 +227,7 @@ dependencies = [
 
 [[package]]
 name = "ccmux-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arc-swap",
  "bincode",
@@ -259,7 +259,7 @@ dependencies = [
 
 [[package]]
 name = "ccmux-utils"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "directories",
  "libc",
