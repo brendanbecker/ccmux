@@ -33,6 +33,8 @@ pub struct LogConfig {
     pub span_events: bool,
     /// Include file/line in logs
     pub file_line: bool,
+    /// Optional custom log file name (defaults to "ccmux.log")
+    pub file_name: Option<String>,
 }
 
 impl Default for LogConfig {
@@ -42,6 +44,7 @@ impl Default for LogConfig {
             filter: "info".into(),
             span_events: false,
             file_line: false,
+            file_name: None,
         }
     }
 }
@@ -55,6 +58,7 @@ impl LogConfig {
                 .unwrap_or_else(|_| "warn".into()),
             span_events: false,
             file_line: false,
+            file_name: None,
         }
     }
 
@@ -66,6 +70,33 @@ impl LogConfig {
                 .unwrap_or_else(|_| "info".into()),
             span_events: true,
             file_line: true,
+            file_name: None,
+        }
+    }
+
+    /// Create config for MCP bridge (file logging, separate file)
+    pub fn mcp_bridge() -> Self {
+        Self {
+            output: LogOutput::File,
+            filter: std::env::var("CCMUX_MCP_LOG")
+                .or_else(|_| std::env::var("CCMUX_LOG"))
+                .unwrap_or_else(|_| "info".into()),
+            span_events: true,
+            file_line: true,
+            file_name: Some("mcp-bridge.log".into()),
+        }
+    }
+
+    /// Create config for standalone MCP server (file logging, separate file)
+    pub fn mcp_server() -> Self {
+        Self {
+            output: LogOutput::File,
+            filter: std::env::var("CCMUX_MCP_LOG")
+                .or_else(|_| std::env::var("CCMUX_LOG"))
+                .unwrap_or_else(|_| "info".into()),
+            span_events: true,
+            file_line: true,
+            file_name: Some("mcp-server.log".into()),
         }
     }
 
@@ -76,6 +107,7 @@ impl LogConfig {
             filter: "debug".into(),
             span_events: true,
             file_line: true,
+            file_name: None,
         }
     }
 }
@@ -109,6 +141,8 @@ pub fn init_logging_with_config(config: LogConfig) -> Result<()> {
         fmt_layer.with_file(false).with_line_number(false)
     };
 
+    let file_name = config.file_name.as_deref().unwrap_or("ccmux.log");
+
     match config.output {
         LogOutput::Stderr => {
             tracing_subscriber::registry()
@@ -125,7 +159,7 @@ pub fn init_logging_with_config(config: LogConfig) -> Result<()> {
                     source: e,
                 })?;
 
-            let log_path = log_dir.join("ccmux.log");
+            let log_path = log_dir.join(file_name);
             let file = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -149,7 +183,7 @@ pub fn init_logging_with_config(config: LogConfig) -> Result<()> {
                     source: e,
                 })?;
 
-            let log_path = log_dir.join("ccmux.log");
+            let log_path = log_dir.join(file_name);
             let file = std::fs::OpenOptions::new()
                 .create(true)
                 .append(true)
@@ -357,6 +391,54 @@ mod tests {
         assert!(config.file_line);
     }
 
+    // ==================== LogConfig::mcp_bridge() Tests ====================
+
+    #[test]
+    fn test_log_config_mcp_bridge() {
+        let config = LogConfig::mcp_bridge();
+        assert_eq!(config.output, LogOutput::File);
+        assert_eq!(config.file_name, Some("mcp-bridge.log".into()));
+        assert!(config.span_events);
+        assert!(config.file_line);
+    }
+
+    #[test]
+    fn test_log_config_mcp_bridge_default_filter() {
+        let _original_mcp = env::var("CCMUX_MCP_LOG").ok();
+        let _original_ccmux = env::var("CCMUX_LOG").ok();
+        env::remove_var("CCMUX_MCP_LOG");
+        env::remove_var("CCMUX_LOG");
+
+        let config = LogConfig::mcp_bridge();
+        assert_eq!(config.filter, "info");
+
+        if let Some(val) = _original_mcp { env::set_var("CCMUX_MCP_LOG", val); }
+        if let Some(val) = _original_ccmux { env::set_var("CCMUX_LOG", val); }
+    }
+
+    #[test]
+    fn test_log_config_mcp_bridge_with_env() {
+        let _original = env::var("CCMUX_MCP_LOG").ok();
+        env::set_var("CCMUX_MCP_LOG", "trace");
+
+        let config = LogConfig::mcp_bridge();
+        assert_eq!(config.filter, "trace");
+
+        match _original {
+            Some(val) => env::set_var("CCMUX_MCP_LOG", val),
+            None => env::remove_var("CCMUX_MCP_LOG"),
+        }
+    }
+
+    // ==================== LogConfig::mcp_server() Tests ====================
+
+    #[test]
+    fn test_log_config_mcp_server() {
+        let config = LogConfig::mcp_server();
+        assert_eq!(config.output, LogOutput::File);
+        assert_eq!(config.file_name, Some("mcp-server.log".into()));
+    }
+
     // ==================== LogConfig::development() Tests ====================
 
     #[test]
@@ -385,6 +467,7 @@ mod tests {
             filter: "ccmux=debug,tokio=warn".to_string(),
             span_events: true,
             file_line: true,
+            file_name: Some("test.log".into()),
         };
 
         let cloned = config.clone();
@@ -392,6 +475,7 @@ mod tests {
         assert_eq!(config.filter, cloned.filter);
         assert_eq!(config.span_events, cloned.span_events);
         assert_eq!(config.file_line, cloned.file_line);
+        assert_eq!(config.file_name, cloned.file_name);
     }
 
     // ==================== LogConfig Debug Tests ====================
@@ -432,12 +516,14 @@ mod tests {
             filter: "error".to_string(),
             span_events: true,
             file_line: false,
+            file_name: Some("all.log".into()),
         };
 
         assert_eq!(config.output, LogOutput::File);
         assert_eq!(config.filter, "error");
         assert!(config.span_events);
         assert!(!config.file_line);
+        assert_eq!(config.file_name, Some("all.log".into()));
     }
 
     // ==================== Config Comparison Tests ====================
