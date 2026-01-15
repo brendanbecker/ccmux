@@ -2641,4 +2641,29 @@ mod tests {
             );
         }
     }
+
+    #[tokio::test]
+    async fn test_create_pane_blocked_by_human_activity() {
+        let ctx = create_test_context();
+        let (_session_id, window_id, _pane_id) = create_session_with_pane(&ctx).await;
+
+        // Set client type to MCP
+        ctx.registry.set_client_type(ctx.client_id, ClientType::Mcp);
+
+        // Record human activity on the window
+        ctx.user_priority.record_human_layout(window_id);
+
+        // Try to create pane - should be blocked
+        let result = ctx
+            .handle_create_pane_with_options(None, None, SplitDirection::Vertical, None, None, false, None)
+            .await;
+
+        match result {
+            HandlerResult::Response(ServerMessage::Error { code, message }) => {
+                assert_eq!(code, ErrorCode::UserPriorityActive);
+                assert!(message.contains("blocked by human activity"));
+            }
+            _ => panic!("Expected UserPriorityActive error"),
+        }
+    }
 }
