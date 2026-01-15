@@ -4,9 +4,9 @@
 **Last Updated**: 2026-01-13
 
 ## Summary Statistics
-- Total Bugs: 41
-- Open: 12
-- Resolved: 27
+- Total Bugs: 42
+- Open: 13
+- Resolved: 28
 - Deprecated: 1
 
 ## CRITICAL: Approach for Complex Bugs
@@ -40,7 +40,8 @@
 
 | ID | Description | Priority | Status | Component | Link |
 |----|-------------|----------|--------|-----------|------|
-| BUG-040 | create_window returns success but doesn't create windows | P1 | new | mcp | [Link](BUG-040-create-window-returns-success-but-no-window/) |
+| BUG-042 | Excessive Result Nesting (Ok(Ok(...))) | P3 | new | mcp-bridge | [Link](BUG-042-excessive-result-nesting-code-smell/) |
+| BUG-041 | Claude Code crashes on paste inside ccmux | P1 | new | pty/client | [Link](BUG-041-claude-code-crashes-on-paste-inside-ccmux/) |
 | BUG-039 | MCP tools hang intermittently through Claude Code | P1 | new | mcp-bridge | [Link](BUG-039-mcp-tools-hang-through-claude-code/) |
 | BUG-035 | MCP handlers return wrong response types | P1 | new | daemon | [Link](BUG-035-mcp-handlers-return-wrong-response-types/) |
 | BUG-033 | create_layout rejects all layout formats | P1 | new | daemon | [Link](BUG-033-create-layout-validation-rejects-all-formats/) |
