@@ -716,6 +716,10 @@ async fn handle_client(stream: UnixStream, shared_state: SharedState) {
 /// Run the MCP server mode (standalone, legacy)
 fn run_mcp_server() -> Result<()> {
     use mcp::McpServer;
+    use ccmux_utils::logging::{init_logging_with_config, LogConfig};
+
+    // Initialize file-based logging for standalone MCP server
+    init_logging_with_config(LogConfig::mcp_server())?;
 
     let mut mcp_server = McpServer::new();
     mcp_server.run().map_err(|e| ccmux_utils::CcmuxError::Internal(e.to_string()))
@@ -724,6 +728,11 @@ fn run_mcp_server() -> Result<()> {
 /// Run the MCP bridge mode (connects to daemon)
 async fn run_mcp_bridge() -> Result<()> {
     use mcp::McpBridge;
+    use ccmux_utils::logging::{init_logging_with_config, LogConfig};
+
+    // Initialize file-based logging for MCP bridge
+    // This is safe because it doesn't use stdout/stderr which are used for JSON-RPC
+    init_logging_with_config(LogConfig::mcp_bridge())?;
 
     let mut bridge = McpBridge::new();
     bridge.run().await.map_err(|e| ccmux_utils::CcmuxError::Internal(e.to_string()))
