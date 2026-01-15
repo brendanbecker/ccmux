@@ -412,6 +412,9 @@ pub enum ServerMessage {
         session: SessionInfo,
         windows: Vec<WindowInfo>,
         panes: Vec<PaneInfo>,
+        /// Current commit sequence number for resync tracking (FEAT-075)
+        #[serde(default)]
+        commit_seq: u64,
     },
 
     /// Window created
@@ -1064,17 +1067,20 @@ tags: HashSet::new(),
                 title: None,
                 cwd: None,
             }],
+            commit_seq: 100,
         };
 
         if let ServerMessage::Attached {
             session,
             windows,
             panes,
+            commit_seq,
         } = msg
         {
             assert_eq!(session.id, session_id);
             assert_eq!(windows.len(), 1);
             assert_eq!(panes.len(), 1);
+            assert_eq!(commit_seq, 100);
         }
     }
 

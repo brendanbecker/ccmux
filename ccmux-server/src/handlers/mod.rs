@@ -17,6 +17,7 @@ use uuid::Uuid;
 use ccmux_protocol::{ClientMessage, ErrorCode, ServerMessage};
 
 use crate::config::AppConfig;
+use crate::persistence::PersistenceManager;
 use crate::pty::{PaneClosedNotification, PtyManager};
 use crate::registry::{ClientId, ClientRegistry};
 use crate::session::SessionManager;
@@ -43,6 +44,8 @@ pub struct HandlerContext {
     pub command_executor: Arc<AsyncCommandExecutor>,
     /// User priority lock manager (FEAT-056)
     pub user_priority: Arc<Arbitrator>,
+    /// Persistence manager for state logging (optional)
+    pub persistence: Option<Arc<RwLock<PersistenceManager>>>,
 }
 
 /// Result of handling a message
@@ -69,6 +72,7 @@ pub enum HandlerResult {
 
 impl HandlerContext {
     /// Create a new handler context
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         session_manager: Arc<RwLock<SessionManager>>,
         pty_manager: Arc<RwLock<PtyManager>>,
@@ -78,6 +82,7 @@ impl HandlerContext {
         pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
         command_executor: Arc<AsyncCommandExecutor>,
         user_priority: Arc<Arbitrator>,
+        persistence: Option<Arc<RwLock<PersistenceManager>>>,
     ) -> Self {
         Self {
             session_manager,
@@ -88,6 +93,7 @@ impl HandlerContext {
             pane_closed_tx,
             command_executor,
             user_priority,
+            persistence,
         }
     }
 
@@ -308,6 +314,10 @@ impl HandlerContext {
             ClientMessage::RequestBeadsReadyList { pane_id } => {
                 self.handle_request_beads_ready_list(pane_id).await
             }
+
+            ClientMessage::GetEventsSince { last_commit_seq } => {
+                self.handle_get_events_since(last_commit_seq).await
+            }
         }
     }
 
@@ -436,7 +446,17 @@ mod tests {
         // Create cleanup channel (receiver is dropped in tests)
         let (pane_closed_tx, _pane_closed_rx) = mpsc::channel(10);
 
-        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor, user_priority)
+        HandlerContext::new(
+            session_manager,
+            pty_manager,
+            registry,
+            config,
+            client_id,
+            pane_closed_tx,
+            command_executor,
+            user_priority,
+            None,
+        )
     }
 
     #[tokio::test]

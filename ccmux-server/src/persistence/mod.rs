@@ -41,6 +41,7 @@
 
 pub mod checkpoint;
 pub mod recovery;
+pub mod replay;
 pub mod restoration;
 pub mod scrollback;
 pub mod types;
@@ -53,8 +54,9 @@ use parking_lot::Mutex;
 use tracing::{info, warn};
 use uuid::Uuid;
 
-use ccmux_protocol::PaneState;
+use ccmux_protocol::{PaneState, ServerMessage};
 use ccmux_utils::{CcmuxError, Result};
+use replay::ReplayBuffer;
 
 // Re-exports for public API - allow unused during development
 #[allow(unused_imports)]
@@ -93,6 +95,8 @@ pub struct PersistenceConfig {
     pub max_checkpoints: usize,
     /// Whether to sync WAL on each write
     pub sync_on_write: bool,
+    /// Maximum events to keep in replay buffer
+    pub max_replay_events: usize,
 }
 
 impl Default for PersistenceConfig {
@@ -103,6 +107,7 @@ impl Default for PersistenceConfig {
             screen_snapshot_lines: 500,
             max_checkpoints: 5,
             sync_on_write: true,
+            max_replay_events: 10000,
         }
     }
 }
@@ -115,6 +120,7 @@ impl From<&crate::config::PersistenceConfig> for PersistenceConfig {
             screen_snapshot_lines: schema.screen_snapshot_lines,
             max_checkpoints: schema.max_checkpoints,
             sync_on_write: schema.sync_on_write,
+            max_replay_events: 10000, // Hardcoded for now as it's not in schema
         }
     }
 }
@@ -147,6 +153,8 @@ pub struct PersistenceManager {
     last_checkpoint: Mutex<SystemTime>,
     /// Last checkpoint sequence
     last_checkpoint_sequence: Mutex<u64>,
+    /// Replay buffer for client resync
+    replay_buffer: Mutex<ReplayBuffer>,
 }
 
 impl PersistenceManager {
@@ -175,12 +183,15 @@ impl PersistenceManager {
         let recovery_manager =
             RecoveryManager::new(&state_dir, checkpoint_config, wal_config)?;
 
+        let replay_buffer = Mutex::new(ReplayBuffer::new(config.max_replay_events));
+
         Ok(Self {
             state_dir,
             config,
             recovery_manager,
             last_checkpoint: Mutex::new(SystemTime::now()),
             last_checkpoint_sequence: Mutex::new(0),
+            replay_buffer,
         })
     }
 
@@ -214,6 +225,18 @@ impl PersistenceManager {
         self.recovery_manager.has_state_to_recover()
     }
 
+    // ==================== Replay Operations ====================
+
+    /// Add an event to the replay buffer
+    pub fn push_replay(&self, seq: u64, message: ServerMessage) {
+        self.replay_buffer.lock().push(seq, message);
+    }
+
+    /// Get events since a specific sequence number
+    pub fn get_events_since(&self, seq: u64) -> Option<Vec<(u64, ServerMessage)>> {
+        self.replay_buffer.lock().get_events_since(seq)
+    }
+
     // ==================== WAL Operations ====================
 
     /// Log a session creation
@@ -221,31 +244,28 @@ impl PersistenceManager {
         &self,
         id: Uuid,
         name: impl Into<String>,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let entry = WalEntry::SessionCreated {
             id,
             name: name.into(),
             created_at: Self::unix_timestamp(),
         };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a session destruction
-    pub fn log_session_destroyed(&self, id: Uuid) -> Result<()> {
+    pub fn log_session_destroyed(&self, id: Uuid) -> Result<u64> {
         let entry = WalEntry::SessionDestroyed { id };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a session rename
-    pub fn log_session_renamed(&self, id: Uuid, new_name: impl Into<String>) -> Result<()> {
+    pub fn log_session_renamed(&self, id: Uuid, new_name: impl Into<String>) -> Result<u64> {
         let entry = WalEntry::SessionRenamed {
             id,
             new_name: new_name.into(),
         };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a session metadata change
@@ -254,14 +274,13 @@ impl PersistenceManager {
         session_id: Uuid,
         key: impl Into<String>,
         value: impl Into<String>,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let entry = WalEntry::SessionMetadataSet {
             session_id,
             key: key.into(),
             value: value.into(),
         };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a window creation
@@ -271,7 +290,7 @@ impl PersistenceManager {
         session_id: Uuid,
         name: impl Into<String>,
         index: usize,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let entry = WalEntry::WindowCreated {
             id,
             session_id,
@@ -279,25 +298,22 @@ impl PersistenceManager {
             index,
             created_at: Self::unix_timestamp(),
         };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a window destruction
-    pub fn log_window_destroyed(&self, id: Uuid, session_id: Uuid) -> Result<()> {
+    pub fn log_window_destroyed(&self, id: Uuid, session_id: Uuid) -> Result<u64> {
         let entry = WalEntry::WindowDestroyed { id, session_id };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a window rename
-    pub fn log_window_renamed(&self, id: Uuid, new_name: impl Into<String>) -> Result<()> {
+    pub fn log_window_renamed(&self, id: Uuid, new_name: impl Into<String>) -> Result<u64> {
         let entry = WalEntry::WindowRenamed {
             id,
             new_name: new_name.into(),
         };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log active window change
@@ -305,13 +321,12 @@ impl PersistenceManager {
         &self,
         session_id: Uuid,
         window_id: Option<Uuid>,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let entry = WalEntry::ActiveWindowChanged {
             session_id,
             window_id,
         };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a pane creation
@@ -322,7 +337,7 @@ impl PersistenceManager {
         index: usize,
         cols: u16,
         rows: u16,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let entry = WalEntry::PaneCreated {
             id,
             window_id,
@@ -331,43 +346,37 @@ impl PersistenceManager {
             rows,
             created_at: Self::unix_timestamp(),
         };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a pane destruction
-    pub fn log_pane_destroyed(&self, id: Uuid, window_id: Uuid) -> Result<()> {
+    pub fn log_pane_destroyed(&self, id: Uuid, window_id: Uuid) -> Result<u64> {
         let entry = WalEntry::PaneDestroyed { id, window_id };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a pane resize
-    pub fn log_pane_resized(&self, id: Uuid, cols: u16, rows: u16) -> Result<()> {
+    pub fn log_pane_resized(&self, id: Uuid, cols: u16, rows: u16) -> Result<u64> {
         let entry = WalEntry::PaneResized { id, cols, rows };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a pane state change
-    pub fn log_pane_state_changed(&self, id: Uuid, state: PaneState) -> Result<()> {
+    pub fn log_pane_state_changed(&self, id: Uuid, state: PaneState) -> Result<u64> {
         let entry = WalEntry::PaneStateChanged { id, state };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a pane title change
-    pub fn log_pane_title_changed(&self, id: Uuid, title: Option<String>) -> Result<()> {
+    pub fn log_pane_title_changed(&self, id: Uuid, title: Option<String>) -> Result<u64> {
         let entry = WalEntry::PaneTitleChanged { id, title };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log a pane working directory change
-    pub fn log_pane_cwd_changed(&self, id: Uuid, cwd: Option<String>) -> Result<()> {
+    pub fn log_pane_cwd_changed(&self, id: Uuid, cwd: Option<String>) -> Result<u64> {
         let entry = WalEntry::PaneCwdChanged { id, cwd };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log active pane change
@@ -375,17 +384,15 @@ impl PersistenceManager {
         &self,
         window_id: Uuid,
         pane_id: Option<Uuid>,
-    ) -> Result<()> {
+    ) -> Result<u64> {
         let entry = WalEntry::ActivePaneChanged { window_id, pane_id };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     /// Log pane output (for scrollback persistence)
-    pub fn log_pane_output(&self, pane_id: Uuid, data: Vec<u8>) -> Result<()> {
+    pub fn log_pane_output(&self, pane_id: Uuid, data: Vec<u8>) -> Result<u64> {
         let entry = WalEntry::PaneOutput { pane_id, data };
-        self.recovery_manager.wal().append(&entry)?;
-        Ok(())
+        self.recovery_manager.wal().append(&entry)
     }
 
     // ==================== Checkpoint Operations ====================
@@ -433,6 +440,11 @@ impl PersistenceManager {
     /// Get the last checkpoint sequence
     pub fn last_checkpoint_sequence(&self) -> u64 {
         *self.last_checkpoint_sequence.lock()
+    }
+
+    /// Get current WAL sequence number
+    pub fn current_sequence(&self) -> u64 {
+        self.recovery_manager.wal().sequence()
     }
 
     // ==================== Shutdown ====================

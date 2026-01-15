@@ -69,6 +69,8 @@ pub struct SharedState {
     pub command_executor: Arc<AsyncCommandExecutor>,
     /// User priority lock manager (FEAT-056)
     pub user_priority: Arc<Arbitrator>,
+    /// Persistence manager for state logging (optional)
+    pub persistence: Option<Arc<RwLock<PersistenceManager>>>,
 }
 
 impl SharedState {
@@ -85,7 +87,7 @@ pub struct Server {
     /// PTY manager (owned, moved to shared state at startup)
     pty_manager: PtyManager,
     /// Persistence manager (optional if disabled)
-    persistence: Option<PersistenceManager>,
+    persistence: Option<Arc<RwLock<PersistenceManager>>>,
     /// Scrollback capture config
     scrollback_config: ScrollbackConfig,
     /// Shutdown signal sender
@@ -136,7 +138,7 @@ impl Server {
 
             let config = PersistenceConfig::from(persistence_config);
             let manager = PersistenceManager::new(&state_dir, config)?;
-            server.persistence = Some(manager);
+            server.persistence = Some(Arc::new(RwLock::new(manager)));
 
             info!("Persistence initialized at {}", state_dir.display());
         } else {
@@ -149,10 +151,13 @@ impl Server {
     /// Perform recovery on startup
     ///
     /// This should be called early in the server initialization.
-    pub fn recover(&mut self) -> Result<RestorationResult> {
-        let Some(persistence) = &self.persistence else {
+    pub async fn recover(&mut self) -> Result<RestorationResult> {
+        let Some(persistence_lock) = &self.persistence else {
             return Ok(RestorationResult::default());
         };
+
+        // Acquire read lock for recovery check
+        let persistence = persistence_lock.read().await;
 
         // Check if recovery is needed
         if !persistence.needs_recovery()? {
@@ -184,7 +189,7 @@ impl Server {
     }
 
     /// Create a checkpoint of current state
-    pub fn checkpoint(&mut self) -> Result<()> {
+    pub async fn checkpoint(&mut self) -> Result<()> {
         if self.persistence.is_none() {
             return Ok(());
         }
@@ -193,7 +198,8 @@ impl Server {
         let sessions = self.collect_session_snapshots();
 
         // Then create checkpoint (mutable borrow)
-        if let Some(ref mut persistence) = self.persistence {
+        if let Some(ref persistence_lock) = self.persistence {
+            let mut persistence = persistence_lock.write().await;
             persistence.create_checkpoint(sessions)?;
         }
 
@@ -201,8 +207,9 @@ impl Server {
     }
 
     /// Create a checkpoint with pre-collected snapshots
-    pub fn checkpoint_with_snapshots(&mut self, sessions: Vec<SessionSnapshot>) -> Result<()> {
-        if let Some(ref mut persistence) = self.persistence {
+    pub async fn checkpoint_with_snapshots(&mut self, sessions: Vec<SessionSnapshot>) -> Result<()> {
+        if let Some(ref persistence_lock) = self.persistence {
+            let mut persistence = persistence_lock.write().await;
             persistence.create_checkpoint(sessions)?;
         }
         Ok(())
@@ -267,7 +274,7 @@ impl Server {
     }
 
     /// Perform graceful shutdown
-    pub fn shutdown(&mut self) -> Result<()> {
+    pub async fn shutdown(&mut self) -> Result<()> {
         info!("Server shutting down");
 
         // Kill all PTYs
@@ -291,8 +298,9 @@ impl Server {
         }
 
         // Collect final state and shutdown persistence
-        if let Some(mut persistence) = self.persistence.take() {
+        if let Some(persistence_lock) = self.persistence.take() {
             let sessions = self.collect_session_snapshots();
+            let mut persistence = persistence_lock.write().await;
             persistence.shutdown(sessions)?;
         }
 
@@ -301,11 +309,12 @@ impl Server {
     }
 
     /// Check if checkpoint is due
-    pub fn is_checkpoint_due(&self) -> bool {
-        self.persistence
-            .as_ref()
-            .map(|p| p.is_checkpoint_due())
-            .unwrap_or(false)
+    pub async fn is_checkpoint_due(&self) -> bool {
+        if let Some(ref persistence_lock) = self.persistence {
+            persistence_lock.read().await.is_checkpoint_due()
+        } else {
+            false
+        }
     }
 
     /// Collect session snapshots for checkpointing
@@ -384,7 +393,7 @@ impl Server {
     }
 
     /// Get persistence manager reference
-    pub fn persistence(&self) -> Option<&PersistenceManager> {
+    pub fn persistence(&self) -> Option<&Arc<RwLock<PersistenceManager>>> {
         self.persistence.as_ref()
     }
 
@@ -569,6 +578,7 @@ async fn handle_client(stream: UnixStream, shared_state: SharedState) {
         shared_state.pane_closed_tx.clone(),
         Arc::clone(&shared_state.command_executor),
         Arc::clone(&shared_state.user_priority),
+        shared_state.persistence.clone(),
     );
 
     // Message pump loop
@@ -737,7 +747,7 @@ async fn run_daemon() -> Result<()> {
     let mut server = Server::new(&app_config)?;
 
     // Perform recovery
-    match server.recover() {
+    match server.recover().await {
         Ok(result) => {
             if result.total_panes > 0 {
                 info!("{}", result.summary());
@@ -790,6 +800,7 @@ async fn run_daemon() -> Result<()> {
         pane_closed_tx,
         command_executor,
         user_priority: Arc::new(Arbitrator::new()),
+        persistence: server.persistence.clone(),
     };
 
     // Store references back in server for persistence operations
@@ -912,7 +923,8 @@ async fn run_daemon() -> Result<()> {
             let snapshots = server_guard.collect_session_snapshots_from(&session_manager);
             drop(session_manager);
 
-            if let Some(mut persistence) = server_guard.persistence.take() {
+            if let Some(persistence_lock) = server_guard.persistence.take() {
+                let mut persistence = persistence_lock.write().await;
                 if let Err(e) = persistence.shutdown(snapshots) {
                     error!("Persistence shutdown failed: {}", e);
                 }
@@ -1070,13 +1082,13 @@ async fn run_checkpoint_loop(server: Arc<Mutex<Server>>, shared_state: SharedSta
         tokio::select! {
             _ = tokio::time::sleep(checkpoint_interval) => {
                 let mut server_guard = server.lock().await;
-                if server_guard.is_checkpoint_due() {
+                if server_guard.is_checkpoint_due().await {
                     // Collect snapshots from shared state
                     let session_manager = shared_state.session_manager.read().await;
                     let snapshots = server_guard.collect_session_snapshots_from(&session_manager);
                     drop(session_manager);
 
-                    if let Err(e) = server_guard.checkpoint_with_snapshots(snapshots) {
+                    if let Err(e) = server_guard.checkpoint_with_snapshots(snapshots).await {
                         error!("Checkpoint failed: {}", e);
                     }
                 }
@@ -1204,6 +1216,7 @@ mod tests {
             pane_closed_tx,
             command_executor,
             user_priority: Arc::new(user_priority::Arbitrator::new()),
+            persistence: None,
         }
     }
 
@@ -1592,6 +1605,7 @@ mod tests {
             shared_state.pane_closed_tx,
             shared_state.command_executor,
             shared_state.user_priority,
+            None,
         )
     }
 

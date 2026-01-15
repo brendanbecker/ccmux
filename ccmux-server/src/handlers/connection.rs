@@ -97,6 +97,7 @@ impl HandlerContext {
                             session: session_info,
                             windows,
                             panes,
+                            commit_seq: 0, // Sync doesn't guarantee resync, just dump
                         },
                         follow_up: initial_output,
                     }
@@ -164,6 +165,72 @@ impl HandlerContext {
             },
         })
     }
+
+    /// Handle GetEventsSince message - return events for replay or snapshot
+    pub async fn handle_get_events_since(&self, last_commit_seq: u64) -> HandlerResult {
+        debug!(
+            "GetEventsSince request from {} (seq: {})",
+            self.client_id, last_commit_seq
+        );
+
+        // Try to fetch from replay buffer
+        if let Some(persistence_lock) = &self.persistence {
+            let persistence = persistence_lock.read().await;
+            if let Some(events) = persistence.get_events_since(last_commit_seq) {
+                // Return events as follow-up
+                let follow_up: Vec<ServerMessage> = events
+                    .into_iter()
+                    .map(|(seq, msg)| ServerMessage::Sequenced {
+                        seq,
+                        inner: Box::new(msg),
+                    })
+                    .collect();
+
+                return HandlerResult::ResponseWithFollowUp {
+                    response: ServerMessage::Pong, // Signal success
+                    follow_up,
+                };
+            }
+        }
+
+        // Fallback: Snapshot
+        let session_manager = self.session_manager.read().await;
+
+        // Get attached session
+        let attached_session_id = self.registry.get_client_session(self.client_id);
+
+        if let Some(session_id) = attached_session_id {
+            if let Some(session) = session_manager.get_session(session_id) {
+                let session_info = session.to_info();
+                let windows: Vec<_> = session.windows().map(|w| w.to_info()).collect();
+                let mut panes = Vec::new();
+                for window in session.windows() {
+                    for pane in window.panes() {
+                        panes.push(pane.to_info());
+                    }
+                }
+
+                let current_seq = if let Some(persistence_lock) = &self.persistence {
+                    persistence_lock.read().await.current_sequence()
+                } else {
+                    0
+                };
+
+                return HandlerResult::Response(ServerMessage::StateSnapshot {
+                    commit_seq: current_seq,
+                    session: session_info,
+                    windows,
+                    panes,
+                });
+            }
+        }
+
+        // If not attached or session lost, return error
+        HandlerContext::error(
+            ErrorCode::InvalidOperation,
+            "Cannot resync: not attached to a session or persistence unavailable",
+        )
+    }
 }
 
 #[cfg(test)]
@@ -192,7 +259,17 @@ mod tests {
         let client_id = registry.register_client(tx);
 
         let (pane_closed_tx, _) = mpsc::channel(10);
-        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor, user_priority)
+        HandlerContext::new(
+            session_manager,
+            pty_manager,
+            registry,
+            config,
+            client_id,
+            pane_closed_tx,
+            command_executor,
+            user_priority,
+            None,
+        )
     }
 
     #[tokio::test]

@@ -171,14 +171,54 @@ impl HandlerContext {
             }
         }
 
+        // Log to persistence
+        let mut commit_seq = 0;
+        if let Some(persistence_lock) = &self.persistence {
+            let persistence = persistence_lock.read().await;
+            if let Ok(seq) = persistence.log_pane_created(
+                pane_id,
+                pane_info.window_id,
+                pane_info.index,
+                pane_info.cols,
+                pane_info.rows,
+            ) {
+                commit_seq = seq;
+                persistence.push_replay(seq, ServerMessage::PaneCreated {
+                    pane: pane_info.clone(),
+                    direction,
+                });
+            }
+        }
+
+        let response_msg = ServerMessage::PaneCreated {
+            pane: pane_info.clone(),
+            direction,
+        };
+        let broadcast_msg = ServerMessage::PaneCreated {
+            pane: pane_info,
+            direction,
+        };
+
+        let (response, broadcast) = if commit_seq > 0 {
+            (
+                ServerMessage::Sequenced {
+                    seq: commit_seq,
+                    inner: Box::new(response_msg),
+                },
+                ServerMessage::Sequenced {
+                    seq: commit_seq,
+                    inner: Box::new(broadcast_msg),
+                },
+            )
+        } else {
+            (response_msg, broadcast_msg)
+        };
+
         // Broadcast to all clients attached to this session
         HandlerResult::ResponseWithBroadcast {
-            response: ServerMessage::PaneCreated {
-                pane: pane_info.clone(),
-                direction,
-            },
+            response,
             session_id,
-            broadcast: ServerMessage::PaneCreated { pane: pane_info, direction },
+            broadcast,
         }
     }
 
@@ -405,8 +445,20 @@ mod tests {
         let (tx, _rx) = mpsc::channel(10);
         let client_id = registry.register_client(tx);
 
-        let (pane_closed_tx, _) = mpsc::channel(10);
-        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor, user_priority)
+        // Create cleanup channel (receiver is dropped in tests)
+        let (pane_closed_tx, _pane_closed_rx) = mpsc::channel(10);
+
+        HandlerContext::new(
+            session_manager,
+            pty_manager,
+            registry,
+            config,
+            client_id,
+            pane_closed_tx,
+            command_executor,
+            user_priority,
+            None,
+        )
     }
 
     async fn create_session_with_window(ctx: &HandlerContext) -> (Uuid, Uuid) {
@@ -484,7 +536,7 @@ mod tests {
         let (session_id, window_id) = create_session_with_window(&ctx).await;
 
         // Create two panes
-        let (pane1_id, pane2_id) = {
+        let (_pane1_id, pane2_id) = {
             let mut session_manager = ctx.session_manager.write().await;
             let session = session_manager.get_session_mut(session_id).unwrap();
             let window = session.get_window_mut(window_id).unwrap();
