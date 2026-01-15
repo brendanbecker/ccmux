@@ -736,8 +736,14 @@ impl McpBridge {
                 let command = arguments["command"].as_str().map(String::from);
                 let cwd = arguments["cwd"].as_str().map(String::from);
                 let select = arguments["select"].as_bool().unwrap_or(false);
-                self.tool_create_pane(session, window, name, direction, command, cwd, select)
-                    .await
+                let model = arguments["model"].as_str().map(String::from);
+                let config = arguments["config"].as_object().map(|o| serde_json::Value::Object(o.clone()));
+                let preset = arguments["preset"].as_str().map(String::from);
+
+                self.tool_create_pane(
+                    session, window, name, direction, command, cwd, select, model, config, preset,
+                )
+                .await
             }
             "ccmux_send_input" => {
                 let pane_id = parse_uuid(arguments, "pane_id")?;
@@ -1151,7 +1157,14 @@ impl McpBridge {
         command: Option<String>,
         cwd: Option<String>,
     ) -> Result<ToolResult, McpError> {
-        self.send_to_daemon(ClientMessage::CreateSessionWithOptions { name, command, cwd })
+        self.send_to_daemon(ClientMessage::CreateSessionWithOptions {
+            name,
+            command,
+            cwd,
+            claude_model: None,
+            claude_config: None,
+            preset: None,
+        })
             .await?;
 
         match self.recv_response_from_daemon().await? {
@@ -1226,6 +1239,9 @@ impl McpBridge {
         command: Option<String>,
         cwd: Option<String>,
         select: bool,
+        claude_model: Option<String>,
+        claude_config: Option<serde_json::Value>,
+        preset: Option<String>,
     ) -> Result<ToolResult, McpError> {
         // Map terminal multiplexer convention to layout direction:
         // - "vertical" = vertical split LINE = panes side-by-side = Horizontal layout
@@ -1250,6 +1266,9 @@ impl McpBridge {
             cwd,
             select,
             name,
+            claude_model,
+            claude_config: claude_config.map(Into::into),
+            preset,
         })
         .await?;
 

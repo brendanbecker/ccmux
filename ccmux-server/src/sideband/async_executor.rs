@@ -47,6 +47,8 @@ struct SpawnConfig {
     env: HashMap<String, String>,
     #[serde(default)]
     timeout_secs: Option<u64>,
+    #[serde(default)]
+    sandbox: bool,
 }
 
 /// Async executor for sideband commands
@@ -366,6 +368,32 @@ impl AsyncCommandExecutor {
                         warn!("Pane {} not found for timeout closure (may have been closed already)", pane_id);
                     }
                 });
+            }
+
+            // Apply sandbox if requested (FEAT-081)
+            if cfg.sandbox {
+                match std::env::current_exe() {
+                    Ok(exe_path) => {
+                        let sandbox_path = exe_path.parent().unwrap().join("ccmux-sandbox");
+                        if sandbox_path.exists() {
+                            info!("Applying sandbox wrapper: {:?}", sandbox_path);
+                            
+                            // Reconstruct command: sandbox <cmd> <args...>
+                            let original_cmd = pty_config.command.clone();
+                            let mut new_args = vec![original_cmd];
+                            new_args.extend(pty_config.args.clone());
+                            
+                            pty_config.command = sandbox_path.to_string_lossy().to_string();
+                            pty_config.args = new_args;
+                        } else {
+                            warn!("Sandbox requested but ccmux-sandbox binary not found at {:?}", sandbox_path);
+                            return Err(ExecuteError::ExecutionFailed("Sandbox requested but ccmux-sandbox binary not found".to_string()));
+                        }
+                    }
+                    Err(e) => {
+                        return Err(ExecuteError::ExecutionFailed(format!("Failed to locate ccmux-sandbox: {}", e)));
+                    }
+                }
             }
         }
 
@@ -737,5 +765,25 @@ mod tests {
             pane_id,
         ).await;
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_spawn_config_deserialization() {
+        let json = r#"{"env": {"FOO": "bar"}, "timeout_secs": 60, "sandbox": true}"#;
+        let config: SpawnConfig = serde_json::from_str(json).unwrap();
+        
+        assert_eq!(config.env.get("FOO").map(|s| s.as_str()), Some("bar"));
+        assert_eq!(config.timeout_secs, Some(60));
+        assert_eq!(config.sandbox, true);
+    }
+
+    #[test]
+    fn test_spawn_config_default() {
+        let json = r#"{}"#;
+        let config: SpawnConfig = serde_json::from_str(json).unwrap();
+        
+        assert!(config.env.is_empty());
+        assert_eq!(config.timeout_secs, None);
+        assert_eq!(config.sandbox, false);
     }
 }
