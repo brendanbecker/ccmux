@@ -1093,6 +1093,7 @@ tags: HashSet::new(),
                 name: None,
                 title: None,
                 cwd: None,
+                metadata: HashMap::new(),
             }],
             commit_seq: 100,
         };
@@ -1146,6 +1147,7 @@ tags: HashSet::new(),
             name: None,
             title: None,
             cwd: None,
+            metadata: HashMap::new(),
         };
 
         let msg = ServerMessage::PaneCreated {

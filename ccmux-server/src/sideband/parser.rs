@@ -245,6 +245,10 @@ impl SidebandParser {
                 })
             }
 
+            "capabilities" => Ok(SidebandCommand::AdvertiseCapabilities {
+                capabilities: content.to_string(),
+            }),
+
             _ => Err(format!("Unknown command type: {}", cmd_type)),
         }
     }

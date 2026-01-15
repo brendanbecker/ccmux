@@ -49,6 +49,11 @@ pub enum SidebandCommand {
     },
     /// Pane control action
     Control { action: ControlAction, pane: PaneRef },
+    /// Advertise capabilities (identity, resume, etc.)
+    AdvertiseCapabilities {
+        /// Optional JSON payload containing capability declarations
+        capabilities: String,
+    },
 }
 
 /// Reference to a pane (by index, ID, or active)

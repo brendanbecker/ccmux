@@ -45,6 +45,8 @@ pub struct Pane {
     claude_detector: ClaudeDetector,
     /// Beads root directory if detected (FEAT-057)
     beads_root: Option<PathBuf>,
+    /// Arbitrary key-value metadata for the pane (FEAT-076)
+    metadata: std::collections::HashMap<String, String>,
 }
 
 impl fmt::Debug for Pane {
@@ -104,6 +106,7 @@ impl Pane {
             parser: None,
             claude_detector: ClaudeDetector::new(),
             beads_root: None,
+            metadata: std::collections::HashMap::new(),
         }
     }
 
@@ -146,7 +149,30 @@ impl Pane {
             parser: None,
             claude_detector,
             beads_root: None,
+            metadata: std::collections::HashMap::new(),
         }
+    }
+
+    /// Restore a pane with metadata from persisted state
+    #[allow(clippy::too_many_arguments)]
+    pub fn restore_with_metadata(
+        id: Uuid,
+        window_id: Uuid,
+        index: usize,
+        cols: u16,
+        rows: u16,
+        state: PaneState,
+        name: Option<String>,
+        title: Option<String>,
+        cwd: Option<String>,
+        created_at: u64,
+        metadata: std::collections::HashMap<String, String>,
+    ) -> Self {
+        let mut pane = Self::restore(
+            id, window_id, index, cols, rows, state, name, title, cwd, created_at,
+        );
+        pane.metadata = metadata;
+        pane
     }
 
     /// Get pane ID
@@ -192,6 +218,21 @@ impl Pane {
     pub fn set_state(&mut self, state: PaneState) {
         self.state = state;
         self.state_changed_at = SystemTime::now();
+    }
+
+    /// Get metadata value
+    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+        self.metadata.get(key)
+    }
+
+    /// Set metadata value
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.metadata.insert(key.into(), value.into());
+    }
+
+    /// Get all metadata
+    pub fn metadata(&self) -> &std::collections::HashMap<String, String> {
+        &self.metadata
     }
 
     /// Check if this is a Claude pane
@@ -455,6 +496,7 @@ impl Pane {
             name: self.name.clone(),
             title: self.title.clone(),
             cwd: self.cwd.clone(),
+            metadata: self.metadata.clone(),
         }
     }
 }
