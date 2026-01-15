@@ -184,7 +184,7 @@ impl HandlerContext {
 
     /// Handle SelectPane message - update focused pane
     ///
-    /// BUG-026 FIX: Now broadcasts PaneFocused to TUI clients so they update their UI.
+    /// FEAT-078: Updates per-client focus state instead of global.
     /// FEAT-056: Checks user priority lock before changing focus.
     pub async fn handle_select_pane(&self, pane_id: Uuid) -> HandlerResult {
         debug!("SelectPane {} request from {}", pane_id, self.client_id);
@@ -202,7 +202,7 @@ impl HandlerContext {
             );
         }
 
-        let mut session_manager = self.session_manager.write().await;
+        let session_manager = self.session_manager.read().await;
 
         // Find the pane
         match session_manager.find_pane(pane_id) {
@@ -210,34 +210,17 @@ impl HandlerContext {
                 let session_id = session.id();
                 let window_id = window.id();
 
-                // Set as active pane in window and active window in session
-                if let Some(session) = session_manager.get_session_mut(session_id) {
-                    // Also set this window as active in the session
-                    session.set_active_window(window_id);
-
-                    if let Some(window) = session.get_window_mut(window_id) {
-                        if window.set_active_pane(pane_id) {
-                            debug!("Pane {} selected as active", pane_id);
-                        // BUG-026: Broadcast pane focus change to TUI clients
-                        // BUG-036: Use global broadcast so TUIs in other sessions can switch
-                        return HandlerResult::ResponseWithGlobalBroadcast {
-                            response: ServerMessage::PaneFocused {
-                                session_id,
-                                window_id,
-                                pane_id,
-                            },
-                            broadcast: ServerMessage::PaneFocused {
-                                session_id,
-                                window_id,
-                                pane_id,
-                            },
-                        };
-                        }
-                    }
-                }
-
-                // Shouldn't reach here
-                HandlerContext::error(ErrorCode::InternalError, "Failed to select pane")
+                // Update client focus
+                self.registry.update_client_focus(self.client_id, Some(session_id), Some(window_id), Some(pane_id));
+                
+                debug!("Client {} selected pane {}", self.client_id, pane_id);
+                
+                // Send confirmation ONLY to the requesting client
+                HandlerResult::Response(ServerMessage::PaneFocused {
+                    session_id,
+                    window_id,
+                    pane_id,
+                })
             }
             None => {
                 debug!("Pane {} not found for SelectPane", pane_id);
@@ -246,106 +229,6 @@ impl HandlerContext {
                     format!("Pane {} not found", pane_id),
                 )
             }
-        }
-    }
-
-    /// Handle SelectWindow message - update active window in session
-    ///
-    /// BUG-026 FIX: Now broadcasts WindowFocused to TUI clients so they update their UI.
-    /// FEAT-056: Checks user priority lock before changing focus.
-    pub async fn handle_select_window(&self, window_id: Uuid) -> HandlerResult {
-        debug!("SelectWindow {} request from {}", window_id, self.client_id);
-
-        // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.check_focus_lock() {
-            debug!(
-                "SelectWindow blocked by user priority lock, retry after {}ms",
-                remaining_ms
-            );
-            return HandlerContext::error_with_details(
-                ErrorCode::UserPriorityActive,
-                format!("User priority lock active, retry after {}ms", remaining_ms),
-                ErrorDetails::HumanControl { remaining_ms },
-            );
-        }
-
-        let mut session_manager = self.session_manager.write().await;
-
-        // Find the session containing this window
-        let session_id = session_manager
-            .list_sessions()
-            .iter()
-            .find_map(|s| s.windows().find(|w| w.id() == window_id).map(|_| s.id()));
-
-        match session_id {
-            Some(session_id) => {
-                if let Some(session) = session_manager.get_session_mut(session_id) {
-                    session.set_active_window(window_id);
-                    debug!("Window {} selected as active", window_id);
-                    // BUG-026: Broadcast window focus change to TUI clients
-                    // BUG-036: Use global broadcast so TUIs in other sessions can switch
-                    return HandlerResult::ResponseWithGlobalBroadcast {
-                        response: ServerMessage::WindowFocused {
-                            session_id,
-                            window_id,
-                        },
-                        broadcast: ServerMessage::WindowFocused {
-                            session_id,
-                            window_id,
-                        },
-                    };
-                }
-                HandlerContext::error(ErrorCode::InternalError, "Session disappeared")
-            }
-            None => {
-                debug!("Window {} not found for SelectWindow", window_id);
-                HandlerContext::error(
-                    ErrorCode::WindowNotFound,
-                    format!("Window {} not found", window_id),
-                )
-            }
-        }
-    }
-
-    /// Handle SelectSession message - update active session
-    ///
-    /// BUG-026 FIX: Now broadcasts SessionFocused to TUI clients so they update their UI.
-    /// FEAT-056: Checks user priority lock before changing focus.
-    pub async fn handle_select_session(&self, session_id: Uuid) -> HandlerResult {
-        debug!("SelectSession {} request from {}", session_id, self.client_id);
-
-        // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.check_focus_lock() {
-            debug!(
-                "SelectSession blocked by user priority lock, retry after {}ms",
-                remaining_ms
-            );
-            return HandlerContext::error_with_details(
-                ErrorCode::UserPriorityActive,
-                format!("User priority lock active, retry after {}ms", remaining_ms),
-                ErrorDetails::HumanControl { remaining_ms },
-            );
-        }
-
-        let mut session_manager = self.session_manager.write().await;
-
-        // Verify session exists
-        if session_manager.get_session(session_id).is_none() {
-            debug!("Session {} not found for SelectSession", session_id);
-            return HandlerContext::error(
-                ErrorCode::SessionNotFound,
-                format!("Session {} not found", session_id),
-            );
-        }
-
-        // Set as active session
-        session_manager.set_active_session(session_id);
-        debug!("Session {} selected as active", session_id);
-        // BUG-026: Broadcast session focus change to TUI clients
-        // BUG-036: Use global broadcast so TUIs in other sessions can switch
-        HandlerResult::ResponseWithGlobalBroadcast {
-            response: ServerMessage::SessionFocused { session_id },
-            broadcast: ServerMessage::SessionFocused { session_id },
         }
     }
 
@@ -613,23 +496,17 @@ mod tests {
         // Select second pane
         let result = ctx.handle_select_pane(pane2_id).await;
 
-        // BUG-026: Now returns ResponseWithBroadcast with PaneFocused
-        // BUG-036: Use ResponseWithGlobalBroadcast for global focus notification
+        // FEAT-078: Returns Response with PaneFocused
         match result {
-            HandlerResult::ResponseWithGlobalBroadcast {
-                response: ServerMessage::PaneFocused { pane_id, .. },
-                ..
-            } => {
+            HandlerResult::Response(ServerMessage::PaneFocused { pane_id, .. }) => {
                 assert_eq!(pane_id, pane2_id);
             }
-            _ => panic!("Expected ResponseWithGlobalBroadcast with PaneFocused"),
+            _ => panic!("Expected Response with PaneFocused"),
         }
 
-        // Verify pane2 is now active
-        let session_manager = ctx.session_manager.read().await;
-        let (_, window) = session_manager.find_window(window_id).unwrap();
-        assert_eq!(window.active_pane_id(), Some(pane2_id));
-        assert_ne!(window.active_pane_id(), Some(pane1_id));
+        // Verify focus was updated in registry
+        let focus = ctx.registry.get_client_focus(ctx.client_id).unwrap();
+        assert_eq!(focus.active_pane_id, Some(pane2_id));
     }
 
     #[tokio::test]
@@ -786,48 +663,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_select_window_blocked_by_user_priority() {
-        let ctx = create_test_context();
-        let (_session_id, window_id) = create_session_with_window(&ctx).await;
-
-        // Activate user priority lock
-        let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_focus_lock(other_client_id, 5000);
-
-        // Try to select window - should be blocked
-        let result = ctx.handle_select_window(window_id).await;
-
-        match result {
-            HandlerResult::Response(ServerMessage::Error { code, message, .. }) => {
-                assert_eq!(code, ErrorCode::UserPriorityActive);
-                assert!(message.contains("retry after"));
-            }
-            _ => panic!("Expected UserPriorityActive error"),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_select_session_blocked_by_user_priority() {
-        let ctx = create_test_context();
-        let (session_id, _window_id) = create_session_with_window(&ctx).await;
-
-        // Activate user priority lock
-        let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_focus_lock(other_client_id, 5000);
-
-        // Try to select session - should be blocked
-        let result = ctx.handle_select_session(session_id).await;
-
-        match result {
-            HandlerResult::Response(ServerMessage::Error { code, message, .. }) => {
-                assert_eq!(code, ErrorCode::UserPriorityActive);
-                assert!(message.contains("retry after"));
-            }
-            _ => panic!("Expected UserPriorityActive error"),
-        }
-    }
-
-    #[tokio::test]
     async fn test_select_pane_allowed_when_no_lock() {
         let ctx = create_test_context();
         let (session_id, window_id) = create_session_with_window(&ctx).await;
@@ -844,13 +679,10 @@ mod tests {
         let result = ctx.handle_select_pane(pane_id).await;
 
         match result {
-            HandlerResult::ResponseWithGlobalBroadcast {
-                response: ServerMessage::PaneFocused { pane_id: focused_id, .. },
-                ..
-            } => {
+            HandlerResult::Response(ServerMessage::PaneFocused { pane_id: focused_id, .. }) => {
                 assert_eq!(focused_id, pane_id);
             }
-            _ => panic!("Expected ResponseWithGlobalBroadcast with PaneFocused"),
+            _ => panic!("Expected PaneFocused response"),
         }
     }
 
@@ -876,13 +708,10 @@ mod tests {
         let result = ctx.handle_select_pane(pane_id).await;
 
         match result {
-            HandlerResult::ResponseWithGlobalBroadcast {
-                response: ServerMessage::PaneFocused { pane_id: focused_id, .. },
-                ..
-            } => {
+            HandlerResult::Response(ServerMessage::PaneFocused { pane_id: focused_id, .. }) => {
                 assert_eq!(focused_id, pane_id);
             }
-            _ => panic!("Expected ResponseWithGlobalBroadcast with PaneFocused"),
+            _ => panic!("Expected PaneFocused response"),
         }
     }
 }
