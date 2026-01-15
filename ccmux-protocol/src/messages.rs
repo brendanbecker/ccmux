@@ -368,6 +368,14 @@ pub enum ClientMessage {
 
     /// Request full ready task list for the beads panel
     RequestBeadsReadyList { pane_id: Uuid },
+
+    // ==================== Resync / Event Log (FEAT-075) ====================
+
+    /// Request events since a specific commit sequence
+    GetEventsSince {
+        /// Last seen commit sequence (0 = none)
+        last_commit_seq: u64,
+    },
 }
 
 /// Messages sent from server to client
@@ -377,6 +385,20 @@ pub enum ServerMessage {
     Connected {
         server_version: String,
         protocol_version: u32,
+    },
+
+    /// A sequenced message for event log/replay (FEAT-075)
+    Sequenced {
+        seq: u64,
+        inner: Box<ServerMessage>,
+    },
+
+    /// Snapshot of the current state for resync (FEAT-075)
+    StateSnapshot {
+        commit_seq: u64,
+        session: SessionInfo,
+        windows: Vec<WindowInfo>,
+        panes: Vec<PaneInfo>,
     },
 
     /// List of available sessions
