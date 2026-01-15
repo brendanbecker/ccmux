@@ -350,6 +350,7 @@ mod tests {
                     title: None,
                     cwd: Some("/home/user".to_string()),
                 }],
+                commit_seq: 42,
             },
             ServerMessage::WindowCreated {
                 window: WindowInfo {

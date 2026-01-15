@@ -194,7 +194,17 @@ mod tests {
         let client_id = registry.register_client(tx);
 
         let (pane_closed_tx, _) = mpsc::channel(10);
-        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor, user_priority)
+        HandlerContext::new(
+            session_manager,
+            pty_manager,
+            registry,
+            config,
+            client_id,
+            pane_closed_tx,
+            command_executor,
+            user_priority,
+            None,
+        )
     }
 
     async fn create_pane(ctx: &HandlerContext) -> Uuid {

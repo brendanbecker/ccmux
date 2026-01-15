@@ -73,6 +73,16 @@ impl HandlerContext {
                 let session_info = session_manager.get_session(session_id).unwrap().to_info();
                 drop(session_manager);
 
+                // Log to persistence
+                let mut commit_seq = 0;
+                if let Some(persistence_lock) = &self.persistence {
+                    let persistence = persistence_lock.read().await;
+                    if let Ok(seq) = persistence.log_session_created(session_id, &name) {
+                        commit_seq = seq;
+                        persistence.push_replay(seq, ServerMessage::SessionCreated { session: session_info.clone() });
+                    }
+                }
+
                 // Spawn PTY for the default pane
                 {
                     let mut pty_manager = self.pty_manager.write().await;
@@ -119,9 +129,20 @@ impl HandlerContext {
                     }
                 }
 
-                HandlerResult::Response(ServerMessage::SessionCreated {
+                let response = ServerMessage::SessionCreated {
                     session: session_info,
-                })
+                };
+
+                let response = if commit_seq > 0 {
+                    ServerMessage::Sequenced {
+                        seq: commit_seq,
+                        inner: Box::new(response),
+                    }
+                } else {
+                    response
+                };
+
+                HandlerResult::Response(response)
             }
             Err(e) => {
                 debug!("Failed to create session '{}': {}", name, e);
@@ -219,12 +240,20 @@ impl HandlerContext {
             self.registry.attach_to_session(self.client_id, session_id);
             self.registry.update_client_focus(self.client_id, Some(session_id), active_window, active_pane);
 
+            // Get current seq
+            let commit_seq = if let Some(persistence_lock) = &self.persistence {
+                persistence_lock.read().await.current_sequence()
+            } else {
+                0
+            };
+
             info!(
-                "Client {} attached to session {} (focus: w={:?}, p={:?})",
+                "Client {} attached to session {} (focus: w={:?}, p={:?}, seq={})",
                 self.client_id,
                 session_id,
                 active_window,
-                active_pane
+                active_pane,
+                commit_seq
             );
 
             // Return response with follow-up output messages for initial scrollback
@@ -233,6 +262,7 @@ impl HandlerContext {
                     session: session_info,
                     windows,
                     panes,
+                    commit_seq,
                 },
                 follow_up: initial_output,
             }
@@ -315,6 +345,19 @@ impl HandlerContext {
             }
         }
 
+        // Log to persistence
+        let mut commit_seq = 0;
+        if let Some(persistence_lock) = &self.persistence {
+            let persistence = persistence_lock.read().await;
+            if let Ok(seq) = persistence.log_session_destroyed(session_id) {
+                commit_seq = seq;
+                persistence.push_replay(seq, ServerMessage::SessionDestroyed {
+                    session_id,
+                    session_name: session_name.clone(),
+                });
+            }
+        }
+
         // Detach any clients attached to this session
         self.registry.detach_session_clients(session_id);
 
@@ -330,14 +373,33 @@ impl HandlerContext {
                 .collect()
         };
 
-        self.registry
-            .broadcast_to_all(ServerMessage::SessionsChanged { sessions });
+        let broadcast_msg = ServerMessage::SessionsChanged { sessions };
+        let broadcast_msg = if commit_seq > 0 {
+            ServerMessage::Sequenced {
+                seq: commit_seq,
+                inner: Box::new(broadcast_msg),
+            }
+        } else {
+            broadcast_msg
+        };
+
+        self.registry.broadcast_to_all(broadcast_msg);
 
         // Return confirmation to the requesting client (for MCP bridge)
-        HandlerResult::Response(ServerMessage::SessionDestroyed {
+        let response = ServerMessage::SessionDestroyed {
             session_id,
             session_name,
-        })
+        };
+        let response = if commit_seq > 0 {
+            ServerMessage::Sequenced {
+                seq: commit_seq,
+                inner: Box::new(response),
+            }
+        } else {
+            response
+        };
+
+        HandlerResult::Response(response)
     }
 
     /// Handle CreateWindow message - create a new window in a session
@@ -427,15 +489,50 @@ impl HandlerContext {
             }
         }
 
+        // Log to persistence
+        let mut commit_seq = 0;
+        if let Some(persistence_lock) = &self.persistence {
+            let persistence = persistence_lock.read().await;
+            if let Ok(seq) = persistence.log_window_created(
+                window_id,
+                session_id,
+                &window_info.name,
+                window_info.index,
+            ) {
+                commit_seq = seq;
+                persistence.push_replay(seq, ServerMessage::WindowCreated {
+                    window: window_info.clone(),
+                });
+            }
+        }
+
+        let response_msg = ServerMessage::WindowCreated {
+            window: window_info.clone(),
+        };
+        let broadcast_msg = ServerMessage::WindowCreated {
+            window: window_info,
+        };
+
+        let (response, broadcast) = if commit_seq > 0 {
+            (
+                ServerMessage::Sequenced {
+                    seq: commit_seq,
+                    inner: Box::new(response_msg),
+                },
+                ServerMessage::Sequenced {
+                    seq: commit_seq,
+                    inner: Box::new(broadcast_msg),
+                },
+            )
+        } else {
+            (response_msg, broadcast_msg)
+        };
+
         // Broadcast to all clients attached to this session
         HandlerResult::ResponseWithBroadcast {
-            response: ServerMessage::WindowCreated {
-                window: window_info.clone(),
-            },
+            response,
             session_id,
-            broadcast: ServerMessage::WindowCreated {
-                window: window_info,
-            },
+            broadcast,
         }
     }
 
@@ -705,8 +802,20 @@ mod tests {
         let (tx, _rx) = mpsc::channel(10);
         let client_id = registry.register_client(tx);
 
-        let (pane_closed_tx, _) = mpsc::channel(10);
-        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor, user_priority)
+        // Create cleanup channel (receiver is dropped in tests)
+        let (pane_closed_tx, _pane_closed_rx) = mpsc::channel(10);
+
+        HandlerContext::new(
+            session_manager,
+            pty_manager,
+            registry,
+            config,
+            client_id,
+            pane_closed_tx,
+            command_executor,
+            user_priority,
+            None,
+        )
     }
 
     #[tokio::test]
