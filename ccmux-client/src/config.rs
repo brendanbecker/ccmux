@@ -3,6 +3,7 @@
 //! Loads keybinding configuration from the shared config file.
 
 use crate::input::QuickBindings;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Get the config file path (~/.config/ccmux/config.toml)
@@ -18,6 +19,8 @@ fn config_file() -> PathBuf {
 #[serde(default)]
 struct ClientConfig {
     keybindings: KeybindingConfig,
+    #[serde(default)]
+    remotes: HashMap<String, String>,
 }
 
 /// Keybinding configuration for quick navigation
@@ -41,6 +44,29 @@ impl Default for KeybindingConfig {
             prev_window_quick: "Ctrl-PageUp".into(),
             next_pane_quick: "Ctrl-Shift-PageDown".into(),
             prev_pane_quick: "Ctrl-Shift-PageUp".into(),
+        }
+    }
+}
+
+/// Resolve a remote alias to an address
+pub fn resolve_remote(name: &str) -> Option<String> {
+    let path = config_file();
+
+    if !path.exists() {
+        return None;
+    }
+
+    match std::fs::read_to_string(&path) {
+        Ok(content) => match toml::from_str::<ClientConfig>(&content) {
+            Ok(config) => config.remotes.get(name).cloned(),
+            Err(e) => {
+                tracing::warn!("Failed to parse config file for remotes: {}", e);
+                None
+            }
+        },
+        Err(e) => {
+            tracing::warn!("Failed to read config file for remotes: {}", e);
+            None
         }
     }
 }
@@ -126,5 +152,18 @@ mod tests {
         "#;
         let config: ClientConfig = toml::from_str(toml).unwrap();
         assert_eq!(config.keybindings.next_window_quick, "");
+    }
+
+    #[test]
+    fn test_parse_remotes() {
+        let toml = r#"
+            [remotes]
+            gaming-pc = "tcp://192.168.1.5:9999"
+            cloud-gpu = "tcp://203.0.113.10:9999"
+        "#;
+        let config: ClientConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.remotes.get("gaming-pc"), Some(&"tcp://192.168.1.5:9999".to_string()));
+        assert_eq!(config.remotes.get("cloud-gpu"), Some(&"tcp://203.0.113.10:9999".to_string()));
+        assert_eq!(config.remotes.get("missing"), None);
     }
 }

@@ -48,13 +48,14 @@ We use a "CI-in-worktree" pattern to keep branches short-lived and history clean
 - **FEAT-068**: SSH tunnel integration and documentation (Stream C).
 - **FEAT-070**: Gastown remote pane support (Stream C).
 - **FEAT-075**: Snapshot + replay resync API (Stream B).
+- **FEAT-082 (aka 073)**: Multi-tier routing logic via target aliases (Stream C).
 - **BUG-042**: Flatten Result nesting code smell (Stream A).
 - **Retro**: Conducted comprehensive retrospective, categorized backlog into streams.
 
 ### In Progress
 - **BUG-032 (P0)**: MCP handlers missing TUI broadcasts (Stream A).
 - **FEAT-082 (P2)**: Adaptive layout engine (Stream B).
-- **FEAT-073 (P2)**: Multi-tier routing logic (Stream C).
+- **FEAT-074 (P2)**: Telemetry and observability dashboard (Stream C).
 
 ## Backlog Highlights
 
@@ -91,12 +92,17 @@ We use a "CI-in-worktree" pattern to keep branches short-lived and history clean
    - Implemented `GetEventsSince` handler and `StateSnapshot` fallback.
    - Added client-side gap detection and automatic resync flow.
 
-3. **Stream Merges**
-   - Merged Stream C (FEAT-070) into main.
+3. **FEAT-082 (aka 073): Multi-tier routing logic via target aliases (Stream C)**
+   - Add `[remotes]` section to `ccmux-client` configuration.
+   - Add `--target <NAME>` CLI flag to `ccmux-client`.
+   - Implement address resolution and conditional auto-start logic.
+
+4. **Stream Merges**
+   - Merged Stream C (FEAT-070, FEAT-082) into main.
    - Merged Stream B (FEAT-075) into main.
-   - Updated `SESSION.md` in both worktrees for next objectives.
+   - Updated `SESSION.md` in all worktrees for next objectives.
 
 ### Next Steps
 - **Stream A**: Resolve BUG-032.
 - **Stream B**: FEAT-082 (Adaptive Layout).
-- **Stream C**: FEAT-073 (Multi-tier Routing).
+- **Stream C**: FEAT-074 (Telemetry/Dashboard).

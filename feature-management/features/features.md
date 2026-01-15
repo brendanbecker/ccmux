@@ -1,17 +1,28 @@
 # Feature Tracking
 
 **Project**: ccmux
-**Last Updated**: 2026-01-14
+**Last Updated**: 2026-01-15
 
 ## Summary Statistics
 
-- **Total Features**: 79
-- **Completed**: 60
-- **Backlog**: 19
+- **Total Features**: 82
+- **Completed**: 72
+- **Backlog**: 10
 
 ## Current Status
 
-Core terminal multiplexer features complete. Nineteen features remain in backlog.
+Core terminal multiplexer features complete. Ten features remain in backlog.
+
+**Recent Completions (2026-01-15)**:
+- FEAT-082 (aka 073): Multi-tier routing logic via target aliases
+- FEAT-075: Snapshot + replay resync API (event retention)
+- FEAT-070: gastown remote pane support via CCMUX_ADDR
+- FEAT-068: SSH tunnel integration and documentation
+- FEAT-067: Client TCP connection support
+- FEAT-066: TCP listener support in daemon
+- FEAT-071: Per-pane Claude configuration on spawn
+- FEAT-080: Per-Pane/Session Configuration via Sideband Commands
+- FEAT-081: Optional Landlock Integration for Per-Pane Sandboxing
 
 **Recent Completions (2026-01-14)**:
 - FEAT-079: Comprehensive Human-Control Arbitration
@@ -26,51 +37,18 @@ Core terminal multiplexer features complete. Nineteen features remain in backlog
 - FEAT-050: Session metadata storage (arbitrary key-value metadata)
 - FEAT-056: User priority lockout for MCP focus control
 
-**Recent Additions (2026-01-14)**:
-- FEAT-081: Optional Landlock Integration for Per-Pane Sandboxing
-- FEAT-080: Per-Pane/Session Configuration via Sideband Commands
-
-**Recent Additions (2026-01-13)**:
-- FEAT-078: Per-client focus state support
-- FEAT-076: Capability signaling protocol (sideband metadata)
-- FEAT-075: Snapshot + replay resync API (event retention)
-- FEAT-074: Observability instrumentation (metrics, tracing, status)
-- FEAT-073: Visibility dashboard (stuck detection, mailbox, graph pane)
-- FEAT-071: Per-pane Claude configuration on spawn (model selection, context limits, presets)
-- FEAT-070: gastown remote pane support via CCMUX_ADDR (enables hybrid Mayor/polecat orchestration)
-- FEAT-069: TLS/auth for direct TCP connections (Phase 4 of remote peering - future enhancement)
-- FEAT-068: SSH tunnel integration and documentation (Phase 3 of remote peering - MVP completion)
-- FEAT-067: Client TCP connection support (Phase 2 of remote peering support)
-- FEAT-066: TCP listener support in daemon (Phase 1 of remote peering support)
-- FEAT-064: Refactor MCP bridge.rs into modular components (maintainability)
-- FEAT-063: Add file-based logging to MCP bridge mode (unblocks BUG-039)
-
-**Recent Additions (2026-01-11)**:
-- FEAT-062: Mirror pane (picture-in-picture view) for multi-agent monitoring
-- FEAT-061: Screen redraw command to fix display corruption
-
 ### Backlog Features
 
 | ID | Title | Component | Priority | Status | Notes |
 |----|-------|-----------|----------|--------|-------|
-| FEAT-080 | Per-Pane/Session Configuration via Sideband Commands | ccmux-server, ccmux-protocol | P2 | **New** | Enable dynamic, agent-driven configuration of individual panes/sessions. |
-| FEAT-081 | Optional Landlock Integration for Per-Pane Sandboxing | ccmux-server | P3 | **New** | Unprivileged filesystem/network sandboxing using Linux Landlock. |
-| FEAT-078 | Per-client focus state support | ccmux-server, ccmux-client, ccmux-protocol | P2 | **Ready** | Ensure focus/selection is per-client (avoid focus fights) with snapshot initialization only. |
-| FEAT-075 | Snapshot + replay resync API (event retention) | ccmux-server, ccmux-protocol, ccmux-client | P2 | **Ready** | Resync after gaps via snapshot fallback + event replay. |
 | FEAT-063 | Add file-based logging to MCP bridge mode | ccmux-server | P1 | **Ready** | Enable file logging for mcp-bridge to debug BUG-039. Small change. |
 | FEAT-061 | Screen Redraw Command | ccmux-client | P2 | **Ready** | Keybind to force full screen redraw for display corruption recovery. |
 | FEAT-074 | Observability instrumentation (metrics, tracing, status) | ccmux-server | P2 | **Ready** | Structured logging, tracing, metrics, and status fields per OBSERVABILITY.md. |
 | FEAT-073 | Visibility dashboard (stuck detection, mailbox, graph pane) | ccmux-client | P2 | **Ready** | Terminal-native visibility dashboard with activity feed/intent log and mailbox. |
-| FEAT-071 | Per-pane Claude configuration on spawn | ccmux-server, ccmux-protocol | P2 | **Ready** | Configure model, context limits per pane. Blocks FEAT-072. |
-| FEAT-066 | TCP listener support in daemon | ccmux-server | P2 | **Ready** | Optional TCP listener for remote workflows. Phase 1 of remote peering. Blocks FEAT-067. |
-| FEAT-067 | Client TCP connection support | ccmux-client | P2 | **Ready** | TCP client connection capability. Phase 2 of remote peering. Blocks FEAT-068. |
-| FEAT-068 | SSH tunnel integration and documentation | documentation | P2 | **Ready** | Document and validate SSH tunnel workflow. Phase 3 of remote peering (MVP completion). |
-| FEAT-070 | gastown remote pane support via CCMUX_ADDR | external (gastown fork) | P2 | **Ready** | Extend gastown to support remote pane execution via ccmux TCP connections. Enables hybrid Mayor/polecat workflows. |
 | FEAT-064 | Refactor MCP bridge.rs into modular components | ccmux-server | P2 | **Ready** | Extract connection, health, and tool modules from 33k+ token bridge.rs. |
 | FEAT-065 | Refactor handlers in MCP bridge modules | ccmux-server | P2 | **Ready** | Continue modularization of MCP bridge after FEAT-064. |
 | FEAT-062 | Mirror Pane (Picture-in-Picture View) | ccmux-server, ccmux-client | P3 | **Ready** | Read-only pane that mirrors another pane's output for multi-agent monitoring. |
 | FEAT-076 | Capability signaling protocol (sideband metadata) | ccmux-server, ccmux-protocol | P3 | **Ready** | Explicit sideband capability signals stored as pane metadata. |
-| FEAT-069 | TLS/auth for direct TCP connections | ccmux-server, ccmux-client | P3 | **Ready** | Native TLS and authentication for direct TCP. Phase 4 of remote peering (future enhancement). |
 | FEAT-058 | Beads Query Integration | ccmux-server, ccmux-client | P3 | **Ready** | TUI visibility into work queue. |
 | FEAT-059 | Beads Workflow Integration | ccmux-server, ccmux-protocol | P3 | Blocked | Depends on FEAT-058. Scope reduced by FEAT-050. |
 
@@ -83,35 +61,6 @@ FEAT-063 (Ready)
 
 FEAT-061 (Ready)
   |-- No dependencies
-
-FEAT-071 (Ready)
-  |-- FEAT-020 (complete) - Per-pane config directories
-  |-- Blocks: FEAT-072 (Per-pane MCP mode control)
-
-FEAT-066 (Ready)
-  |-- No dependencies
-  |-- Blocks: FEAT-067 (Client TCP connection support)
-
-FEAT-067 (Ready)
-  |-- FEAT-066 (complete or ready)
-  |-- Blocks: FEAT-068 (SSH tunnel documentation)
-
-FEAT-068 (Ready)
-  |-- FEAT-066 (TCP listener in daemon)
-  |-- FEAT-067 (TCP connection in client)
-  |-- Completes: Remote peering MVP
-
-FEAT-070 (Ready)
-  |-- FEAT-066 (TCP listener in daemon)
-  |-- FEAT-067 (TCP connection in client)
-  |-- FEAT-068 (SSH tunnel documentation)
-  |-- Enables: Remote gastown workflows
-
-FEAT-069 (Ready)
-  |-- FEAT-066 (TCP listener in daemon)
-  |-- FEAT-067 (TCP connection in client)
-  |-- FEAT-068 (SSH tunnel baseline)
-  |-- Phase 4: Future enhancement (optional)
 
 FEAT-064 (Ready)
   |-- No dependencies
@@ -137,17 +86,11 @@ FEAT-059 (Blocked)
 
 1. **FEAT-063** - P1, ready now (no dependencies, unblocks BUG-039 debugging)
 2. **FEAT-061** - P2, ready now (no dependencies, improves UX)
-3. **FEAT-071** - P2, ready now (FEAT-020 complete, enables heterogeneous agent configs)
-4. **FEAT-066** - P2, ready now (no dependencies, Phase 1 for remote workflows)
-5. **FEAT-067** - P2, after FEAT-066 (Phase 2 for remote workflows)
-6. **FEAT-068** - P2, after FEAT-066+067 (completes remote MVP)
-7. **FEAT-070** - P2, after FEAT-066+067+068 (enables remote gastown workflows)
-8. **FEAT-064** - P2, ready now (no dependencies, improves maintainability)
-9. **FEAT-065** - P2, ready now (parallel with FEAT-064)
-10. **FEAT-062** - P3, ready now (no dependencies, improves multi-agent workflows)
-11. **FEAT-058** - P3, ready now (all dependencies complete)
-12. **FEAT-059** - P3, after FEAT-058
-13. **FEAT-069** - P3, after FEAT-066+067+068 (optional future enhancement)
+3. **FEAT-064** - P2, ready now (no dependencies, improves maintainability)
+4. **FEAT-065** - P2, ready now (parallel with FEAT-064)
+5. **FEAT-062** - P3, ready now (no dependencies, improves multi-agent workflows)
+6. **FEAT-058** - P3, ready now (all dependencies complete)
+7. **FEAT-059** - P3, after FEAT-058
 
 ## Completed Features
 
@@ -200,7 +143,7 @@ All completed features are in `feature-management/completed/`. Here's a summary 
 | FEAT-026 | Input Handling Integration and Testing | Complete |
 | FEAT-027 | Client Connection Registry | Complete |
 
-### Post-MVP Features (27 features)
+### Post-MVP Features (37 features)
 | ID | Title | Status |
 |----|-------|--------|
 | FEAT-029 | MCP Natural Language Terminal Control | Complete |
@@ -236,6 +179,15 @@ All completed features are in `feature-management/completed/`. Here's a summary 
 | FEAT-050 | Session Metadata Storage | Complete |
 | FEAT-079 | Comprehensive Human-Control Arbitration | Complete |
 | FEAT-077 | Human-control mode UX indicator and MCP error details | Complete |
+| FEAT-071 | Per-pane Claude configuration on spawn | Complete |
+| FEAT-066 | TCP listener support in daemon | Complete |
+| FEAT-067 | Client TCP connection support | Complete |
+| FEAT-068 | SSH tunnel integration and documentation | Complete |
+| FEAT-070 | gastown remote pane support via CCMUX_ADDR | Complete |
+| FEAT-075 | Snapshot + replay resync API (event retention) | Complete |
+| FEAT-080 | Per-Pane/Session Configuration via Sideband Commands | Complete |
+| FEAT-081 | Optional Landlock Integration for Per-Pane Sandboxing | Complete |
+| FEAT-082 | Multi-tier routing logic via target aliases | Complete |
 
 ## Test Coverage
 
@@ -246,8 +198,8 @@ All completed features are in `feature-management/completed/`. Here's a summary 
 | Wave 2 | 3 | 224 |
 | Wave 3 | 2 | 49 |
 | Wave 4 | 7 | 126 |
-| Post-MVP | 31 | 347 |
-| **Total** | **58** | **1,566** |
+| Post-MVP | 45 | 457 |
+| **Total** | **72** | **1,676** |
 
 ## Architecture
 
@@ -260,3 +212,4 @@ The project follows a multi-crate workspace structure:
 - `ccmux-session/` - Session/window/pane hierarchy
 - `ccmux-utils/` - Shared utilities
 - `ccmux-persistence/` - WAL-based crash recovery
+- `ccmux-sandbox/` - Landlock sandboxing helper
