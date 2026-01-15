@@ -115,6 +115,8 @@ pub enum InputAction {
     None,
     /// Send bytes to the active pane's PTY
     SendToPane(Vec<u8>),
+    /// Send pasted bytes to the active pane's PTY (possibly wrapped in brackets)
+    PasteToPane(Vec<u8>),
     /// Execute a client command
     Command(ClientCommand),
     /// Focus pane at coordinates
@@ -234,7 +236,7 @@ impl InputHandler {
             Event::FocusGained | Event::FocusLost => InputAction::None,
             Event::Paste(text) => {
                 // Handle paste as input to pane
-                InputAction::SendToPane(text.into_bytes())
+                InputAction::PasteToPane(text.into_bytes())
             }
         }
     }
@@ -852,7 +854,7 @@ mod tests {
         let event = Event::Paste("hello world".to_string());
         let result = handler.handle_event(event);
 
-        assert_eq!(result, InputAction::SendToPane(b"hello world".to_vec()));
+        assert_eq!(result, InputAction::PasteToPane(b"hello world".to_vec()));
     }
 
     #[test]
