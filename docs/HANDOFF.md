@@ -36,12 +36,13 @@ We use a "CI-in-worktree" pattern to keep branches short-lived and history clean
 
 ### Completed
 - **FEAT-064**: Refactor MCP bridge.rs into modular components (Stream A).
+- **FEAT-080, FEAT-081, FEAT-071**: Sideband Config, Landlock Sandboxing, Per-pane Claude config (Stream C).
 - **Retro**: Conducted comprehensive retrospective, categorized backlog into streams.
 
 ### In Progress
 - **BUG-041 (P0)**: Claude Code crashes on paste inside ccmux (Stream B).
 - **BUG-035 (P1)**: MCP handlers return wrong response types (Stream A).
-- **FEAT-080 (P2)**: Per-Pane/Session Configuration via Sideband (Stream C).
+- **FEAT-066 (P2)**: TCP listener support in daemon (Stream C).
 
 ## Backlog Highlights
 

@@ -6,7 +6,7 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 /// Maximum size for a single input chunk sent to the server.
 /// This should be well under the protocol's MAX_MESSAGE_SIZE (16MB).
@@ -36,7 +36,7 @@ use uuid::Uuid;
 
 use ccmux_protocol::{
     ClientMessage, ClaudeActivity, PaneInfo, PaneState, ServerMessage, SessionInfo,
-    SplitDirection, WindowInfo,
+    SplitDirection, WindowInfo, messages::ClientType,
 };
 use ccmux_utils::Result;
 
@@ -114,6 +114,8 @@ pub struct App {
     is_beads_tracked: bool,
     /// Beads ready task count (FEAT-058): None = unavailable, Some(n) = n tasks ready
     beads_ready_count: Option<usize>,
+    /// Expiry time for human control lock (FEAT-077)
+    human_control_lock_expiry: Option<Instant>,
 }
 
 impl App {
@@ -146,6 +148,7 @@ impl App {
             last_beads_request_tick: 0,
             is_beads_tracked: false,
             beads_ready_count: None,
+            human_control_lock_expiry: None,
         })
     }
 
@@ -178,6 +181,7 @@ impl App {
             last_beads_request_tick: 0,
             is_beads_tracked: false,
             beads_ready_count: None,
+            human_control_lock_expiry: None,
         })
     }
 
@@ -242,6 +246,7 @@ impl App {
                     .send(ClientMessage::Connect {
                         client_id: self.client_id,
                         protocol_version: ccmux_protocol::PROTOCOL_VERSION,
+                        client_type: Some(ClientType::Tui),
                     })
                     .await?;
                 Ok(())
@@ -420,6 +425,67 @@ impl App {
         Ok(())
     }
 
+    /// Send input to a pane, handling large pastes and chunking
+    async fn send_pane_input(&mut self, pane_id: Uuid, data: Vec<u8>) -> Result<()> {
+        // FEAT-077: Update local human control lock
+        self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(2000));
+
+        // BUG-011 FIX: Handle large pastes gracefully
+        let data_len = data.len();
+
+        // Reject extremely large pastes to prevent memory issues
+        if data_len > MAX_PASTE_SIZE {
+            let size_mb = data_len as f64 / (1024.0 * 1024.0);
+            self.status_message = Some(format!(
+                "Paste too large ({:.1}MB). Maximum is {}MB.",
+                size_mb,
+                MAX_PASTE_SIZE / (1024 * 1024)
+            ));
+            tracing::warn!(
+                "Rejected paste of {} bytes ({:.1}MB) - exceeds maximum",
+                data_len,
+                size_mb
+            );
+            return Ok(());
+        }
+
+        // Chunk large inputs to avoid protocol message size limits
+        if data_len > MAX_INPUT_CHUNK_SIZE {
+            let num_chunks = (data_len + MAX_INPUT_CHUNK_SIZE - 1) / MAX_INPUT_CHUNK_SIZE;
+            tracing::debug!(
+                "Chunking large paste ({} bytes) into {} chunks",
+                data_len,
+                num_chunks
+            );
+
+            // Show feedback for large pastes
+            if data_len > 1024 * 1024 {
+                let size_mb = data_len as f64 / (1024.0 * 1024.0);
+                self.status_message = Some(format!(
+                    "Pasting {:.1}MB in {} chunks...",
+                    size_mb,
+                    num_chunks
+                ));
+            }
+
+            // Send data in chunks
+            for chunk in data.chunks(MAX_INPUT_CHUNK_SIZE) {
+                self.connection
+                    .send(ClientMessage::Input {
+                        pane_id,
+                        data: chunk.to_vec(),
+                    })
+                    .await?;
+            }
+        } else {
+            // Small input - send directly
+            self.connection
+                .send(ClientMessage::Input { pane_id, data })
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Handle an InputAction from the input handler
     async fn handle_input_action(&mut self, action: InputAction) -> Result<()> {
         match action {
@@ -427,59 +493,27 @@ impl App {
 
             InputAction::SendToPane(data) => {
                 if let Some(pane_id) = self.active_pane_id {
-                    // BUG-011 FIX: Handle large pastes gracefully
-                    let data_len = data.len();
+                    self.send_pane_input(pane_id, data).await?;
+                }
+            }
 
-                    // Reject extremely large pastes to prevent memory issues
-                    if data_len > MAX_PASTE_SIZE {
-                        let size_mb = data_len as f64 / (1024.0 * 1024.0);
-                        self.status_message = Some(format!(
-                            "Paste too large ({:.1}MB). Maximum is {}MB.",
-                            size_mb,
-                            MAX_PASTE_SIZE / (1024 * 1024)
-                        ));
-                        tracing::warn!(
-                            "Rejected paste of {} bytes ({:.1}MB) - exceeds maximum",
-                            data_len,
-                            size_mb
-                        );
-                        return Ok(());
-                    }
-
-                    // Chunk large inputs to avoid protocol message size limits
-                    if data_len > MAX_INPUT_CHUNK_SIZE {
-                        let num_chunks = (data_len + MAX_INPUT_CHUNK_SIZE - 1) / MAX_INPUT_CHUNK_SIZE;
-                        tracing::debug!(
-                            "Chunking large paste ({} bytes) into {} chunks",
-                            data_len,
-                            num_chunks
-                        );
-
-                        // Show feedback for large pastes
-                        if data_len > 1024 * 1024 {
-                            let size_mb = data_len as f64 / (1024.0 * 1024.0);
-                            self.status_message = Some(format!(
-                                "Pasting {:.1}MB in {} chunks...",
-                                size_mb,
-                                num_chunks
-                            ));
-                        }
-
-                        // Send data in chunks
-                        for chunk in data.chunks(MAX_INPUT_CHUNK_SIZE) {
-                            self.connection
-                                .send(ClientMessage::Input {
-                                    pane_id,
-                                    data: chunk.to_vec(),
-                                })
-                                .await?;
+            InputAction::PasteToPane(data) => {
+                if let Some(pane_id) = self.active_pane_id {
+                    let final_data = if let Some(pane) = self.pane_manager.get(pane_id) {
+                        if pane.is_bracketed_paste_enabled() {
+                            let mut wrapped = Vec::with_capacity(data.len() + 12);
+                            wrapped.extend_from_slice(b"\x1b[200~");
+                            wrapped.extend_from_slice(&data);
+                            wrapped.extend_from_slice(b"\x1b[201~");
+                            tracing::debug!("Wrapped paste in bracketed sequences ({} bytes)", data.len());
+                            wrapped
+                        } else {
+                            data
                         }
                     } else {
-                        // Small input - send directly
-                        self.connection
-                            .send(ClientMessage::Input { pane_id, data })
-                            .await?;
-                    }
+                        data
+                    };
+                    self.send_pane_input(pane_id, final_data).await?;
                 }
             }
 
@@ -565,6 +599,9 @@ impl App {
             }
 
             InputAction::Resize { cols, rows } => {
+                // FEAT-077: Update local human control lock (layout change)
+                self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(5000));
+
                 self.terminal_size = (cols, rows);
 
                 // Calculate pane area (minus status bar)
@@ -639,6 +676,19 @@ impl App {
 
     /// Handle a client command from prefix key or command mode
     async fn handle_client_command(&mut self, cmd: ClientCommand) -> Result<()> {
+        // FEAT-077: Update local human control lock for layout-changing commands
+        match cmd {
+            ClientCommand::CreatePane
+            | ClientCommand::ClosePane
+            | ClientCommand::SplitVertical
+            | ClientCommand::SplitHorizontal
+            | ClientCommand::CreateSession(_)
+            | ClientCommand::CreateWindow => {
+                self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(5000));
+            }
+            _ => {}
+        }
+
         match cmd {
             ClientCommand::CreatePane => {
                 if let Some(window) = self.windows.values().next() {
@@ -1504,8 +1554,12 @@ impl App {
                 // Refresh session list
                 self.connection.send(ClientMessage::ListSessions).await?;
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, details } => {
                 self.status_message = Some(format!("Error ({:?}): {}", code, message));
+                
+                if let Some(ccmux_protocol::messages::ErrorDetails::HumanControl { remaining_ms }) = details {
+                    self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(remaining_ms));
+                }
             }
             ServerMessage::Pong => {
                 // Keepalive response, no action needed
@@ -1919,13 +1973,27 @@ impl App {
             "".to_string()
         };
 
+        // FEAT-077: Human control indicator
+        let human_control_indicator = if let Some(expiry) = self.human_control_lock_expiry {
+            let now = Instant::now();
+            if expiry > now {
+                let remaining = expiry.duration_since(now).as_secs_f32();
+                format!(" [LOCKED: {:.1}s]", remaining)
+            } else {
+                "".to_string()
+            }
+        } else {
+            "".to_string()
+        };
+
         format!(
-            " {} | {} panes {}{}{}",
+            " {} | {} panes {}{}{}{}",
             session_name,
             self.panes.len(),
             pane_info,
             beads_indicator,
-            mode_indicator
+            mode_indicator,
+            human_control_indicator
         )
     }
 }

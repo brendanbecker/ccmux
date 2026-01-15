@@ -21,7 +21,7 @@ use crate::pty::{PaneClosedNotification, PtyManager};
 use crate::registry::{ClientId, ClientRegistry};
 use crate::session::SessionManager;
 use crate::sideband::AsyncCommandExecutor;
-use crate::user_priority::UserPriorityManager;
+use crate::user_priority::Arbitrator;
 
 /// Context for message handlers
 ///
@@ -42,7 +42,7 @@ pub struct HandlerContext {
     /// Sideband command executor for processing Claude commands
     pub command_executor: Arc<AsyncCommandExecutor>,
     /// User priority lock manager (FEAT-056)
-    pub user_priority: Arc<UserPriorityManager>,
+    pub user_priority: Arc<Arbitrator>,
 }
 
 /// Result of handling a message
@@ -77,7 +77,7 @@ impl HandlerContext {
         client_id: ClientId,
         pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
         command_executor: Arc<AsyncCommandExecutor>,
-        user_priority: Arc<UserPriorityManager>,
+        user_priority: Arc<Arbitrator>,
     ) -> Self {
         Self {
             session_manager,
@@ -98,7 +98,8 @@ impl HandlerContext {
             ClientMessage::Connect {
                 client_id,
                 protocol_version,
-            } => self.handle_connect(client_id, protocol_version).await,
+                client_type,
+            } => self.handle_connect(client_id, protocol_version, client_type).await,
 
             ClientMessage::Ping => self.handle_ping(),
 
@@ -335,13 +336,13 @@ impl HandlerContext {
 
     /// Handle user command mode entered (prefix key pressed)
     fn handle_user_command_mode_entered(&self, timeout_ms: u32) -> HandlerResult {
-        self.user_priority.set_lock(self.client_id, timeout_ms);
+        self.user_priority.set_focus_lock(self.client_id, timeout_ms);
         HandlerResult::NoResponse
     }
 
     /// Handle user command mode exited (command completed/cancelled/timed out)
     fn handle_user_command_mode_exited(&self) -> HandlerResult {
-        self.user_priority.release_lock(self.client_id);
+        self.user_priority.release_focus_lock(self.client_id);
         HandlerResult::NoResponse
     }
 
@@ -407,6 +408,20 @@ impl HandlerContext {
         HandlerResult::Response(ServerMessage::Error {
             code,
             message: message.into(),
+            details: None,
+        })
+    }
+
+    /// Create an error response with details
+    pub fn error_with_details(
+        code: ErrorCode, 
+        message: impl Into<String>,
+        details: ccmux_protocol::messages::ErrorDetails
+    ) -> HandlerResult {
+        HandlerResult::Response(ServerMessage::Error {
+            code,
+            message: message.into(),
+            details: Some(details),
         })
     }
 }
@@ -433,7 +448,7 @@ mod tests {
             Arc::clone(&pty_manager),
             Arc::clone(&registry),
         ));
-        let user_priority = Arc::new(UserPriorityManager::new());
+        let user_priority = Arc::new(Arbitrator::new());
 
         // Register a test client
         let (tx, _rx) = mpsc::channel(10);
@@ -463,6 +478,7 @@ mod tests {
             .route_message(ClientMessage::Connect {
                 client_id: Uuid::new_v4(),
                 protocol_version: PROTOCOL_VERSION,
+                client_type: None,
             })
             .await;
 
@@ -479,6 +495,7 @@ mod tests {
             .route_message(ClientMessage::Connect {
                 client_id: Uuid::new_v4(),
                 protocol_version: 9999,
+                client_type: None,
             })
             .await;
 
@@ -507,9 +524,10 @@ mod tests {
         let result = HandlerContext::error(ErrorCode::SessionNotFound, "Session not found");
 
         match result {
-            HandlerResult::Response(ServerMessage::Error { code, message }) => {
+            HandlerResult::Response(ServerMessage::Error { code, message, details }) => {
                 assert_eq!(code, ErrorCode::SessionNotFound);
                 assert_eq!(message, "Session not found");
+                assert!(details.is_none());
             }
             _ => panic!("Expected Error response"),
         }

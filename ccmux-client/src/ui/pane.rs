@@ -153,6 +153,8 @@ pub struct Pane {
     selection: Option<Selection>,
     /// Internal paste buffer (fallback when OSC 52 not available)
     paste_buffer: Option<String>,
+    /// Whether bracketed paste mode is enabled by the application
+    bracketed_paste_enabled: bool,
 }
 
 impl Pane {
@@ -170,6 +172,7 @@ impl Pane {
             copy_mode_cursor: None,
             selection: None,
             paste_buffer: None,
+            bracketed_paste_enabled: false,
         }
     }
 
@@ -233,11 +236,28 @@ impl Pane {
 
     /// Process output data through the terminal parser
     pub fn process_output(&mut self, data: &[u8]) {
+        // Scan for bracketed paste mode sequences
+        // \x1b[?2004h = Enable
+        // \x1b[?2004l = Disable
+        // Simple scan handles most cases; split packets are edge cases accepted for now
+        let s = String::from_utf8_lossy(data);
+        if s.contains("\x1b[?2004h") {
+            self.bracketed_paste_enabled = true;
+        }
+        if s.contains("\x1b[?2004l") {
+            self.bracketed_paste_enabled = false;
+        }
+
         self.parser.process(data);
         // Reset scroll to bottom when new output arrives
         self.parser.set_scrollback(0);
         // Read back to ensure consistency with parser state
         self.scroll_offset = self.parser.screen().scrollback();
+    }
+
+    /// Check if bracketed paste mode is enabled
+    pub fn is_bracketed_paste_enabled(&self) -> bool {
+        self.bracketed_paste_enabled
     }
 
     /// Resize the terminal
@@ -1442,5 +1462,29 @@ mod tests {
         let selection = pane.selection().unwrap();
         assert_eq!(selection.mode, VisualMode::Line);
         assert_eq!(selection.anchor.row, 7);
+    }
+
+    #[test]
+    fn test_pane_bracketed_paste_detection() {
+        let id = Uuid::new_v4();
+        let mut pane = Pane::new(id, 24, 80);
+
+        assert!(!pane.is_bracketed_paste_enabled());
+
+        // Enable sequence
+        pane.process_output(b"\x1b[?2004h");
+        assert!(pane.is_bracketed_paste_enabled());
+
+        // Normal output shouldn't change it
+        pane.process_output(b"hello world");
+        assert!(pane.is_bracketed_paste_enabled());
+
+        // Disable sequence
+        pane.process_output(b"\x1b[?2004l");
+        assert!(!pane.is_bracketed_paste_enabled());
+        
+        // Mixed output
+        pane.process_output(b"text\x1b[?2004hmore text");
+        assert!(pane.is_bracketed_paste_enabled());
     }
 }

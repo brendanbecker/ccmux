@@ -11,6 +11,7 @@ use uuid::Uuid;
 
 use ccmux_protocol::{
     ClientCodec, ClientMessage, ServerMessage, PROTOCOL_VERSION,
+    messages::ClientType,
 };
 use ccmux_utils::socket_path;
 
@@ -124,6 +125,7 @@ impl ConnectionManager {
         self.send_to_daemon(ClientMessage::Connect {
             client_id: self.client_id,
             protocol_version: PROTOCOL_VERSION,
+            client_type: Some(ClientType::Mcp),
         })
         .await?;
 
@@ -144,7 +146,7 @@ impl ConnectionManager {
 
                 Ok(())
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Err(McpError::DaemonError(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),

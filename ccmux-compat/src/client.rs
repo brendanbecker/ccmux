@@ -69,7 +69,7 @@ impl Client {
         // Wait for Connected response
         match self.recv().await? {
             ServerMessage::Connected { .. } => Ok(()),
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Err(CcmuxError::Protocol(format!("{:?}: {}", code, message)))
             }
             other => Err(CcmuxError::Protocol(format!(

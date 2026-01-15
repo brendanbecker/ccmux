@@ -43,7 +43,7 @@ pub async fn new_session(
             }
             Ok(0)
         }
-        ServerMessage::Error { code, message } => {
+        ServerMessage::Error { code, message, .. } => {
             eprintln!("error: {}", message);
             match code {
                 ErrorCode::SessionNameExists => Ok(1),

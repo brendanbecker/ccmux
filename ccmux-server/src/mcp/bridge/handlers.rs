@@ -92,7 +92,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -129,7 +129,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -150,7 +150,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -167,7 +167,7 @@ impl<'a> ToolHandlers<'a> {
 
         match self.connection.recv_response_from_daemon().await? {
             ServerMessage::PaneContent { content, .. } => Ok(ToolResult::text(content)),
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -231,7 +231,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -276,7 +276,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -313,7 +313,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -378,7 +378,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -427,7 +427,7 @@ impl<'a> ToolHandlers<'a> {
                         .map_err(|e| McpError::Internal(e.to_string()))?;
                     return Ok(ToolResult::text(json));
                 }
-                Ok(Ok(ServerMessage::Error { code, message })) => {
+                Ok(Ok(ServerMessage::Error { code, message, .. })) => {
                     return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
                 }
                 Ok(Ok(msg)) => {
@@ -474,7 +474,7 @@ impl<'a> ToolHandlers<'a> {
                         .map_err(|e| McpError::Internal(e.to_string()))?;
                     return Ok(ToolResult::text(json));
                 }
-                Ok(Ok(ServerMessage::Error { code, message })) => {
+                Ok(Ok(ServerMessage::Error { code, message, .. })) => {
                     return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
                 }
                 Ok(Ok(msg)) => {
@@ -520,7 +520,7 @@ impl<'a> ToolHandlers<'a> {
                         .map_err(|e| McpError::Internal(e.to_string()))?;
                     return Ok(ToolResult::text(json));
                 }
-                Ok(Ok(ServerMessage::Error { code, message })) => {
+                Ok(Ok(ServerMessage::Error { code, message, .. })) => {
                     return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
                 }
                 Ok(Ok(msg)) => {
@@ -565,7 +565,7 @@ impl<'a> ToolHandlers<'a> {
                         .map_err(|e| McpError::Internal(e.to_string()))?;
                     return Ok(ToolResult::text(json));
                 }
-                Ok(Ok(ServerMessage::Error { code, message })) => {
+                Ok(Ok(ServerMessage::Error { code, message, .. })) => {
                     return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
                 }
                 Ok(Ok(msg)) => {
@@ -612,7 +612,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -647,7 +647,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -682,7 +682,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -740,7 +740,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -771,7 +771,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -810,7 +810,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -835,7 +835,7 @@ impl<'a> ToolHandlers<'a> {
                             ))
                         })?
                 }
-                ServerMessage::Error { code, message } => {
+                ServerMessage::Error { code, message, .. } => {
                     return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
                 }
                 msg => return Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -861,7 +861,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -900,7 +900,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -934,7 +934,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -973,7 +973,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1007,7 +1007,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1055,7 +1055,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1092,7 +1092,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1122,7 +1122,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1163,7 +1163,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1233,7 +1233,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1266,7 +1266,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1316,7 +1316,7 @@ impl<'a> ToolHandlers<'a> {
                         session_name,
                         ..
                     } => Ok((session_name, Some(pane_id))),
-                    ServerMessage::Error { code, message } => {
+                    ServerMessage::Error { code, message, .. } => {
                         Err(McpError::InvalidParams(format!("{:?}: {}", code, message)))
                     }
                     msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1333,7 +1333,7 @@ impl<'a> ToolHandlers<'a> {
                             Ok((sessions[0].name.clone(), None))
                         }
                     }
-                    ServerMessage::Error { code, message } => {
+                    ServerMessage::Error { code, message, .. } => {
                         Err(McpError::InvalidParams(format!("{:?}: {}", code, message)))
                     }
                     msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1366,7 +1366,7 @@ impl<'a> ToolHandlers<'a> {
 
         match self.connection.recv_response_from_daemon().await? {
             ServerMessage::MetadataSet { .. } => {} // Ignore success
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
             }
             msg => return Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1398,7 +1398,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1423,7 +1423,7 @@ impl<'a> ToolHandlers<'a> {
             ServerMessage::MetadataList { metadata, .. } => {
                 metadata.get(beads::CURRENT_ISSUE).cloned()
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
             }
             msg => return Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1494,7 +1494,7 @@ impl<'a> ToolHandlers<'a> {
 
         match self.connection.recv_response_from_daemon().await? {
             ServerMessage::MetadataSet { .. } => {} // Ignore success
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
             }
             msg => return Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1509,7 +1509,7 @@ impl<'a> ToolHandlers<'a> {
 
         match self.connection.recv_response_from_daemon().await? {
             ServerMessage::MetadataSet { .. } => {} // Ignore success
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
             }
             msg => return Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1542,7 +1542,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1554,7 +1554,7 @@ impl<'a> ToolHandlers<'a> {
 
         let sessions = match self.connection.recv_response_from_daemon().await? {
             ServerMessage::SessionList { sessions } => sessions,
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 return Ok(ToolResult::error(format!("{:?}: {}", code, message)));
             }
             msg => return Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
@@ -1666,7 +1666,7 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message } => {
+            ServerMessage::Error { code, message, .. } => {
                 Ok(ToolResult::error(format!("{:?}: {}", code, message)))
             }
             msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),

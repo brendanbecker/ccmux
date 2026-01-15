@@ -66,6 +66,23 @@ pub enum OrchestrationTarget {
     Worktree(String),
 }
 
+/// Type of client connecting to the server
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ClientType {
+    /// Terminal UI client (Human)
+    Tui,
+    /// MCP Bridge client (Agent)
+    Mcp,
+    /// Unknown or legacy client
+    Unknown,
+}
+
+impl Default for ClientType {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
 /// Messages sent from client to server
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ClientMessage {
@@ -73,6 +90,10 @@ pub enum ClientMessage {
     Connect {
         client_id: Uuid,
         protocol_version: u32,
+        /// Type of client (TUI, MCP, etc.)
+        /// Optional for backward compatibility with v1 clients
+        #[serde(default)]
+        client_type: Option<ClientType>,
     },
 
     /// Request list of sessions
@@ -423,7 +444,12 @@ pub enum ServerMessage {
     SessionsChanged { sessions: Vec<SessionInfo> },
 
     /// Error response
-    Error { code: ErrorCode, message: String },
+    Error {
+        code: ErrorCode,
+        message: String,
+        #[serde(default)]
+        details: Option<ErrorDetails>,
+    },
 
     /// Pong response to ping
     Pong,
@@ -698,6 +724,16 @@ pub enum ErrorCode {
     UserPriorityActive,
 }
 
+/// Detailed error information
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum ErrorDetails {
+    /// Human control mode is active
+    HumanControl {
+        /// Remaining time in milliseconds until lock expires
+        remaining_ms: u64,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -709,6 +745,7 @@ mod tests {
         let msg = ClientMessage::Connect {
             client_id,
             protocol_version: 1,
+            client_type: Some(ClientType::Tui),
         };
 
         // Test clone
@@ -719,6 +756,7 @@ mod tests {
         let debug = format!("{:?}", msg);
         assert!(debug.contains("Connect"));
         assert!(debug.contains(&client_id.to_string()));
+        assert!(debug.contains("Tui"));
     }
 
     #[test]
@@ -1194,11 +1232,13 @@ tags: HashSet::new(),
         let msg = ServerMessage::Error {
             code: ErrorCode::SessionNotFound,
             message: "Session 'test' not found".to_string(),
+            details: None,
         };
 
-        if let ServerMessage::Error { code, message } = msg {
+        if let ServerMessage::Error { code, message, details } = msg {
             assert_eq!(code, ErrorCode::SessionNotFound);
             assert!(message.contains("test"));
+            assert!(details.is_none());
         }
     }
 
