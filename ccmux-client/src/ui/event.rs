@@ -38,6 +38,8 @@ pub enum InputEvent {
     FocusGained,
     /// Focus lost
     FocusLost,
+    /// Paste event
+    Paste(String),
 }
 
 /// Event handler that combines input polling with server message receiving
@@ -91,7 +93,9 @@ impl EventHandler {
                             CrosstermEvent::FocusLost => {
                                 Some(AppEvent::Input(InputEvent::FocusLost))
                             }
-                            CrosstermEvent::Paste(_) => None, // Handle paste events if needed
+                            CrosstermEvent::Paste(text) => {
+                                Some(AppEvent::Input(InputEvent::Paste(text)))
+                            }
                         };
 
                         if let Some(evt) = app_event {

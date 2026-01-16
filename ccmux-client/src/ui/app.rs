@@ -425,6 +425,7 @@ impl App {
             InputEvent::Mouse(mouse) => CrosstermEvent::Mouse(mouse),
             InputEvent::FocusGained => CrosstermEvent::FocusGained,
             InputEvent::FocusLost => CrosstermEvent::FocusLost,
+            InputEvent::Paste(text) => CrosstermEvent::Paste(text),
         };
 
         // Only use input handler when attached to a session
@@ -458,6 +459,15 @@ impl App {
             InputAction::None => {}
 
             InputAction::SendToPane(data) => {
+                if let Some(pane_id) = self.active_pane_id {
+                    // Small input - send directly
+                    self.connection
+                        .send(ClientMessage::Input { pane_id, data })
+                        .await?;
+                }
+            }
+
+            InputAction::PasteToPane(data) => {
                 if let Some(pane_id) = self.active_pane_id {
                     // BUG-011 FIX: Handle large pastes gracefully
                     let data_len = data.len();
@@ -500,7 +510,7 @@ impl App {
                         // Send data in chunks
                         for chunk in data.chunks(MAX_INPUT_CHUNK_SIZE) {
                             self.connection
-                                .send(ClientMessage::Input {
+                                .send(ClientMessage::Paste {
                                     pane_id,
                                     data: chunk.to_vec(),
                                 })
@@ -509,7 +519,7 @@ impl App {
                     } else {
                         // Small input - send directly
                         self.connection
-                            .send(ClientMessage::Input { pane_id, data })
+                            .send(ClientMessage::Paste { pane_id, data })
                             .await?;
                     }
                 }
