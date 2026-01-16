@@ -11,8 +11,12 @@ pub mod types;
 mod tests;
 
 use std::io::{BufRead, Write};
-use tracing::{debug, info, warn};
+use std::sync::atomic::{AtomicU64, Ordering};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+/// Global request counter for generating unique request IDs within this bridge instance
+static REQUEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 use crate::mcp::error::McpError;
 use crate::mcp::protocol::{
@@ -58,12 +62,22 @@ impl McpBridge {
                 continue;
             }
 
-            debug!("Received: {}", line);
+            // Generate a unique request ID for logging correlation
+            let log_req_id = REQUEST_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+            // Log raw incoming request at debug level (may contain sensitive data)
+            debug!(req_id = log_req_id, raw = %line, "Received raw JSON-RPC request");
 
             // Parse request
             let request: JsonRpcRequest = match serde_json::from_str(&line) {
                 Ok(req) => req,
                 Err(e) => {
+                    error!(
+                        req_id = log_req_id,
+                        error = %e,
+                        raw_input = %line,
+                        "Failed to parse JSON-RPC request"
+                    );
                     let response = JsonRpcResponse::error(
                         serde_json::Value::Null,
                         JsonRpcError::new(JsonRpcError::PARSE_ERROR, e.to_string()),
@@ -75,8 +89,22 @@ impl McpBridge {
                 }
             };
 
+            // Log parsed request at info level
+            info!(
+                req_id = log_req_id,
+                method = %request.method,
+                jsonrpc_id = ?request.id,
+                "Incoming JSON-RPC request"
+            );
+
             // Validate JSON-RPC version
             if request.jsonrpc != "2.0" {
+                error!(
+                    req_id = log_req_id,
+                    method = %request.method,
+                    got_version = %request.jsonrpc,
+                    "Invalid JSON-RPC version"
+                );
                 let response = JsonRpcResponse::error(
                     request.id,
                     JsonRpcError::with_data(
@@ -91,12 +119,33 @@ impl McpBridge {
                 continue;
             }
 
-            // Handle request
-            let response = self.handle_request(request).await;
+            // Handle request with timing
+            let start = std::time::Instant::now();
+            let response = self.handle_request(request.clone()).await;
+            let elapsed_ms = start.elapsed().as_millis();
+
+            // Log response at info level
+            let is_error = matches!(response, JsonRpcResponse { error: Some(_), .. });
+            if is_error {
+                warn!(
+                    req_id = log_req_id,
+                    method = %request.method,
+                    elapsed_ms = %elapsed_ms,
+                    error = ?response.error,
+                    "JSON-RPC request completed with error"
+                );
+            } else {
+                info!(
+                    req_id = log_req_id,
+                    method = %request.method,
+                    elapsed_ms = %elapsed_ms,
+                    "JSON-RPC request completed successfully"
+                );
+            }
 
             // Write response
             let json = serde_json::to_string(&response)?;
-            debug!("Sending: {}", json);
+            debug!(req_id = log_req_id, raw = %json, "Sending raw JSON-RPC response");
             writeln!(stdout, "{}", json)?;
             stdout.flush()?;
         }
@@ -151,10 +200,26 @@ impl McpBridge {
 
         let arguments = &params["arguments"];
 
-        debug!("Tool call: {} with args: {}", name, arguments);
+        info!(tool = %name, "Dispatching tool call");
+        debug!(tool = %name, arguments = %arguments, "Tool call arguments");
 
         // FEAT-060: Check connection state and handle recovery
-        let result = self.dispatch_tool_with_recovery(name, arguments).await?;
+        let result = match self.dispatch_tool_with_recovery(name, arguments).await {
+            Ok(r) => {
+                info!(tool = %name, "Tool call completed successfully");
+                Ok(r)
+            }
+            Err(e) => {
+                error!(
+                    tool = %name,
+                    error = %e,
+                    error_debug = ?e,
+                    arguments = %arguments,
+                    "Tool call failed"
+                );
+                Err(e)
+            }
+        }?;
 
         serde_json::to_value(result).map_err(|e| McpError::Internal(e.to_string()))
     }

@@ -59,13 +59,24 @@ impl ConnectionManager {
     pub async fn connect_to_daemon(&mut self) -> Result<(), McpError> {
         let socket = socket_path();
 
+        info!(
+            socket_path = %socket.display(),
+            client_id = %self.client_id,
+            "Attempting to connect to ccmux daemon"
+        );
+
         // Check if socket exists
         if !socket.exists() {
+            error!(
+                socket_path = %socket.display(),
+                "Daemon socket does not exist - is the daemon running?"
+            );
             return Err(McpError::DaemonNotRunning);
         }
 
         // Connect with retry logic
         let stream = self.connect_with_retry(&socket, 3, Duration::from_millis(500)).await?;
+        debug!(socket_path = %socket.display(), "TCP connection established");
 
         // Create framed transport
         let framed = Framed::new(stream, ClientCodec::new());
@@ -131,7 +142,10 @@ impl ConnectionManager {
         // Wait for Connected response
         match self.recv_from_daemon().await? {
             ServerMessage::Connected { .. } => {
-                info!("Connected to ccmux daemon");
+                info!(
+                    client_id = %self.client_id,
+                    "Successfully connected to ccmux daemon"
+                );
 
                 // FEAT-060: Update connection state to Connected
                 {
@@ -139,16 +153,29 @@ impl ConnectionManager {
                     *state = ConnectionState::Connected;
                 }
                 let _ = self.state_tx.send(ConnectionState::Connected);
+                info!(state = "Connected", "Connection state changed");
 
                 // FEAT-060: Spawn health monitor task
                 self.health_monitor_handle = Some(self.spawn_health_monitor());
+                debug!("Health monitor task spawned");
 
                 Ok(())
             }
             ServerMessage::Error { code, message, .. } => {
+                error!(
+                    error_code = ?code,
+                    error_message = %message,
+                    "Daemon rejected connection"
+                );
                 Err(McpError::DaemonError(format!("{:?}: {}", code, message)))
             }
-            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+            msg => {
+                error!(
+                    response = ?msg,
+                    "Unexpected response from daemon during connection"
+                );
+                Err(McpError::UnexpectedResponse(format!("{:?}", msg)))
+            }
         }
     }
 
@@ -230,7 +257,11 @@ impl ConnectionManager {
 
     /// Attempt to reconnect to the daemon with exponential backoff
     pub async fn attempt_reconnection(&mut self) -> Result<(), McpError> {
-        info!("Starting reconnection attempts");
+        info!(
+            client_id = %self.client_id,
+            max_attempts = MAX_RECONNECT_ATTEMPTS,
+            "Starting reconnection attempts to daemon"
+        );
 
         for (attempt, delay_ms) in RECONNECT_DELAYS_MS.iter().enumerate() {
             let attempt_num = (attempt + 1) as u8;
@@ -241,12 +272,18 @@ impl ConnectionManager {
                 *state = ConnectionState::Reconnecting { attempt: attempt_num };
             }
             let _ = self.state_tx.send(ConnectionState::Reconnecting { attempt: attempt_num });
+            info!(
+                state = "Reconnecting",
+                attempt = attempt_num,
+                max_attempts = MAX_RECONNECT_ATTEMPTS,
+                "Connection state changed"
+            );
 
             info!(
-                "Reconnection attempt {}/{}: waiting {}ms before trying",
-                attempt_num,
-                MAX_RECONNECT_ATTEMPTS,
-                delay_ms
+                attempt = attempt_num,
+                max_attempts = MAX_RECONNECT_ATTEMPTS,
+                delay_ms = delay_ms,
+                "Waiting before reconnection attempt"
             );
 
             // Wait before attempting
@@ -256,18 +293,24 @@ impl ConnectionManager {
             self.daemon_tx = None;
             self.daemon_rx = None;
             self.health_monitor_handle = None;
+            debug!("Cleaned up old connection resources");
 
             // Try to reconnect
             match self.connect_to_daemon().await {
                 Ok(()) => {
-                    info!("Reconnection successful on attempt {}", attempt_num);
+                    info!(
+                        attempt = attempt_num,
+                        "Reconnection successful"
+                    );
                     // connect_to_daemon already sets state to Connected
                     return Ok(());
                 }
                 Err(e) => {
                     warn!(
-                        "Reconnection attempt {} failed: {}",
-                        attempt_num, e
+                        attempt = attempt_num,
+                        max_attempts = MAX_RECONNECT_ATTEMPTS,
+                        error = %e,
+                        "Reconnection attempt failed"
                     );
                 }
             }
@@ -279,8 +322,12 @@ impl ConnectionManager {
             *state = ConnectionState::Disconnected;
         }
         let _ = self.state_tx.send(ConnectionState::Disconnected);
+        info!(state = "Disconnected", "Connection state changed");
 
-        error!("All {} reconnection attempts exhausted", MAX_RECONNECT_ATTEMPTS);
+        error!(
+            attempts_made = MAX_RECONNECT_ATTEMPTS,
+            "All reconnection attempts exhausted - daemon connection failed"
+        );
         Err(McpError::RecoveryFailed { attempts: MAX_RECONNECT_ATTEMPTS })
     }
 
