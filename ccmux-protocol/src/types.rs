@@ -154,6 +154,9 @@ pub struct PaneInfo {
     pub cwd: Option<String>,
     /// Stuck/health status of the pane (FEAT-073)
     pub stuck_status: Option<PaneStuckStatus>,
+    /// Arbitrary key-value metadata for the pane (FEAT-076)
+    #[serde(default)]
+    pub metadata: std::collections::HashMap<String, String>,
 }
 
 /// Pane stuck/health status (FEAT-073)
@@ -721,6 +724,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         assert_eq!(pane.index, 0);
@@ -745,6 +749,7 @@ mod tests {
             name: None,
             title: Some("vim".to_string()),
             cwd: Some("/home/user/project".to_string()),
+            metadata: std::collections::HashMap::new(),
         };
 
         assert_eq!(pane.id, id);
@@ -766,6 +771,7 @@ mod tests {
             name: None,
             title: Some("bash".to_string()),
             cwd: Some("/tmp".to_string()),
+            metadata: std::collections::HashMap::new(),
         };
 
         let cloned = pane.clone();
@@ -787,6 +793,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         let pane2 = PaneInfo {
@@ -799,6 +806,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         let pane3 = PaneInfo {
@@ -811,6 +819,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            metadata: std::collections::HashMap::new(),
         };
 
         assert_eq!(pane1, pane2);
@@ -1111,6 +1120,7 @@ tags: HashSet::new(),
             name: None,
             title: Some("test".to_string()),
             cwd: Some("/home".to_string()),
+            metadata: std::collections::HashMap::new(),
         };
 
         let serialized = bincode::serialize(&pane).unwrap();

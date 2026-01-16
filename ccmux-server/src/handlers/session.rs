@@ -88,7 +88,10 @@ impl HandlerContext {
                     let persistence = persistence_lock.read().await;
                     if let Ok(seq) = persistence.log_session_created(session_id, &name) {
                         commit_seq = seq;
-                        persistence.push_replay(seq, ServerMessage::SessionCreated { session: session_info.clone() });
+                        persistence.push_replay(seq, ServerMessage::SessionCreated { 
+                            session: session_info.clone(),
+                            should_focus: false, // Default for replay
+                        });
                     }
                 }
 
@@ -140,6 +143,7 @@ impl HandlerContext {
 
                 let response = ServerMessage::SessionCreated {
                     session: session_info,
+                    should_focus: true, // Requester focuses new session
                 };
                 let broadcast = ServerMessage::SessionsChanged { sessions };
 
@@ -527,6 +531,7 @@ impl HandlerContext {
                 commit_seq = seq;
                 persistence.push_replay(seq, ServerMessage::WindowCreated {
                     window: window_info.clone(),
+                    should_focus: false, // Default for replay
                 });
             }
         }
@@ -535,6 +540,7 @@ impl HandlerContext {
 
         let window_created_msg = ServerMessage::WindowCreated {
             window: window_info.clone(),
+            should_focus: true, // Requester focuses new window
         };
 
         let window_created_sequenced = if commit_seq > 0 {
@@ -562,6 +568,7 @@ impl HandlerContext {
             broadcast: ServerMessage::PaneCreated {
                 pane: pane_info,
                 direction: SplitDirection::Vertical,
+                should_focus: false,
             },
         }
     }
@@ -915,7 +922,7 @@ mod tests {
 
         match result {
             HandlerResult::ResponseWithGlobalBroadcast {
-                response: ServerMessage::SessionCreated { session },
+                response: ServerMessage::SessionCreated { session, .. },
                 broadcast: ServerMessage::SessionsChanged { sessions },
             } => {
                 assert_eq!(session.name, "new-session");
@@ -1129,7 +1136,7 @@ mod tests {
 
         match result {
             HandlerResult::ResponseWithBroadcast {
-                response: ServerMessage::WindowCreated { window },
+                response: ServerMessage::WindowCreated { window, .. },
                 session_id: broadcast_session,
                 .. 
             } => {
@@ -1171,7 +1178,7 @@ mod tests {
 
         match result {
             HandlerResult::ResponseWithBroadcast {
-                response: ServerMessage::WindowCreated { window },
+                response: ServerMessage::WindowCreated { window, .. },
                 ..
             } => {
                 // Auto-generated name should be the index

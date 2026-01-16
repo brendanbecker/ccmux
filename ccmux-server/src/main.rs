@@ -1825,7 +1825,7 @@ mod tests {
             .unwrap()
             .unwrap();
         let session_id = match response {
-            ServerMessage::SessionCreated { session } => session.id,
+            ServerMessage::SessionCreated { session, .. } => session.id,
             _ => panic!("Expected SessionCreated, got {:?}", response),
         };
 

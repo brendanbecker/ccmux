@@ -28,6 +28,9 @@ impl HandlerContext {
 
         let session_manager = self.session_manager.read().await;
 
+        // FEAT-078: Get client's focus state
+        let client_focus = self.registry.get_client_focus(self.client_id);
+
         let mut panes = Vec::new();
 
         for session in session_manager.list_sessions() {
@@ -39,11 +42,11 @@ impl HandlerContext {
                 }
             }
 
-            // Get the active window for this session to determine focused pane
+            // Get the global active window for this session as a fallback
             let active_window_id = session.active_window_id();
 
             for window in session.windows() {
-                // Get the active pane in this window
+                // Get the global active pane in this window as a fallback
                 let active_pane_id = window.active_pane_id();
                 // A pane is focused if it's the active pane in the active window
                 let is_active_window = Some(window.id()) == active_window_id;
@@ -54,8 +57,15 @@ impl HandlerContext {
                         _ => None,
                     };
 
-                    // Pane is focused if it's the active pane in the active window
-                    let is_focused = is_active_window && Some(pane.id()) == active_pane_id;
+                    // FEAT-078: Pane is focused if it's the active pane for THIS client
+                    let is_focused = if let Some(ref focus) = client_focus {
+                        focus.active_session_id == Some(session.id())
+                            && focus.active_window_id == Some(window.id())
+                            && focus.active_pane_id == Some(pane.id())
+                    } else {
+                        // Fallback to global focus if client has no specific focus yet
+                        is_active_window && Some(pane.id()) == active_pane_id
+                    };
 
                     panes.push(PaneListEntry {
                         id: pane.id(),
@@ -100,13 +110,16 @@ impl HandlerContext {
                 session_manager.get_session_by_name(filter)
             }
         } else {
-            // Use active session if not specified (BUG-034 fix)
-            session_manager.active_session()
+            // Use client's focused session, global active session, or first session (FEAT-078)
+            self.resolve_active_session(&session_manager)
+                .and_then(|id| session_manager.get_session(id))
+                .or_else(|| session_manager.list_sessions().first().copied())
         };
 
         match session {
             Some(session) => {
                 let session_name = session.name().to_string();
+                let client_focus = self.registry.get_client_focus(self.client_id);
 
                 let windows: Vec<WindowInfo> = session
                     .windows()
@@ -116,7 +129,16 @@ impl HandlerContext {
                         name: w.name().to_string(),
                         index: w.index(),
                         pane_count: w.pane_count(),
-                        active_pane_id: w.active_pane_id(),
+                        // FEAT-078: Return client-specific active pane if this is the focused window
+                        active_pane_id: if let Some(ref focus) = client_focus {
+                            if focus.active_window_id == Some(w.id()) {
+                                focus.active_pane_id
+                            } else {
+                                w.active_pane_id()
+                            }
+                        } else {
+                            w.active_pane_id()
+                        },
                     })
                     .collect();
 
@@ -268,8 +290,8 @@ impl HandlerContext {
                 }
             }
         } else {
-            // Use active session or create one
-            match session_manager.active_session_id() {
+            // Use client's active session, global active session, or create one (FEAT-078)
+            match self.resolve_active_session(&session_manager) {
                 Some(id) => id,
                 None => {
                     match session_manager.create_session("default") {
@@ -324,12 +346,17 @@ impl HandlerContext {
                 }
             }
         } else {
-            // Use first window or create one
-            // Check first, then create to avoid borrow conflict
-            let existing_window_id = session.windows().next().map(|w| w.id());
-            match existing_window_id {
+            // Use client's focused window or first window (FEAT-078)
+            match self.resolve_active_window(session) {
                 Some(id) => id,
-                None => session.create_window(None).id(),
+                None => {
+                    // Check first, then create to avoid borrow conflict
+                    let existing_window_id = session.windows().next().map(|w| w.id());
+                    match existing_window_id {
+                        Some(id) => id,
+                        None => session.create_window(None).id(),
+                    }
+                }
             }
         };
 
@@ -529,9 +556,14 @@ impl HandlerContext {
                 session_name,
                 window_id,
                 direction: direction_str.to_string(),
+                should_focus: select,
             },
             session_id,
-            broadcast: ServerMessage::PaneCreated { pane: pane_info, direction },
+            broadcast: ServerMessage::PaneCreated { 
+                pane: pane_info, 
+                direction,
+                should_focus: false, // Don't steal focus from TUI users
+            },
         }
     }
 
@@ -716,6 +748,7 @@ impl HandlerContext {
                 session_name,
                 window_id,
                 pane_id,
+                should_focus: true,
             },
             broadcast: ServerMessage::SessionsChanged { sessions },
         }
@@ -758,8 +791,8 @@ impl HandlerContext {
                 }
             }
         } else {
-            // Use active session (BUG-034 fix)
-            match session_manager.active_session_id() {
+            // Use client's focused session or first session (FEAT-078)
+            match self.resolve_active_session(&session_manager) {
                 Some(id) => id,
                 None => {
                     return HandlerContext::error(
@@ -878,11 +911,13 @@ impl HandlerContext {
                 window_id,
                 pane_id,
                 session_name,
+                should_focus: true,
             },
             session_id,
             broadcast: ServerMessage::PaneCreated {
                 pane: pane_info,
                 direction: SplitDirection::Vertical, // Default direction for new window pane
+                should_focus: false,
             },
         }
     }
@@ -1039,11 +1074,13 @@ impl HandlerContext {
                 session_name,
                 window_id,
                 direction: direction_str.to_string(),
+                should_focus: select,
             },
             session_id,
             broadcast: ServerMessage::PaneCreated {
                 pane: new_pane_info,
                 direction,
+                should_focus: false,
             },
         }
     }
@@ -1190,7 +1227,8 @@ impl HandlerContext {
                     }
                 }
             } else {
-                match session_manager.active_session_id() {
+                // Use client's focused session or first session (FEAT-078)
+                match self.resolve_active_session(&session_manager) {
                     Some(id) => id,
                     None => {
                         return HandlerContext::error(ErrorCode::SessionNotFound, "No sessions exist");
@@ -1233,11 +1271,17 @@ impl HandlerContext {
                     }
                 }
             } else {
-                // Check for existing window first, then create if needed
-                let existing_id = session.windows().next().map(|w| w.id());
-                match existing_id {
+                // Use client's focused window or first window (FEAT-078)
+                match self.resolve_active_window(session) {
                     Some(id) => id,
-                    None => session.create_window(None).id(),
+                    None => {
+                        // Check for existing window first, then create if needed
+                        let existing_id = session.windows().next().map(|w| w.id());
+                        match existing_id {
+                            Some(id) => id,
+                            None => session.create_window(None).id(),
+                        }
+                    }
                 }
             };
 
@@ -1310,6 +1354,7 @@ impl HandlerContext {
                 ServerMessage::PaneCreated {
                     pane: pane_info,
                     direction: SplitDirection::Vertical,
+                    should_focus: false,
                 }
             ).await;
         }
@@ -2062,7 +2107,7 @@ mod tests {
                     direction,
                     ..
                 },
-                broadcast: ServerMessage::PaneCreated { pane, direction: broadcast_dir },
+                broadcast: ServerMessage::PaneCreated { pane, direction: broadcast_dir, .. },
                 ..
             } => {
                 assert_eq!(session_name, "default");
@@ -2173,7 +2218,7 @@ mod tests {
         assert!(received.is_ok(), "TUI should have received the broadcast");
 
         match received.unwrap() {
-            ServerMessage::PaneCreated { pane, direction: _ } => {
+            ServerMessage::PaneCreated { pane, direction: _, .. } => {
                 // The new pane should have a valid ID
                 assert_ne!(pane.id, Uuid::nil());
             }
@@ -2377,7 +2422,7 @@ mod tests {
 
         // Verify TUI received PaneCreated
         match tui_rx.try_recv() {
-            Ok(ServerMessage::PaneCreated { pane, direction }) => {
+            Ok(ServerMessage::PaneCreated { pane, direction, .. }) => {
                 assert!(pane.id != Uuid::nil());
                 assert_eq!(direction, SplitDirection::Horizontal);
             }

@@ -157,6 +157,10 @@ impl CommandExecutor {
             SidebandCommand::Control { action, pane } => {
                 self.execute_control(source_pane, pane, action)
             }
+
+            SidebandCommand::AdvertiseCapabilities { capabilities } => {
+                self.execute_advertise_capabilities(source_pane, capabilities)
+            }
         }
     }
 
@@ -309,6 +313,7 @@ impl CommandExecutor {
         let msg = ServerMessage::PaneCreated {
             pane: pane_info.clone(),
             direction: direction.into(),
+            should_focus: false,
         };
         let delivered = self.registry.try_broadcast_to_session(session_id, msg);
         debug!(
@@ -490,6 +495,38 @@ impl CommandExecutor {
         }
 
         Ok(())
+    }
+
+    /// Execute advertise capabilities command
+    fn execute_advertise_capabilities(
+        &self,
+        source_pane: Uuid,
+        json: String,
+    ) -> ExecuteResult<()> {
+        info!("AdvertiseCapabilities requested for pane: {}", source_pane);
+
+        // Parse JSON
+        let capabilities: serde_json::Value = serde_json::from_str(&json)
+            .map_err(|e| ExecuteError::ExecutionFailed(format!("Invalid capabilities JSON: {}", e)))?;
+
+        let mut manager = self.session_manager.lock();
+        if let Some(pane) = manager.find_pane_mut(source_pane) {
+            // Update metadata
+            if let Some(obj) = capabilities.as_object() {
+                for (key, value) in obj {
+                    let val_str = match value {
+                        serde_json::Value::String(s) => s.clone(),
+                        serde_json::Value::Bool(b) => b.to_string(),
+                        serde_json::Value::Number(n) => n.to_string(),
+                        _ => value.to_string(),
+                    };
+                    pane.set_metadata(format!("capability.{}", key), val_str);
+                }
+            }
+            Ok(())
+        } else {
+            Err(ExecuteError::PaneNotFound(source_pane.to_string()))
+        }
     }
 }
 

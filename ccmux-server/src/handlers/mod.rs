@@ -20,7 +20,7 @@ use crate::config::AppConfig;
 use crate::persistence::PersistenceManager;
 use crate::pty::{PaneClosedNotification, PtyManager};
 use crate::registry::{ClientId, ClientRegistry};
-use crate::session::SessionManager;
+use crate::session::{Session, SessionManager, Window};
 use crate::sideband::AsyncCommandExecutor;
 use crate::user_priority::Arbitrator;
 
@@ -109,7 +109,31 @@ impl HandlerContext {
         }
     }
 
-    /// Route a client message to the appropriate handler
+    /// Resolve the current session for the client (FEAT-078)
+    pub fn resolve_active_session(&self, manager: &SessionManager) -> Option<Uuid> {
+        self.registry
+            .get_client_focus(self.client_id)
+            .and_then(|f| f.active_session_id)
+            .or_else(|| manager.active_session_id())
+    }
+
+    /// Resolve the current window for the client within a session (FEAT-078)
+    pub fn resolve_active_window(&self, session: &Session) -> Option<Uuid> {
+        self.registry
+            .get_client_focus(self.client_id)
+            .and_then(|f| f.active_window_id)
+            .or_else(|| session.active_window_id())
+    }
+
+    /// Resolve the current pane for the client within a window (FEAT-078)
+    pub fn resolve_active_pane(&self, window: &Window) -> Option<Uuid> {
+        self.registry
+            .get_client_focus(self.client_id)
+            .and_then(|f| f.active_pane_id)
+            .or_else(|| window.active_pane_id())
+    }
+
+    /// Route a message to the appropriate handler
     pub async fn route_message(&self, msg: ClientMessage) -> HandlerResult {
         match msg {
             // Connection handlers
@@ -172,6 +196,8 @@ impl HandlerContext {
             }
 
             ClientMessage::JumpToBottom { pane_id } => self.handle_jump_to_bottom(pane_id).await,
+
+            ClientMessage::Redraw { pane_id } => self.handle_redraw(pane_id).await,
 
             // Orchestration handlers
             ClientMessage::SendOrchestration { target, message } => {

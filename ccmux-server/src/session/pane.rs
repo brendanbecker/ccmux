@@ -47,6 +47,8 @@ pub struct Pane {
     beads_root: Option<PathBuf>,
     /// Whether bracketed paste mode is enabled (ESC [ ? 2004 h)
     bracketed_paste_enabled: bool,
+    /// Arbitrary key-value metadata for the pane (FEAT-076)
+    metadata: std::collections::HashMap<String, String>,
 }
 
 impl fmt::Debug for Pane {
@@ -107,6 +109,7 @@ impl Pane {
             claude_detector: ClaudeDetector::new(),
             beads_root: None,
             bracketed_paste_enabled: false,
+            metadata: std::collections::HashMap::new(),
         }
     }
 
@@ -150,7 +153,30 @@ impl Pane {
             claude_detector,
             beads_root: None,
             bracketed_paste_enabled: false,
+            metadata: std::collections::HashMap::new(),
         }
+    }
+
+    /// Restore a pane with metadata from persisted state
+    #[allow(clippy::too_many_arguments)]
+    pub fn restore_with_metadata(
+        id: Uuid,
+        window_id: Uuid,
+        index: usize,
+        cols: u16,
+        rows: u16,
+        state: PaneState,
+        name: Option<String>,
+        title: Option<String>,
+        cwd: Option<String>,
+        created_at: u64,
+        metadata: std::collections::HashMap<String, String>,
+    ) -> Self {
+        let mut pane = Self::restore(
+            id, window_id, index, cols, rows, state, name, title, cwd, created_at,
+        );
+        pane.metadata = metadata;
+        pane
     }
 
     /// Get pane ID
@@ -196,6 +222,21 @@ impl Pane {
     pub fn set_state(&mut self, state: PaneState) {
         self.state = state;
         self.state_changed_at = SystemTime::now();
+    }
+
+    /// Get metadata value
+    pub fn get_metadata(&self, key: &str) -> Option<&String> {
+        self.metadata.get(key)
+    }
+
+    /// Set metadata value
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: impl Into<String>) {
+        self.metadata.insert(key.into(), value.into());
+    }
+
+    /// Get all metadata
+    pub fn metadata(&self) -> &std::collections::HashMap<String, String> {
+        &self.metadata
     }
 
     /// Check if this is a Claude pane
@@ -476,54 +517,7 @@ impl Pane {
             title: self.title.clone(),
             cwd: self.cwd.clone(),
             stuck_status: self.check_stuck_status(),
-        }
-    }
-
-    /// Check if the pane is stuck or running slowly
-    fn check_stuck_status(&self) -> Option<PaneStuckStatus> {
-        // Only relevant for Claude panes
-        let claude_state = match &self.state {
-            PaneState::Claude(state) => state,
-            _ => return None,
-        };
-
-        let now = SystemTime::now();
-        let duration = now
-            .duration_since(self.state_changed_at)
-            .unwrap_or(Duration::from_secs(0))
-            .as_secs();
-
-        match claude_state.activity {
-            ClaudeActivity::Thinking => {
-                if duration > 120 {
-                    // > 2 minutes thinking
-                    Some(PaneStuckStatus::Stuck {
-                        duration,
-                        reason: "Thinking timeout (2m)".to_string(),
-                    })
-                } else if duration > 60 {
-                    // > 1 minute thinking
-                    Some(PaneStuckStatus::Slow { duration })
-                } else {
-                    None
-                }
-            }
-            ClaudeActivity::ToolUse => {
-                if duration > 300 {
-                    // > 5 minutes tool use
-                    Some(PaneStuckStatus::Stuck {
-                        duration,
-                        reason: "Tool use timeout (5m)".to_string(),
-                    })
-                } else if duration > 120 {
-                    // > 2 minutes tool use
-                    Some(PaneStuckStatus::Slow { duration })
-                } else {
-                    None
-                }
-            }
-            // Other states (Idle, Coding, AwaitingConfirmation) don't have implicit timeouts
-            _ => None,
+            metadata: self.metadata.clone(),
         }
     }
 }

@@ -1283,6 +1283,7 @@ mod tests {
         let broadcast_msg = ServerMessage::PaneCreated {
             pane: pane_info,
             direction: ccmux_protocol::SplitDirection::Vertical,
+            should_focus: false,
         };
 
         let count = registry
@@ -1296,7 +1297,7 @@ mod tests {
         let received = tui_rx.try_recv();
         assert!(received.is_ok(), "TUI should receive the broadcast");
         match received.unwrap() {
-            ServerMessage::PaneCreated { pane, direction: _ } => {
+            ServerMessage::PaneCreated { pane, direction: _, .. } => {
                 assert_eq!(pane.index, 1);
             }
             _ => panic!("Expected PaneCreated message"),

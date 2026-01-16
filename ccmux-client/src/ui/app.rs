@@ -118,6 +118,8 @@ pub struct App {
     human_control_lock_expiry: Option<Instant>,
     /// Last seen commit sequence number (FEAT-075)
     last_seen_commit_seq: u64,
+    /// Whether a full screen redraw is requested
+    needs_redraw: bool,
 }
 
 impl App {
@@ -152,6 +154,7 @@ impl App {
             beads_ready_count: None,
             human_control_lock_expiry: None,
             last_seen_commit_seq: 0,
+            needs_redraw: false,
         })
     }
 
@@ -186,6 +189,7 @@ impl App {
             beads_ready_count: None,
             human_control_lock_expiry: None,
             last_seen_commit_seq: 0,
+            needs_redraw: false,
         })
     }
 
@@ -220,6 +224,7 @@ impl App {
             beads_ready_count: None,
             human_control_lock_expiry: None,
             last_seen_commit_seq: 0,
+            needs_redraw: false,
         })
     }
 
@@ -261,6 +266,10 @@ impl App {
         // Main event loop
         while !self.should_quit() {
             // Draw UI
+            if self.needs_redraw {
+                terminal.clear()?;
+                self.needs_redraw = false;
+            }
             self.draw(&mut terminal)?;
 
             // Handle events
@@ -1029,6 +1038,13 @@ impl App {
                     Some("Ctrl+B: prefix | c: new pane | x: close | n/p: next/prev".to_string());
             }
 
+            ClientCommand::Redraw => {
+                self.needs_redraw = true;
+                self.status_message = Some("Screen redrawn".to_string());
+                // Also notify server to signal child PTYs
+                self.connection.send(ClientMessage::Redraw { pane_id: None }).await?;
+            }
+
             ClientCommand::NextWindow => {
                 self.cycle_window(1);
             }
@@ -1298,40 +1314,44 @@ impl App {
     }
 
     /// Handle server messages
-    async fn handle_server_message(&mut self, msg: ServerMessage) -> Result<()> {
-        tracing::debug!(
-            message_type = ?std::mem::discriminant(&msg),
-            "handle_server_message processing"
-        );
+    async fn handle_server_message(&mut self, mut msg: ServerMessage) -> Result<()> {
+        loop {
+            tracing::debug!(
+                message_type = ?std::mem::discriminant(&msg),
+                "handle_server_message processing"
+            );
 
-        match msg {
-            ServerMessage::Sequenced { seq, inner } => {
-                if self.last_seen_commit_seq > 0 && seq > self.last_seen_commit_seq + 1 {
-                    tracing::warn!(
-                        "Gap detected: last_seen={}, got {}. Requesting resync.",
-                        self.last_seen_commit_seq,
-                        seq
-                    );
-                    self.connection
-                        .send(ClientMessage::GetEventsSince {
-                            last_commit_seq: self.last_seen_commit_seq,
-                        })
-                        .await?;
-                    // Drop this message as we'll get it during replay
-                    return Ok(());
+            match msg {
+                // FEAT-075: Sequence tracking and resync
+                ServerMessage::Sequenced { seq, inner } => {
+                    if self.last_seen_commit_seq > 0 && seq > self.last_seen_commit_seq + 1 {
+                        tracing::warn!(
+                            "Gap detected: last_seen={}, got {}. Requesting resync.",
+                            self.last_seen_commit_seq,
+                            seq
+                        );
+                        self.connection
+                            .send(ClientMessage::GetEventsSince {
+                                last_commit_seq: self.last_seen_commit_seq,
+                            })
+                            .await?;
+                        // Drop this message as we'll get it during replay
+                        return Ok(());
+                    }
+
+                    if seq > self.last_seen_commit_seq {
+                        self.last_seen_commit_seq = seq;
+                    }
+
+                    // Process inner message
+                    msg = *inner;
+                    continue;
                 }
 
-                if seq > self.last_seen_commit_seq {
-                    self.last_seen_commit_seq = seq;
-                }
-
-                // Recursive call for inner message
-                return Box::pin(self.handle_server_message(*inner)).await;
-            }
-            ServerMessage::Connected {
-                server_version,
-                protocol_version: _,
-            } => {
+                ServerMessage::Connected {
+                    server_version,
+                    protocol_version: _,
+                } => {
                 self.status_message = Some(format!("Connected to server v{}", server_version));
                 // Request session list
                 self.connection.send(ClientMessage::ListSessions).await?;
@@ -1347,13 +1367,15 @@ impl App {
                 self.available_sessions = sessions;
                 // Don't reset session_list_index to preserve user's scroll position
             }
-            ServerMessage::SessionCreated { session } => {
-                // Automatically attach to new session
-                self.connection
-                    .send(ClientMessage::AttachSession {
-                        session_id: session.id,
-                    })
-                    .await?;
+            ServerMessage::SessionCreated { session, should_focus } => {
+                if should_focus {
+                    // Automatically attach to new session if we requested it
+                    self.connection
+                        .send(ClientMessage::AttachSession {
+                            session_id: session.id,
+                        })
+                        .await?;
+                }
             }
             ServerMessage::Attached {
                 session,
@@ -1509,15 +1531,16 @@ impl App {
                 self.last_beads_request_tick = 0;
                 self.beads_ready_count = None;
             }
-            ServerMessage::WindowCreated { window } => {
+            ServerMessage::WindowCreated { window, should_focus: _ } => {
                 self.windows.insert(window.id, window);
             }
-            ServerMessage::PaneCreated { pane, direction } => {
+            ServerMessage::PaneCreated { pane, direction, should_focus } => {
                 tracing::info!(
                     pane_id = %pane.id,
                     window_id = %pane.window_id,
                     pane_index = pane.index,
                     ?direction,
+                    should_focus,
                     "Handling PaneCreated broadcast from server"
                 );
 
@@ -1549,11 +1572,13 @@ impl App {
                 }
                 self.panes.insert(pane.id, pane.clone());
 
-                // Switch focus to the new pane
-                self.active_pane_id = Some(pane.id);
-                self.pane_manager.set_active(pane.id);
-                if let Some(ref mut layout) = self.layout {
-                    layout.set_active_pane(pane.id);
+                // Switch focus to the new pane if requested
+                if should_focus {
+                    self.active_pane_id = Some(pane.id);
+                    self.pane_manager.set_active(pane.id);
+                    if let Some(ref mut layout) = self.layout {
+                        layout.set_active_pane(pane.id);
+                    }
                 }
 
                 // Resize all panes after layout change
@@ -1863,8 +1888,10 @@ impl App {
                 // For now, this message is received but not displayed
             }
         }
-        Ok(())
+        break;
     }
+    Ok(())
+}
 
     /// Draw the UI
     fn draw(&mut self, terminal: &mut Terminal) -> Result<()> {
