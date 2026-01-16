@@ -22,8 +22,7 @@ pub type SessionId = Uuid;
 pub struct ClientId(u64);
 
 impl ClientId {
-    /// Create a new ClientId from a raw value (mainly for testing)
-    #[cfg(test)]
+    /// Create a new ClientId from a raw value
     pub fn new(value: u64) -> Self {
         Self(value)
     }

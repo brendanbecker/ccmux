@@ -184,7 +184,7 @@ impl HandlerContext {
         debug!("SelectPane {} request from {}", pane_id, self.client_id);
 
         // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.is_any_lock_active() {
+        if let Some((_client_id, remaining_ms)) = self.arbitrator.is_any_lock_active() {
             debug!(
                 "SelectPane blocked by user priority lock, retry after {}ms",
                 remaining_ms
@@ -250,7 +250,7 @@ impl HandlerContext {
         debug!("SelectWindow {} request from {}", window_id, self.client_id);
 
         // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.is_any_lock_active() {
+        if let Some((_client_id, remaining_ms)) = self.arbitrator.is_any_lock_active() {
             debug!(
                 "SelectWindow blocked by user priority lock, retry after {}ms",
                 remaining_ms
@@ -307,7 +307,7 @@ impl HandlerContext {
         debug!("SelectSession {} request from {}", session_id, self.client_id);
 
         // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.is_any_lock_active() {
+        if let Some((_client_id, remaining_ms)) = self.arbitrator.is_any_lock_active() {
             debug!(
                 "SelectSession blocked by user priority lock, retry after {}ms",
                 remaining_ms
@@ -464,7 +464,7 @@ mod tests {
     use crate::pty::PtyManager;
     use crate::registry::ClientRegistry;
     use crate::session::SessionManager;
-    use crate::user_priority::UserPriorityManager;
+    use crate::arbitration::Arbitrator;
     use std::sync::Arc;
     use tokio::sync::{mpsc, RwLock};
 
@@ -473,7 +473,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(UserPriorityManager::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -484,7 +484,7 @@ mod tests {
         let client_id = registry.register_client(tx);
 
         let (pane_closed_tx, _) = mpsc::channel(10);
-        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor, user_priority)
+        HandlerContext::new(session_manager, pty_manager, registry, config, client_id, pane_closed_tx, command_executor, arbitrator)
     }
 
     async fn create_session_with_window(ctx: &HandlerContext) -> (Uuid, Uuid) {
@@ -730,7 +730,7 @@ mod tests {
     // ==================== FEAT-056 User Priority Lockout Tests ====================
 
     #[tokio::test]
-    async fn test_select_pane_blocked_by_user_priority() {
+    async fn test_select_pane_blocked_by_arbitrator() {
         let ctx = create_test_context();
         let (session_id, window_id) = create_session_with_window(&ctx).await;
 
@@ -744,7 +744,7 @@ mod tests {
 
         // Activate user priority lock from a different client
         let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_lock(other_client_id, 5000);
+        ctx.arbitrator.set_lock(other_client_id, 5000, "Test Lock".to_string());
 
         // Try to select pane - should be blocked
         let result = ctx.handle_select_pane(pane_id).await;
@@ -759,13 +759,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_select_window_blocked_by_user_priority() {
+    async fn test_select_window_blocked_by_arbitrator() {
         let ctx = create_test_context();
         let (_session_id, window_id) = create_session_with_window(&ctx).await;
 
         // Activate user priority lock
         let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_lock(other_client_id, 5000);
+        ctx.arbitrator.set_lock(other_client_id, 5000, "Test Lock".to_string());
 
         // Try to select window - should be blocked
         let result = ctx.handle_select_window(window_id).await;
@@ -780,13 +780,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_select_session_blocked_by_user_priority() {
+    async fn test_select_session_blocked_by_arbitrator() {
         let ctx = create_test_context();
         let (session_id, _window_id) = create_session_with_window(&ctx).await;
 
         // Activate user priority lock
         let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_lock(other_client_id, 5000);
+        ctx.arbitrator.set_lock(other_client_id, 5000, "Test Lock".to_string());
 
         // Try to select session - should be blocked
         let result = ctx.handle_select_session(session_id).await;
@@ -842,8 +842,8 @@ mod tests {
 
         // Activate then release lock
         let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_lock(other_client_id, 5000);
-        ctx.user_priority.release_lock(other_client_id);
+        ctx.arbitrator.set_lock(other_client_id, 5000, "Test Lock".to_string());
+        ctx.arbitrator.release_lock(other_client_id);
 
         // Should succeed after lock released
         let result = ctx.handle_select_pane(pane_id).await;
