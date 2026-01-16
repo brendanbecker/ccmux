@@ -470,6 +470,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 12345,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         }
     }
 

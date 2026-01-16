@@ -142,6 +142,7 @@ impl RecoveryManager {
                     active_window_id: None,
                     created_at,
                     metadata: HashMap::new(),
+                    environment: HashMap::new(),
                 };
 
                 session_map.insert(id, sessions.len());
@@ -337,6 +338,13 @@ impl RecoveryManager {
                 if let Some(&idx) = session_map.get(&session_id) {
                     sessions[idx].metadata.insert(key.clone(), value.clone());
                     debug!("Applied: SessionMetadataSet {} key={}", session_id, key);
+                }
+            }
+
+            WalEntry::SessionEnvironmentSet { session_id, key, value } => {
+                if let Some(&idx) = session_map.get(&session_id) {
+                    sessions[idx].environment.insert(key.clone(), value.clone());
+                    debug!("Applied: SessionEnvironmentSet {} key={}", session_id, key);
                 }
             }
         }

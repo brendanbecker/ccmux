@@ -60,6 +60,9 @@ pub struct SessionSnapshot {
     /// Arbitrary key-value metadata (backward compatible with empty default)
     #[serde(default)]
     pub metadata: HashMap<String, String>,
+    /// Session environment variables (backward compatible with empty default)
+    #[serde(default)]
+    pub environment: HashMap<String, String>,
 }
 
 /// Snapshot of a window for persistence
@@ -219,6 +222,13 @@ pub enum WalEntry {
         key: String,
         value: String,
     },
+
+    /// Session environment variable changed
+    SessionEnvironmentSet {
+        session_id: Uuid,
+        key: String,
+        value: String,
+    },
 }
 
 impl WalEntry {
@@ -301,6 +311,7 @@ mod tests {
             active_window_id: None,
             created_at: 12345,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         });
 
         let serialized = bincode::serialize(&checkpoint).unwrap();
@@ -329,6 +340,7 @@ mod tests {
             active_window_id: None,
             created_at: 1000,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         };
 
         let serialized = bincode::serialize(&snapshot).unwrap();
@@ -435,6 +447,7 @@ mod tests {
             active_window_id: None,
             created_at: 0,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         });
 
         assert!(state.has_sessions());

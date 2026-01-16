@@ -452,6 +452,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 12345,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         }
     }
 
@@ -746,6 +747,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 0,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         };
 
         let state = RecoveryState {
@@ -807,6 +809,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 12345,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         };
 
         let state = RecoveryState {
@@ -876,6 +879,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 0,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         };
 
         let state = RecoveryState {
@@ -935,6 +939,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 12345,
             metadata,
+            environment: HashMap::new(),
         };
 
         let state = RecoveryState {
