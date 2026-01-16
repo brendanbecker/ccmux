@@ -1003,6 +1003,7 @@ tags: HashSet::new(),
                 name: None,
                 title: None,
                 cwd: None,
+                stuck_status: None,
             }],
         };
 
@@ -1051,6 +1052,7 @@ tags: HashSet::new(),
             name: None,
             title: Some("bash".to_string()),
             cwd: Some("/home/user".to_string()),
+            stuck_status: None,
         };
 
         let msg = ServerMessage::PaneCreated {

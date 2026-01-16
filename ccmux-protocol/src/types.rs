@@ -167,6 +167,14 @@ pub enum PaneStuckStatus {
     Stuck { duration: u64, reason: String },
 }
 
+/// Priority for mailbox messages (FEAT-073)
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MailPriority {
+    Info,
+    Warning,
+    Error,
+}
+
 /// Pane state
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum PaneState {
@@ -721,6 +729,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            stuck_status: None,
         };
 
         assert_eq!(pane.index, 0);
@@ -745,6 +754,7 @@ mod tests {
             name: None,
             title: Some("vim".to_string()),
             cwd: Some("/home/user/project".to_string()),
+            stuck_status: Some(PaneStuckStatus::Slow { duration: 10 }),
         };
 
         assert_eq!(pane.id, id);
@@ -752,6 +762,10 @@ mod tests {
         assert_eq!(pane.index, 2);
         assert_eq!(pane.title, Some("vim".to_string()));
         assert_eq!(pane.cwd, Some("/home/user/project".to_string()));
+        assert_eq!(
+            pane.stuck_status,
+            Some(PaneStuckStatus::Slow { duration: 10 })
+        );
     }
 
     #[test]
@@ -766,6 +780,7 @@ mod tests {
             name: None,
             title: Some("bash".to_string()),
             cwd: Some("/tmp".to_string()),
+            stuck_status: None,
         };
 
         let cloned = pane.clone();
@@ -787,6 +802,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            stuck_status: None,
         };
 
         let pane2 = PaneInfo {
@@ -799,6 +815,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            stuck_status: None,
         };
 
         let pane3 = PaneInfo {
@@ -811,6 +828,7 @@ mod tests {
             name: None,
             title: None,
             cwd: None,
+            stuck_status: None,
         };
 
         assert_eq!(pane1, pane2);
@@ -1111,6 +1129,7 @@ tags: HashSet::new(),
             name: None,
             title: Some("test".to_string()),
             cwd: Some("/home".to_string()),
+            stuck_status: None,
         };
 
         let serialized = bincode::serialize(&pane).unwrap();

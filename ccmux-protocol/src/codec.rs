@@ -347,6 +347,7 @@ mod tests {
                     name: None,
                     title: None,
                     cwd: Some("/home/user".to_string()),
+                    stuck_status: None,
                 }],
             },
             ServerMessage::WindowCreated {
@@ -370,6 +371,7 @@ mod tests {
                     name: None,
                     title: None,
                     cwd: None,
+                    stuck_status: None,
                 },
                 direction: crate::types::SplitDirection::Horizontal,
             },
