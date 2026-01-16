@@ -535,8 +535,8 @@ impl PtyOutputPoller {
     /// Flush the buffer by broadcasting to session clients and routing to pane state
     ///
     /// This method:
-    /// 1. Routes output to pane.process() for scrollback and Claude detection
-    /// 2. Broadcasts PaneStateChanged if Claude state changed
+    /// 1. Routes output to pane.process() for scrollback and agent detection (FEAT-084)
+    /// 2. Broadcasts PaneStateChanged if agent state changed
     /// 3. Broadcasts Output to all session clients
     async fn flush(&mut self) {
         if self.buffer.is_empty() {
@@ -553,18 +553,19 @@ impl PtyOutputPoller {
             "Flushing output to session"
         );
 
-        // Route output to pane state for scrollback and Claude detection
-        // This populates the scrollback buffer and triggers Claude detection
+        // Route output to pane state for scrollback and agent detection (FEAT-084)
+        // This populates the scrollback buffer and triggers agent detection
         let state_change_msg = if let Some(executor) = &self.command_executor {
             let session_manager = executor.session_manager();
             let mut manager = session_manager.write().await;
             if let Some(pane) = manager.find_pane_mut(self.pane_id) {
-                // Process returns Some(ClaudeState) if state changed
-                if let Some(claude_state) = pane.process(&data) {
+                // Process returns Some(AgentState) if state changed (FEAT-084)
+                if let Some(agent_state) = pane.process(&data) {
                     debug!(
                         pane_id = %self.pane_id,
-                        activity = ?claude_state.activity,
-                        "Claude state changed from PTY output"
+                        agent_type = %agent_state.agent_type,
+                        activity = ?agent_state.activity,
+                        "Agent state changed from PTY output"
                     );
                     // Capture the state change message while we still have the lock
                     Some(ServerMessage::PaneStateChanged {
@@ -585,7 +586,7 @@ impl PtyOutputPoller {
             None
         };
 
-        // Broadcast state change if Claude state changed
+        // Broadcast state change if agent state changed
         if let Some(state_msg) = state_change_msg {
             self.registry.broadcast_to_session(self.session_id, state_msg).await;
         }

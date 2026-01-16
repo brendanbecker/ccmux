@@ -2415,8 +2415,16 @@ impl App {
                     let color = match &pane.stuck_status {
                         Some(PaneStuckStatus::Stuck { .. }) => Color::Red,
                         Some(PaneStuckStatus::Slow { .. }) => Color::Yellow,
+                        #[allow(deprecated)]
                         _ => match &pane.state {
                             PaneState::Normal => Color::Green,
+                            PaneState::Agent(agent_state) => {
+                                if matches!(agent_state.activity, ccmux_protocol::AgentActivity::Idle) {
+                                    Color::Blue
+                                } else {
+                                    Color::Cyan
+                                }
+                            }
                             PaneState::Claude(cs) => match cs.activity {
                                 ClaudeActivity::Idle => Color::Blue,
                                 _ => Color::Cyan,
@@ -2482,9 +2490,13 @@ impl App {
     }
 
     /// Format pane info for display
+    #[allow(deprecated)]
     fn format_pane_info(&self, pane: &PaneInfo) -> String {
         let state_info = match &pane.state {
             PaneState::Normal => "Normal".to_string(),
+            PaneState::Agent(agent_state) => {
+                format!("{}: {:?}", agent_state.agent_type, agent_state.activity)
+            }
             PaneState::Claude(cs) => {
                 format!("Claude: {:?}", cs.activity)
             }
@@ -2525,6 +2537,7 @@ impl App {
             InputMode::Copy => format!(" [COPY +{}]", self.input_handler.scroll_offset()),
         };
 
+        #[allow(deprecated)]
         let pane_info = if let Some(pane_id) = self.active_pane_id {
             if let Some(pane) = self.panes.get(&pane_id) {
                 // Check stuck status first (overrides normal indicator)
@@ -2538,6 +2551,9 @@ impl App {
                         }
                         PaneStuckStatus::None => match &pane.state {
                             PaneState::Normal => "[ ]".to_string(),
+                            PaneState::Agent(agent_state) => {
+                                format_agent_indicator(&agent_state.agent_type, &agent_state.activity, self.tick_count)
+                            }
                             PaneState::Claude(cs) => {
                                 format_claude_indicator(&cs.activity, self.tick_count)
                             }
@@ -2547,6 +2563,9 @@ impl App {
                 } else {
                     match &pane.state {
                         PaneState::Normal => "[ ]".to_string(),
+                        PaneState::Agent(agent_state) => {
+                            format_agent_indicator(&agent_state.agent_type, &agent_state.activity, self.tick_count)
+                        }
                         PaneState::Claude(cs) => {
                             format_claude_indicator(&cs.activity, self.tick_count)
                         }
@@ -2613,6 +2632,22 @@ fn format_claude_indicator(activity: &ClaudeActivity, tick: u64) -> String {
         ClaudeActivity::Coding => ">[ ]".to_string(),
         ClaudeActivity::ToolUse => "[*]".to_string(),
         ClaudeActivity::AwaitingConfirmation => "[?]".to_string(),
+    }
+}
+
+/// Format agent activity indicator with animation (FEAT-084)
+fn format_agent_indicator(agent_type: &str, activity: &ccmux_protocol::AgentActivity, tick: u64) -> String {
+    let prefix = agent_type.chars().next().unwrap_or('A').to_uppercase().to_string();
+    match activity {
+        ccmux_protocol::AgentActivity::Idle => format!("[{}]", prefix),
+        ccmux_protocol::AgentActivity::Processing => {
+            let frames = ["[.  ]", "[.. ]", "[... ]", "[ ..]", "[  .]", "[   ]"];
+            format!("{}{}", prefix, frames[(tick / 3) as usize % frames.len()])
+        }
+        ccmux_protocol::AgentActivity::Generating => format!(">[{}]", prefix),
+        ccmux_protocol::AgentActivity::ToolUse => format!("[{}*]", prefix),
+        ccmux_protocol::AgentActivity::AwaitingConfirmation => format!("[{}?]", prefix),
+        ccmux_protocol::AgentActivity::Custom(name) => format!("[{}:{}]", prefix, &name[..name.len().min(3)]),
     }
 }
 

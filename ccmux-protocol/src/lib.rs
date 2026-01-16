@@ -14,9 +14,10 @@ pub use messages::{
     ServerMessage,
 };
 pub use types::{
-    ClaudeActivity, ClaudeState, ClientType, Dimensions, MailPriority, PaneInfo, PaneState,
-    PaneStuckStatus, PaneTarget, ReplyMessage, ReplyResult, SessionInfo, SplitDirection,
-    ViewportState, Widget, WidgetConversionError, WidgetUpdate, WindowInfo, WorktreeInfo,
+    AgentActivity, AgentState, ClaudeActivity, ClaudeState, ClientType, Dimensions, JsonValue,
+    MailPriority, PaneInfo, PaneState, PaneStuckStatus, PaneTarget, ReplyMessage, ReplyResult,
+    SessionInfo, SplitDirection, ViewportState, Widget, WidgetConversionError, WidgetUpdate,
+    WindowInfo, WorktreeInfo,
 };
 
 /// Current protocol version

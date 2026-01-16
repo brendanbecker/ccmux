@@ -337,16 +337,209 @@ pub enum MailPriority {
     Error,
 }
 
+// ==================== Generic Agent System (FEAT-084) ====================
+
+/// Generic agent state for any AI coding assistant (FEAT-084)
+///
+/// This type generalizes `ClaudeState` to work with any AI agent by introducing
+/// a common interface for agent detection and state tracking.
+///
+/// # Examples
+/// ```rust
+/// use ccmux_protocol::{AgentState, AgentActivity};
+/// use std::collections::HashMap;
+///
+/// let state = AgentState::new("claude")
+///     .with_activity(AgentActivity::Processing)
+///     .with_session_id("abc123".to_string());
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AgentState {
+    /// Type identifier for the agent (e.g., "claude", "copilot", "aider")
+    pub agent_type: String,
+    /// Agent session ID if available
+    pub session_id: Option<String>,
+    /// Current activity state
+    pub activity: AgentActivity,
+    /// Arbitrary metadata (model, tokens, etc.)
+    #[serde(default)]
+    pub metadata: HashMap<String, JsonValue>,
+}
+
+impl AgentState {
+    /// Create a new agent state with the given type
+    pub fn new(agent_type: impl Into<String>) -> Self {
+        Self {
+            agent_type: agent_type.into(),
+            session_id: None,
+            activity: AgentActivity::Idle,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Set the activity (builder pattern)
+    pub fn with_activity(mut self, activity: AgentActivity) -> Self {
+        self.activity = activity;
+        self
+    }
+
+    /// Set the session ID (builder pattern)
+    pub fn with_session_id(mut self, session_id: String) -> Self {
+        self.session_id = Some(session_id);
+        self
+    }
+
+    /// Set a metadata value (builder pattern)
+    pub fn with_metadata(mut self, key: impl Into<String>, value: serde_json::Value) -> Self {
+        self.metadata.insert(key.into(), JsonValue::new(value));
+        self
+    }
+
+    /// Get a metadata value
+    pub fn get_metadata(&self, key: &str) -> Option<&serde_json::Value> {
+        self.metadata.get(key).map(|v| v.inner())
+    }
+
+    /// Set a metadata value
+    pub fn set_metadata(&mut self, key: impl Into<String>, value: serde_json::Value) {
+        self.metadata.insert(key.into(), JsonValue::new(value));
+    }
+
+    /// Check if this is a specific agent type
+    pub fn is_agent_type(&self, agent_type: &str) -> bool {
+        self.agent_type == agent_type
+    }
+
+    /// Check if this is Claude
+    pub fn is_claude(&self) -> bool {
+        self.agent_type == "claude"
+    }
+}
+
+impl Default for AgentState {
+    fn default() -> Self {
+        Self::new("unknown")
+    }
+}
+
+/// Generic agent activity states (FEAT-084)
+///
+/// This generalizes `ClaudeActivity` to work with any AI agent.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub enum AgentActivity {
+    /// Waiting for input
+    #[default]
+    Idle,
+    /// Processing/thinking (replaces ClaudeActivity::Thinking)
+    Processing,
+    /// Generating content (replaces ClaudeActivity::Coding)
+    Generating,
+    /// Executing tools (same as ClaudeActivity::ToolUse)
+    ToolUse,
+    /// Waiting for user confirmation (same as ClaudeActivity::AwaitingConfirmation)
+    AwaitingConfirmation,
+    /// Agent-specific custom state
+    Custom(String),
+}
+
+impl AgentActivity {
+    /// Check if the activity is an active (non-idle) state
+    pub fn is_active(&self) -> bool {
+        !matches!(self, AgentActivity::Idle)
+    }
+}
+
+// ==================== From Trait Conversions (FEAT-084) ====================
+
+impl From<ClaudeState> for AgentState {
+    fn from(claude: ClaudeState) -> Self {
+        let mut state = AgentState::new("claude")
+            .with_activity(claude.activity.into());
+
+        if let Some(session_id) = claude.session_id {
+            state.session_id = Some(session_id);
+        }
+
+        if let Some(model) = claude.model {
+            state.set_metadata("model", serde_json::Value::String(model));
+        }
+
+        if let Some(tokens) = claude.tokens_used {
+            state.set_metadata("tokens_used", serde_json::Value::Number(tokens.into()));
+        }
+
+        state
+    }
+}
+
+impl From<ClaudeActivity> for AgentActivity {
+    fn from(activity: ClaudeActivity) -> Self {
+        match activity {
+            ClaudeActivity::Idle => AgentActivity::Idle,
+            ClaudeActivity::Thinking => AgentActivity::Processing,
+            ClaudeActivity::Coding => AgentActivity::Generating,
+            ClaudeActivity::ToolUse => AgentActivity::ToolUse,
+            ClaudeActivity::AwaitingConfirmation => AgentActivity::AwaitingConfirmation,
+        }
+    }
+}
+
+impl From<AgentActivity> for ClaudeActivity {
+    fn from(activity: AgentActivity) -> Self {
+        match activity {
+            AgentActivity::Idle => ClaudeActivity::Idle,
+            AgentActivity::Processing => ClaudeActivity::Thinking,
+            AgentActivity::Generating => ClaudeActivity::Coding,
+            AgentActivity::ToolUse => ClaudeActivity::ToolUse,
+            AgentActivity::AwaitingConfirmation => ClaudeActivity::AwaitingConfirmation,
+            AgentActivity::Custom(_) => ClaudeActivity::Idle, // Fallback for unknown states
+        }
+    }
+}
+
+// ==================== Pane State ====================
+
 /// Pane state
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum PaneState {
     /// Normal shell/process
     #[default]
     Normal,
+    /// Generic AI agent detected (FEAT-084)
+    Agent(AgentState),
     /// Claude Code detected
+    #[deprecated(since = "0.2.0", note = "Use PaneState::Agent instead")]
     Claude(ClaudeState),
     /// Process exited
     Exited { code: Option<i32> },
+}
+
+impl PaneState {
+    /// Check if this pane has an active agent
+    pub fn is_agent(&self) -> bool {
+        #[allow(deprecated)]
+        matches!(self, PaneState::Agent(_) | PaneState::Claude(_))
+    }
+
+    /// Get the agent state if this is an agent pane
+    pub fn agent_state(&self) -> Option<AgentState> {
+        #[allow(deprecated)]
+        match self {
+            PaneState::Agent(state) => Some(state.clone()),
+            PaneState::Claude(claude) => Some(claude.clone().into()),
+            _ => None,
+        }
+    }
+
+    /// Get Claude activity (for backward compatibility)
+    pub fn claude_activity(&self) -> Option<ClaudeActivity> {
+        #[allow(deprecated)]
+        match self {
+            PaneState::Agent(state) if state.is_claude() => Some(state.activity.clone().into()),
+            PaneState::Claude(claude) => Some(claude.activity.clone()),
+            _ => None,
+        }
+    }
 }
 
 /// Claude Code specific state
