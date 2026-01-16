@@ -17,7 +17,7 @@ use tui_term::vt100::{Parser, Screen};
 use tui_term::widget::PseudoTerminal;
 use uuid::Uuid;
 
-use ccmux_protocol::{ClaudeActivity, PaneState};
+use ccmux_protocol::{AgentActivity, AgentState, ClaudeActivity, PaneState};
 
 /// Visual mode type for text selection
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -226,7 +226,24 @@ impl Pane {
         self.pane_state = state;
     }
 
-    /// Get Claude activity if in Claude state
+    /// Get agent state if in agent state (FEAT-084)
+    pub fn agent_state(&self) -> Option<&AgentState> {
+        match &self.pane_state {
+            PaneState::Agent(state) => Some(state),
+            _ => None,
+        }
+    }
+
+    /// Get agent activity if in agent state (FEAT-084)
+    pub fn agent_activity(&self) -> Option<&AgentActivity> {
+        match &self.pane_state {
+            PaneState::Agent(state) => Some(&state.activity),
+            _ => None,
+        }
+    }
+
+    /// Get Claude activity if in Claude state (deprecated, use agent_activity)
+    #[allow(deprecated)]
     pub fn claude_activity(&self) -> Option<&ClaudeActivity> {
         match &self.pane_state {
             PaneState::Claude(state) => Some(&state.activity),
@@ -344,11 +361,28 @@ impl Pane {
     }
 
     /// Build the title string for display
+    #[allow(deprecated)]
     pub fn display_title(&self) -> String {
         let base_title = self.title.as_deref().unwrap_or("pane");
 
         match &self.pane_state {
             PaneState::Normal => base_title.to_string(),
+            PaneState::Agent(state) => {
+                let activity = match &state.activity {
+                    AgentActivity::Idle => "Idle",
+                    AgentActivity::Processing => "Processing...",
+                    AgentActivity::Generating => "Generating",
+                    AgentActivity::ToolUse => "Tool Use",
+                    AgentActivity::AwaitingConfirmation => "Confirm?",
+                    AgentActivity::Custom(name) => name.as_str(),
+                };
+                // Include agent type prefix for non-Claude agents
+                if state.agent_type == "claude" {
+                    format!("{} [{}]", base_title, activity)
+                } else {
+                    format!("{} [{}:{}]", base_title, state.agent_type, activity)
+                }
+            }
             PaneState::Claude(state) => {
                 let activity = match state.activity {
                     ClaudeActivity::Idle => "Idle",
@@ -764,8 +798,10 @@ pub fn render_pane(pane: &Pane, area: Rect, buf: &mut Buffer, tick_count: u64) {
         // Render copy mode cursor
         render_copy_mode_cursor(pane, inner, buf, tick_count);
 
-        // Render Claude state indicator if applicable
-        if let Some(activity) = pane.claude_activity() {
+        // Render agent/Claude state indicator if applicable (FEAT-084)
+        if let Some(state) = pane.agent_state() {
+            render_agent_indicator(state, inner, buf, tick_count);
+        } else if let Some(activity) = pane.claude_activity() {
             render_claude_indicator(activity, inner, buf, tick_count);
         }
     }
@@ -864,7 +900,48 @@ fn render_copy_mode_cursor(pane: &Pane, area: Rect, buf: &mut Buffer, tick_count
     }
 }
 
-/// Render Claude state indicator in the pane
+/// Render agent state indicator in the pane (FEAT-084)
+fn render_agent_indicator(state: &AgentState, area: Rect, buf: &mut Buffer, tick_count: u64) {
+    // Small indicator in top-right corner
+    if area.width < 5 || area.height < 1 {
+        return;
+    }
+
+    let indicator = match &state.activity {
+        AgentActivity::Idle => "[ ]",
+        AgentActivity::Processing => {
+            let frames = ["[.  ]", "[.. ]", "[...]", "[ ..]", "[  .]", "[   ]"];
+            frames[(tick_count / 3) as usize % frames.len()]
+        }
+        AgentActivity::Generating => "[>]",
+        AgentActivity::ToolUse => "[*]",
+        AgentActivity::AwaitingConfirmation => "[?]",
+        AgentActivity::Custom(_) => "[~]",
+    };
+
+    let style = match &state.activity {
+        AgentActivity::Idle => Style::default().fg(Color::DarkGray),
+        AgentActivity::Processing => Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+        AgentActivity::Generating => Style::default().fg(Color::Green),
+        AgentActivity::ToolUse => Style::default().fg(Color::Blue),
+        AgentActivity::AwaitingConfirmation => Style::default().fg(Color::Magenta),
+        AgentActivity::Custom(_) => Style::default().fg(Color::Cyan),
+    };
+
+    let x = area.x + area.width.saturating_sub(indicator.len() as u16 + 1);
+    let y = area.y;
+
+    for (i, ch) in indicator.chars().enumerate() {
+        let cell_x = x + (i as u16);
+        if cell_x < area.x + area.width {
+            if let Some(cell) = buf.cell_mut((cell_x, y)) {
+                cell.set_char(ch).set_style(style);
+            }
+        }
+    }
+}
+
+/// Render Claude state indicator in the pane (deprecated, use render_agent_indicator)
 fn render_claude_indicator(activity: &ClaudeActivity, area: Rect, buf: &mut Buffer, tick_count: u64) {
     // Small indicator in top-right corner
     if area.width < 5 || area.height < 1 {

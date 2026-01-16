@@ -402,10 +402,13 @@ impl SessionRestorer {
     }
 
     /// Determine if a PTY should be spawned for a pane based on its state
+    #[allow(deprecated)]
     fn should_spawn_pty(state: &PaneState) -> bool {
         match state {
             // Normal panes always get a PTY
             PaneState::Normal => true,
+            // Agent panes get a PTY (agents run in shell)
+            PaneState::Agent(_) => true,
             // Claude panes get a PTY (Claude Code runs in shell)
             PaneState::Claude(_) => true,
             // Exited panes don't need a PTY

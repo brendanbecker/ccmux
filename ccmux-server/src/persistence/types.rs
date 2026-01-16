@@ -11,7 +11,11 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Current checkpoint format version
-pub const CHECKPOINT_VERSION: u32 = 1;
+///
+/// Version history:
+/// - 1: Initial format with ClaudeState
+/// - 2: Added AgentState variant to PaneState (FEAT-084)
+pub const CHECKPOINT_VERSION: u32 = 2;
 
 /// Magic bytes for checkpoint file identification
 pub const CHECKPOINT_MAGIC: [u8; 4] = *b"CCCP"; // CcmuX Checkpoint

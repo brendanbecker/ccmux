@@ -6,7 +6,8 @@ use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 use vt100::Parser;
-use ccmux_protocol::{ClaudeActivity, ClaudeState, PaneInfo, PaneState, PaneStuckStatus};
+use ccmux_protocol::{AgentActivity, AgentState, ClaudeActivity, ClaudeState, PaneInfo, PaneState, PaneStuckStatus};
+use crate::agents::DetectorRegistry;
 use crate::claude::ClaudeDetector;
 use crate::config::SessionType;
 use crate::isolation;
@@ -41,7 +42,10 @@ pub struct Pane {
     scrollback: ScrollbackBuffer,
     /// vt100 parser for terminal emulation
     parser: Option<Parser>,
-    /// Claude detector for state tracking
+    /// Agent detector registry for state tracking (FEAT-084)
+    agent_detector: DetectorRegistry,
+    /// Claude detector for state tracking (deprecated, use agent_detector)
+    #[deprecated(since = "0.2.0", note = "Use agent_detector instead")]
     claude_detector: ClaudeDetector,
     /// Beads root directory if detected (FEAT-057)
     beads_root: Option<PathBuf>,
@@ -68,7 +72,7 @@ impl fmt::Debug for Pane {
             .field("session_type", &self.session_type)
             .field("scrollback", &self.scrollback)
             .field("parser", &self.parser.as_ref().map(|_| "Parser { ... }"))
-            .field("claude_detector", &self.claude_detector)
+            .field("agent_detector", &self.agent_detector)
             .field("beads_root", &self.beads_root)
             .finish()
     }
@@ -106,6 +110,8 @@ impl Pane {
             session_type,
             scrollback: ScrollbackBuffer::new(scrollback_lines),
             parser: None,
+            agent_detector: DetectorRegistry::with_defaults(),
+            #[allow(deprecated)]
             claude_detector: ClaudeDetector::new(),
             beads_root: None,
             bracketed_paste_enabled: false,
@@ -130,11 +136,23 @@ impl Pane {
         created_at: u64,
     ) -> Self {
         let created_at = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(created_at);
-        // If restoring a Claude pane, pre-mark the detector
+        // If restoring an agent pane, pre-mark the detector
+        let mut agent_detector = DetectorRegistry::with_defaults();
+        #[allow(deprecated)]
         let mut claude_detector = ClaudeDetector::new();
-        if matches!(state, PaneState::Claude(_)) {
-            claude_detector.mark_as_claude();
+
+        #[allow(deprecated)]
+        match &state {
+            PaneState::Agent(agent_state) => {
+                agent_detector.mark_as_active(&agent_state.agent_type);
+            }
+            PaneState::Claude(_) => {
+                agent_detector.mark_as_active("claude");
+                claude_detector.mark_as_claude();
+            }
+            _ => {}
         }
+
         Self {
             id,
             window_id,
@@ -150,6 +168,8 @@ impl Pane {
             session_type: SessionType::Default,
             scrollback: ScrollbackBuffer::new(DEFAULT_SCROLLBACK_LINES),
             parser: None,
+            agent_detector,
+            #[allow(deprecated)]
             claude_detector,
             beads_root: None,
             bracketed_paste_enabled: false,
@@ -239,12 +259,71 @@ impl Pane {
         &self.metadata
     }
 
-    /// Check if this is a Claude pane
+    // ==================== Generic Agent Detection (FEAT-084) ====================
+
+    /// Check if this pane has an active agent
+    pub fn is_agent(&self) -> bool {
+        self.state.is_agent()
+    }
+
+    /// Get the agent state if this is an agent pane
+    pub fn agent_state(&self) -> Option<AgentState> {
+        self.state.agent_state()
+    }
+
+    /// Get reference to the agent detector registry
+    pub fn agent_detector(&self) -> &DetectorRegistry {
+        &self.agent_detector
+    }
+
+    /// Get mutable reference to the agent detector registry
+    pub fn agent_detector_mut(&mut self) -> &mut DetectorRegistry {
+        &mut self.agent_detector
+    }
+
+    /// Set agent state (FEAT-084)
+    pub fn set_agent_state(&mut self, state: AgentState) {
+        self.agent_detector.mark_as_active(&state.agent_type);
+        self.state = PaneState::Agent(state);
+        self.state_changed_at = SystemTime::now();
+    }
+
+    /// Mark this pane as running a specific agent type
+    ///
+    /// Call this when an agent is started via a known command.
+    pub fn mark_as_agent(&mut self, agent_type: &str) {
+        self.agent_detector.mark_as_active(agent_type);
+        if let Some(state) = self.agent_detector.active_state() {
+            self.state = PaneState::Agent(state);
+            self.state_changed_at = SystemTime::now();
+        }
+    }
+
+    /// Reset agent detection state
+    ///
+    /// Call this when the process exits or restarts.
+    pub fn reset_agent_detection(&mut self) {
+        self.agent_detector.reset();
+        #[allow(deprecated)]
+        self.claude_detector.reset();
+        self.state = PaneState::Normal;
+        self.state_changed_at = SystemTime::now();
+    }
+
+    // ==================== Claude-Specific Methods (Backward Compatibility) ====================
+
+    /// Check if this is a Claude pane (includes both Agent and deprecated Claude states)
+    #[allow(deprecated)]
     pub fn is_claude(&self) -> bool {
-        matches!(self.state, PaneState::Claude(_))
+        match &self.state {
+            PaneState::Agent(state) => state.is_claude(),
+            PaneState::Claude(_) => true,
+            _ => false,
+        }
     }
 
     /// Get Claude state if this is a Claude pane
+    #[allow(deprecated)]
     pub fn claude_state(&self) -> Option<&ClaudeState> {
         match &self.state {
             PaneState::Claude(state) => Some(state),
@@ -255,10 +334,15 @@ impl Pane {
     /// Check if pane is awaiting user input (AwaitingConfirmation or Idle state)
     ///
     /// Returns true if:
-    /// - This is a Claude pane in AwaitingConfirmation state
-    /// - This is a Claude pane in Idle state (also waiting for input)
+    /// - This is an agent pane in AwaitingConfirmation state
+    /// - This is an agent pane in Idle state (also waiting for input)
+    #[allow(deprecated)]
     pub fn is_awaiting_input(&self) -> bool {
         match &self.state {
+            PaneState::Agent(state) => matches!(
+                state.activity,
+                AgentActivity::AwaitingConfirmation | AgentActivity::Idle
+            ),
             PaneState::Claude(state) => matches!(
                 state.activity,
                 ClaudeActivity::AwaitingConfirmation | ClaudeActivity::Idle
@@ -268,8 +352,12 @@ impl Pane {
     }
 
     /// Check specifically if pane is awaiting confirmation (tool use approval, etc.)
+    #[allow(deprecated)]
     pub fn is_awaiting_confirmation(&self) -> bool {
         match &self.state {
+            PaneState::Agent(state) => {
+                matches!(state.activity, AgentActivity::AwaitingConfirmation)
+            }
             PaneState::Claude(state) => {
                 matches!(state.activity, ClaudeActivity::AwaitingConfirmation)
             }
@@ -277,20 +365,27 @@ impl Pane {
         }
     }
 
-    /// Update Claude state
+    /// Update Claude state (deprecated, use set_agent_state instead)
+    #[allow(deprecated)]
+    #[deprecated(since = "0.2.0", note = "Use set_agent_state instead")]
     pub fn set_claude_state(&mut self, state: ClaudeState) {
+        // Keep using PaneState::Claude for backward compatibility with claude_state() reference
+        self.agent_detector.mark_as_active("claude");
+        self.claude_detector.mark_as_claude();
         self.state = PaneState::Claude(state);
         self.state_changed_at = SystemTime::now();
-        // Also mark the detector
-        self.claude_detector.mark_as_claude();
     }
 
-    /// Get reference to Claude detector
+    /// Get reference to Claude detector (deprecated, use agent_detector instead)
+    #[allow(deprecated)]
+    #[deprecated(since = "0.2.0", note = "Use agent_detector instead")]
     pub fn claude_detector(&self) -> &ClaudeDetector {
         &self.claude_detector
     }
 
-    /// Get mutable reference to Claude detector
+    /// Get mutable reference to Claude detector (deprecated, use agent_detector_mut instead)
+    #[allow(deprecated)]
+    #[deprecated(since = "0.2.0", note = "Use agent_detector_mut instead")]
     pub fn claude_detector_mut(&mut self) -> &mut ClaudeDetector {
         &mut self.claude_detector
     }
@@ -298,10 +393,12 @@ impl Pane {
     /// Mark this pane as running Claude Code
     ///
     /// Call this when Claude is started via a known command.
+    #[allow(deprecated)]
     pub fn mark_as_claude(&mut self) {
+        self.agent_detector.mark_as_active("claude");
         self.claude_detector.mark_as_claude();
-        if let Some(state) = self.claude_detector.state() {
-            self.state = PaneState::Claude(state);
+        if let Some(state) = self.agent_detector.active_state() {
+            self.state = PaneState::Agent(state);
             self.state_changed_at = SystemTime::now();
         }
     }
@@ -309,33 +406,31 @@ impl Pane {
     /// Mark this pane as running Claude Code with a specific session ID
     ///
     /// Call this when Claude is started with an injected session ID.
+    #[allow(deprecated)]
     pub fn mark_as_claude_with_session(&mut self, session_id: String) {
+        self.agent_detector.mark_as_active("claude");
         self.claude_detector.mark_as_claude();
-        let state = ClaudeState {
-            session_id: Some(session_id),
-            activity: ClaudeActivity::Idle,
-            model: None,
-            tokens_used: None,
-        };
-        self.state = PaneState::Claude(state);
+        let state = AgentState::new("claude")
+            .with_session_id(session_id)
+            .with_activity(AgentActivity::Idle);
+        self.state = PaneState::Agent(state);
         self.state_changed_at = SystemTime::now();
     }
 
-    /// Reset Claude detection state
-    ///
-    /// Call this when the process exits or restarts.
+    /// Reset Claude detection state (deprecated, use reset_agent_detection instead)
+    #[allow(deprecated)]
+    #[deprecated(since = "0.2.0", note = "Use reset_agent_detection instead")]
     pub fn reset_claude_detection(&mut self) {
-        self.claude_detector.reset();
-        self.state = PaneState::Normal;
-        self.state_changed_at = SystemTime::now();
+        self.reset_agent_detection();
     }
 
     /// Clean up isolation directory for this pane
     ///
-    /// Call this when a Claude pane is closed or the process exits.
-    /// Safe to call on non-Claude panes (no-op).
+    /// Call this when an agent pane is closed or the process exits.
+    /// Safe to call on non-agent panes (no-op).
+    #[allow(deprecated)]
     pub fn cleanup_isolation(&self) {
-        if self.claude_detector.is_claude() || self.is_claude() {
+        if self.agent_detector.is_agent_active() || self.is_agent() {
             if let Err(e) = isolation::cleanup_config_dir(self.id) {
                 tracing::warn!(
                     "Failed to cleanup isolation dir for pane {}: {}",
@@ -454,8 +549,9 @@ impl Pane {
 
     /// Process terminal output through the parser
     ///
-    /// Returns `Some(ClaudeState)` if Claude state changed, `None` otherwise.
-    pub fn process(&mut self, data: &[u8]) -> Option<ClaudeState> {
+    /// Returns `Some(AgentState)` if agent state changed, `None` otherwise.
+    #[allow(deprecated)]
+    pub fn process(&mut self, data: &[u8]) -> Option<AgentState> {
         if let Some(parser) = &mut self.parser {
             parser.process(data);
         }
@@ -474,14 +570,12 @@ impl Pane {
         // Also push to scrollback
         self.scrollback.push_bytes(data);
 
-        // Analyze output for Claude state changes
-        if let Some(_activity) = self.claude_detector.analyze(&text) {
+        // Analyze output for agent state changes (FEAT-084)
+        if let Some(agent_state) = self.agent_detector.analyze(&text) {
             // State changed - update pane state and return new state
-            if let Some(claude_state) = self.claude_detector.state() {
-                self.state = PaneState::Claude(claude_state.clone());
-                self.state_changed_at = SystemTime::now();
-                return Some(claude_state);
-            }
+            self.state = PaneState::Agent(agent_state.clone());
+            self.state_changed_at = SystemTime::now();
+            return Some(agent_state);
         }
         None
     }
@@ -522,35 +616,30 @@ impl Pane {
     }
 
     /// Check if the pane is stuck or running slowly
+    #[allow(deprecated)]
     fn check_stuck_status(&self) -> Option<PaneStuckStatus> {
-        // Only relevant for Claude panes
-        let claude_state = match &self.state {
-            PaneState::Claude(state) => state,
-            _ => return None,
-        };
-
         let now = SystemTime::now();
         let duration = now
             .duration_since(self.state_changed_at)
             .unwrap_or(Duration::from_secs(0))
             .as_secs();
 
-        match claude_state.activity {
-            ClaudeActivity::Thinking => {
+        // Helper to determine stuck status based on activity type
+        let check_activity = |is_processing: bool, is_tool_use: bool| -> Option<PaneStuckStatus> {
+            if is_processing {
                 if duration > 120 {
-                    // > 2 minutes thinking
+                    // > 2 minutes processing
                     Some(PaneStuckStatus::Stuck {
                         duration,
-                        reason: "Thinking timeout (2m)".to_string(),
+                        reason: "Processing timeout (2m)".to_string(),
                     })
                 } else if duration > 60 {
-                    // > 1 minute thinking
+                    // > 1 minute processing
                     Some(PaneStuckStatus::Slow { duration })
                 } else {
                     None
                 }
-            }
-            ClaudeActivity::ToolUse => {
+            } else if is_tool_use {
                 if duration > 300 {
                     // > 5 minutes tool use
                     Some(PaneStuckStatus::Stuck {
@@ -563,8 +652,23 @@ impl Pane {
                 } else {
                     None
                 }
+            } else {
+                // Other states don't have implicit timeouts
+                None
             }
-            // Other states (Idle, Coding, AwaitingConfirmation) don't have implicit timeouts
+        };
+
+        match &self.state {
+            PaneState::Agent(state) => {
+                let is_processing = matches!(state.activity, AgentActivity::Processing);
+                let is_tool_use = matches!(state.activity, AgentActivity::ToolUse);
+                check_activity(is_processing, is_tool_use)
+            }
+            PaneState::Claude(state) => {
+                let is_processing = matches!(state.activity, ClaudeActivity::Thinking);
+                let is_tool_use = matches!(state.activity, ClaudeActivity::ToolUse);
+                check_activity(is_processing, is_tool_use)
+            }
             _ => None,
         }
     }

@@ -30,6 +30,7 @@ impl<'a> ToolContext<'a> {
     }
 
     /// List panes, optionally filtered by session name
+    #[allow(deprecated)]
     pub fn list_panes(&self, session_filter: Option<&str>) -> Result<String, McpError> {
         let sessions = self.session_manager.list_sessions();
         let mut panes = Vec::new();
@@ -76,6 +77,9 @@ impl<'a> ToolContext<'a> {
                         }),
                         "state": match pane.state() {
                             PaneState::Normal => "normal",
+                            PaneState::Agent(state) => {
+                                if state.is_claude() { "claude" } else { "agent" }
+                            }
                             PaneState::Claude(_) => "claude",
                             PaneState::Exited { .. } => "exited",
                         },
@@ -536,6 +540,7 @@ impl<'a> ToolContext<'a> {
     }
 
     /// Get detailed status of a pane
+    #[allow(deprecated)]
     pub fn get_status(&self, pane_id: Uuid) -> Result<String, McpError> {
         let (session, window, pane) = self
             .session_manager
@@ -559,6 +564,14 @@ impl<'a> ToolContext<'a> {
             "has_pty": has_pty,
             "state": match pane.state() {
                 PaneState::Normal => serde_json::json!({"type": "normal"}),
+                PaneState::Agent(state) => serde_json::json!({
+                    "type": if state.is_claude() { "claude" } else { "agent" },
+                    "agent_type": state.agent_type,
+                    "session_id": state.session_id,
+                    "activity": format!("{:?}", state.activity),
+                    "model": state.get_metadata("model"),
+                    "tokens_used": state.get_metadata("tokens_used"),
+                }),
                 PaneState::Claude(state) => serde_json::json!({
                     "type": "claude",
                     "session_id": state.session_id,

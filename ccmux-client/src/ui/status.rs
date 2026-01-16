@@ -11,7 +11,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::Span;
 use ratatui::widgets::Widget;
 
-use ccmux_protocol::{ClaudeActivity, SessionInfo};
+use ccmux_protocol::{AgentActivity, AgentState, ClaudeActivity, SessionInfo};
 
 /// Connection status for display
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,7 +54,10 @@ pub struct StatusBar {
     pane_count: usize,
     /// Active pane name/index
     active_pane: Option<String>,
-    /// Claude activity for current pane
+    /// Agent state for current pane (FEAT-084)
+    agent_state: Option<AgentState>,
+    /// Claude activity for current pane (deprecated, use agent_state)
+    #[deprecated(since = "0.2.0", note = "Use agent_state instead")]
     claude_activity: Option<ClaudeActivity>,
     /// Custom message to display (errors, etc.)
     message: Option<(String, Style)>,
@@ -70,12 +73,14 @@ pub struct StatusBar {
 
 impl StatusBar {
     /// Create a new status bar
+    #[allow(deprecated)]
     pub fn new() -> Self {
         Self {
             session: None,
             connection_status: ConnectionStatus::Disconnected,
             pane_count: 0,
             active_pane: None,
+            agent_state: None,
             claude_activity: None,
             message: None,
             show_hints: true,
@@ -105,7 +110,19 @@ impl StatusBar {
         self.active_pane = name;
     }
 
-    /// Set Claude activity
+    /// Set agent state (FEAT-084)
+    pub fn set_agent_state(&mut self, state: Option<AgentState>) {
+        self.agent_state = state;
+    }
+
+    /// Get agent state
+    pub fn agent_state(&self) -> Option<&AgentState> {
+        self.agent_state.as_ref()
+    }
+
+    /// Set Claude activity (deprecated, use set_agent_state)
+    #[allow(deprecated)]
+    #[deprecated(since = "0.2.0", note = "Use set_agent_state instead")]
     pub fn set_claude_activity(&mut self, activity: Option<ClaudeActivity>) {
         self.claude_activity = activity;
     }
@@ -215,13 +232,17 @@ impl StatusBar {
         spans
     }
 
-    /// Build the center section (messages, Claude indicator)
+    /// Build the center section (messages, agent/Claude indicator)
+    #[allow(deprecated)]
     fn center_section(&self) -> Vec<Span<'static>> {
         let mut spans = Vec::new();
 
-        // Priority: message > Claude activity
+        // Priority: message > agent state > Claude activity (deprecated)
         if let Some((ref msg, style)) = self.message {
             spans.push(Span::styled(msg.clone(), style));
+        } else if let Some(ref state) = self.agent_state {
+            let (indicator, style) = self.agent_indicator_styled(state);
+            spans.push(Span::styled(indicator, style));
         } else if let Some(ref activity) = self.claude_activity {
             let (indicator, style) = self.claude_indicator_styled(activity);
             spans.push(Span::styled(indicator, style));
@@ -252,7 +273,49 @@ impl StatusBar {
         spans
     }
 
-    /// Get Claude indicator with style
+    /// Get agent indicator with style (FEAT-084)
+    fn agent_indicator_styled(&self, state: &AgentState) -> (String, Style) {
+        // Determine prefix based on agent type
+        let prefix = match state.agent_type.as_str() {
+            "claude" => "Claude",
+            "copilot" => "Copilot",
+            "aider" => "Aider",
+            other => other,
+        };
+
+        match &state.activity {
+            AgentActivity::Idle => (
+                format!("[{}] Idle", prefix.chars().next().unwrap_or('A')),
+                Style::default().fg(Color::DarkGray),
+            ),
+            AgentActivity::Processing => {
+                let frames = ["[.  ]", "[.. ]", "[...]", "[ ..]", "[  .]", "[   ]"];
+                let frame = frames[(self.tick_count / 3) as usize % frames.len()];
+                (
+                    format!("{} {} Processing", frame, prefix),
+                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                )
+            }
+            AgentActivity::Generating => (
+                format!("[>] {} Generating", prefix),
+                Style::default().fg(Color::Green),
+            ),
+            AgentActivity::ToolUse => (
+                format!("[*] {} Tool Use", prefix),
+                Style::default().fg(Color::Blue),
+            ),
+            AgentActivity::AwaitingConfirmation => (
+                format!("[?] {} Confirm", prefix),
+                Style::default().fg(Color::Magenta).add_modifier(Modifier::BOLD),
+            ),
+            AgentActivity::Custom(name) => (
+                format!("[~] {} {}", prefix, name),
+                Style::default().fg(Color::Cyan),
+            ),
+        }
+    }
+
+    /// Get Claude indicator with style (deprecated, use agent_indicator_styled)
     fn claude_indicator_styled(&self, activity: &ClaudeActivity) -> (String, Style) {
         match activity {
             ClaudeActivity::Idle => (
