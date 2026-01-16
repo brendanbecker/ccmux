@@ -73,6 +73,8 @@ pub enum ClientMessage {
     Connect {
         client_id: Uuid,
         protocol_version: u32,
+        /// Type of client identifying its role (FEAT-079)
+        client_type: ClientType,
     },
 
     /// Request list of sessions
@@ -704,6 +706,7 @@ mod tests {
         let msg = ClientMessage::Connect {
             client_id,
             protocol_version: 1,
+            client_type: crate::ClientType::Tui,
         };
 
         // Test clone

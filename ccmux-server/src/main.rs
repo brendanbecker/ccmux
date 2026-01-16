@@ -1416,6 +1416,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: PROTOCOL_VERSION,
+            client_type: ccmux_protocol::ClientType::Tui,
         };
         tokio_util::codec::Encoder::encode(&mut client_codec, connect_msg, &mut buf).unwrap();
         client_stream.write_all(&buf).await.unwrap();
@@ -1471,6 +1472,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: 9999, // Invalid version
+            client_type: ccmux_protocol::ClientType::Tui,
         };
         tokio_util::codec::Encoder::encode(&mut client_codec, connect_msg, &mut buf).unwrap();
         client_stream.write_all(&buf).await.unwrap();
@@ -1723,6 +1725,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: PROTOCOL_VERSION,
+            client_type: ccmux_protocol::ClientType::Tui,
         };
         Encoder::encode(&mut tui_codec, connect_msg, &mut buf).unwrap();
         tui_client_stream.write_all(&buf).await.unwrap();
@@ -1796,6 +1799,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: PROTOCOL_VERSION,
+            client_type: ccmux_protocol::ClientType::Agent,
         };
         Encoder::encode(&mut mcp_codec, connect_msg, &mut buf).unwrap();
         mcp_client_stream.write_all(&buf).await.unwrap();

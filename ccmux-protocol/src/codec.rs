@@ -156,6 +156,7 @@ mod tests {
         let msg = ClientMessage::Connect {
             client_id: Uuid::new_v4(),
             protocol_version: 1,
+            client_type: crate::ClientType::Tui,
         };
 
         let mut buf = BytesMut::new();
@@ -226,6 +227,7 @@ mod tests {
             ClientMessage::Connect {
                 client_id: Uuid::new_v4(),
                 protocol_version: 1,
+                client_type: crate::ClientType::Tui,
             },
             ClientMessage::ListSessions,
             ClientMessage::CreateSession {

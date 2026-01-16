@@ -5,7 +5,7 @@
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use ccmux_protocol::{ErrorCode, ServerMessage, PROTOCOL_VERSION};
+use ccmux_protocol::{ClientType, ErrorCode, ServerMessage, PROTOCOL_VERSION};
 
 use super::{HandlerContext, HandlerResult};
 
@@ -15,10 +15,11 @@ impl HandlerContext {
         &self,
         client_uuid: Uuid,
         protocol_version: u32,
+        client_type: ClientType,
     ) -> HandlerResult {
         info!(
-            "Client {} (UUID: {}) connecting with protocol version {}",
-            self.client_id, client_uuid, protocol_version
+            "Client {} (UUID: {}, type: {:?}) connecting with protocol version {}",
+            self.client_id, client_uuid, client_type, protocol_version
         );
 
         if protocol_version != PROTOCOL_VERSION {
@@ -30,6 +31,9 @@ impl HandlerContext {
                 ),
             );
         }
+
+        // Store client type in registry
+        self.registry.set_client_type(self.client_id, client_type);
 
         HandlerResult::Response(ServerMessage::Connected {
             server_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -193,7 +197,7 @@ mod tests {
     async fn test_handle_connect_success() {
         let ctx = create_test_context();
         let result = ctx
-            .handle_connect(Uuid::new_v4(), PROTOCOL_VERSION)
+            .handle_connect(Uuid::new_v4(), PROTOCOL_VERSION, ClientType::Tui)
             .await;
 
         match result {
@@ -209,7 +213,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_connect_version_mismatch() {
         let ctx = create_test_context();
-        let result = ctx.handle_connect(Uuid::new_v4(), 9999).await;
+        let result = ctx.handle_connect(Uuid::new_v4(), 9999, ClientType::Tui).await;
 
         match result {
             HandlerResult::Response(ServerMessage::Error { code, message }) => {

@@ -36,8 +36,8 @@ use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use uuid::Uuid;
 
 use ccmux_protocol::{
-    ClientMessage, ClaudeActivity, PaneInfo, PaneState, PaneStuckStatus, ServerMessage, SessionInfo,
-    SplitDirection, WindowInfo,
+    ClaudeActivity, ClientMessage, ClientType, PaneInfo, PaneState, PaneStuckStatus, ServerMessage,
+    SessionInfo, SplitDirection, WindowInfo,
 };
 use ccmux_utils::Result;
 
@@ -273,6 +273,7 @@ impl App {
                     .send(ClientMessage::Connect {
                         client_id: self.client_id,
                         protocol_version: ccmux_protocol::PROTOCOL_VERSION,
+                        client_type: ClientType::Tui,
                     })
                     .await?;
                 Ok(())

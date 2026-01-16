@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use ccmux_protocol::ServerMessage;
+use ccmux_protocol::{ClientType, ServerMessage};
 
 /// Type alias for session IDs (matches the Uuid type used in session module)
 pub type SessionId = Uuid;
@@ -45,12 +45,15 @@ pub struct ClientEntry {
     pub sender: mpsc::Sender<ServerMessage>,
     /// Session this client is attached to (if any)
     pub attached_session: Option<SessionId>,
+    /// Type of client (FEAT-079)
+    pub client_type: ClientType,
 }
 
 impl std::fmt::Debug for ClientEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClientEntry")
             .field("attached_session", &self.attached_session)
+            .field("client_type", &self.client_type)
             .field("sender_closed", &self.sender.is_closed())
             .finish()
     }
@@ -95,12 +98,24 @@ impl ClientRegistry {
         let entry = ClientEntry {
             sender,
             attached_session: None,
+            client_type: ClientType::Tui, // Default until Connect message
         };
 
         self.clients.insert(id, entry);
-        debug!("Registered client {}", id);
-
         id
+    }
+
+    /// Set the type for a registered client
+    pub fn set_client_type(&self, client_id: ClientId, client_type: ClientType) {
+        if let Some(mut entry) = self.clients.get_mut(&client_id) {
+            entry.client_type = client_type;
+            debug!(client = %client_id, ?client_type, "Client type updated");
+        }
+    }
+
+    /// Get the type of a client
+    pub fn get_client_type(&self, client_id: ClientId) -> Option<ClientType> {
+        self.clients.get(&client_id).map(|e| e.client_type)
     }
 
     /// Unregister a client connection
@@ -1104,6 +1119,7 @@ mod tests {
         let entry = ClientEntry {
             sender: tx,
             attached_session: Some(Uuid::new_v4()),
+            client_type: ccmux_protocol::ClientType::Tui,
         };
 
         let debug = format!("{:?}", entry);

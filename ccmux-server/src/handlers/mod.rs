@@ -16,7 +16,7 @@ use uuid::Uuid;
 
 use ccmux_protocol::{ClientMessage, ErrorCode, ServerMessage};
 
-use crate::arbitration::Arbitrator;
+use crate::arbitration::{Action, Actor, Arbitrator, Resource};
 use crate::config::AppConfig;
 use crate::pty::{PaneClosedNotification, PtyManager};
 use crate::registry::{ClientId, ClientRegistry};
@@ -103,6 +103,34 @@ impl HandlerContext {
         }
     }
 
+    /// Get the actor for this context based on client type
+    pub fn actor(&self) -> Actor {
+        match self.registry.get_client_type(self.client_id) {
+            Some(ccmux_protocol::ClientType::Agent) => Actor::Agent,
+            _ => Actor::Human(self.client_id),
+        }
+    }
+
+    /// Record activity for the current actor if they are human
+    pub fn record_human_activity(&self, resource: Resource, action: Action) {
+        if let Actor::Human(_) = self.actor() {
+            self.arbitrator.record_activity(resource, action);
+        }
+    }
+
+    /// Check if the current actor is allowed to perform an action on a resource
+    pub fn check_arbitration(&self, resource: Resource, action: Action) -> Result<(), HandlerResult> {
+        match self.arbitrator.check_access(self.actor(), resource, action) {
+            crate::arbitration::ArbitrationResult::Allowed => Ok(()),
+            crate::arbitration::ArbitrationResult::Blocked { remaining_ms, reason, .. } => {
+                Err(HandlerContext::error(
+                    ErrorCode::UserPriorityActive,
+                    format!("Blocked by {}: retry after {}ms", reason, remaining_ms),
+                ))
+            }
+        }
+    }
+
     /// Route a client message to the appropriate handler
     pub async fn route_message(&self, msg: ClientMessage) -> HandlerResult {
         match msg {
@@ -110,7 +138,8 @@ impl HandlerContext {
             ClientMessage::Connect {
                 client_id,
                 protocol_version,
-            } => self.handle_connect(client_id, protocol_version).await,
+                client_type,
+            } => self.handle_connect(client_id, protocol_version, client_type).await,
 
             ClientMessage::Ping => self.handle_ping(),
 
@@ -454,6 +483,7 @@ mod tests {
             .route_message(ClientMessage::Connect {
                 client_id: Uuid::new_v4(),
                 protocol_version: PROTOCOL_VERSION,
+                client_type: ccmux_protocol::ClientType::Tui,
             })
             .await;
 
@@ -470,6 +500,7 @@ mod tests {
             .route_message(ClientMessage::Connect {
                 client_id: Uuid::new_v4(),
                 protocol_version: 9999,
+                client_type: ccmux_protocol::ClientType::Tui,
             })
             .await;
 

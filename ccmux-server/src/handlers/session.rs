@@ -6,6 +6,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 use ccmux_utils::CcmuxError;
 
+use crate::arbitration::{Action, Resource};
 use crate::pty::{PtyConfig, PtyOutputPoller};
 
 use ccmux_protocol::{ErrorCode, ServerMessage, SplitDirection};
@@ -255,6 +256,11 @@ impl HandlerContext {
             "DestroySession {} request from {}",
             session_id, self.client_id
         );
+
+        // FEAT-079: Check arbitration before destroying session (kill action)
+        if let Err(blocked) = self.check_arbitration(Resource::Session(session_id), Action::Kill) {
+            return blocked;
+        }
 
         // Collect pane IDs and session name for PTY cleanup before removing session
         let (pane_ids, session_name): (Vec<Uuid>, String) = {

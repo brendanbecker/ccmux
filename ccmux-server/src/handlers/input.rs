@@ -8,6 +8,7 @@ use uuid::Uuid;
 use ccmux_protocol::{ErrorCode, ReplyMessage, ServerMessage};
 
 use super::{HandlerContext, HandlerResult};
+use crate::arbitration::{Action, Resource};
 use crate::reply::ReplyHandler;
 
 impl HandlerContext {
@@ -21,6 +22,11 @@ impl HandlerContext {
             self.client_id
         );
 
+        // FEAT-079: Check arbitration before sending input
+        if let Err(blocked) = self.check_arbitration(Resource::Pane(pane_id), Action::Input) {
+            return blocked;
+        }
+
         // Check pane exists
         {
             let session_manager = self.session_manager.read().await;
@@ -31,6 +37,9 @@ impl HandlerContext {
                 );
             }
         }
+
+        // FEAT-079: Record human activity if this is a human actor
+        self.record_human_activity(Resource::Pane(pane_id), Action::Input);
 
         // Write to PTY
         let pty_manager = self.pty_manager.read().await;

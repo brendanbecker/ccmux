@@ -12,7 +12,7 @@ use tokio::time::timeout;
 use tokio_util::codec::Framed;
 use uuid::Uuid;
 
-use ccmux_protocol::{ClientCodec, ClientMessage, ServerMessage, PROTOCOL_VERSION};
+use ccmux_protocol::{ClientCodec, ClientMessage, ClientType, ServerMessage, PROTOCOL_VERSION};
 use ccmux_utils::{socket_path, CcmuxError, Result};
 
 /// Timeout for server responses
@@ -59,6 +59,7 @@ impl Client {
         let connect_msg = ClientMessage::Connect {
             client_id: self.client_id,
             protocol_version: PROTOCOL_VERSION,
+            client_type: ClientType::Cli,
         };
 
         self.framed

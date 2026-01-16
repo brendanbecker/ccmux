@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use ccmux_protocol::{ErrorCode, ServerMessage, SplitDirection};
 
+use crate::arbitration::{Action, Resource};
 use crate::beads::{self, metadata_keys};
 use crate::pty::{PtyConfig, PtyOutputPoller};
 
@@ -28,6 +29,14 @@ impl HandlerContext {
             "CreatePane in window {} request from {} (direction: {:?})",
             window_id, self.client_id, direction
         );
+
+        // FEAT-079: Check arbitration before creating pane (layout change)
+        if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
+            return blocked;
+        }
+
+        // FEAT-079: Record human activity if this is a human actor
+        self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
         // Default terminal size for new panes
         let (cols, rows) = (80, 24);
@@ -344,6 +353,11 @@ impl HandlerContext {
     pub async fn handle_close_pane(&self, pane_id: Uuid) -> HandlerResult {
         info!("ClosePane {} request from {}", pane_id, self.client_id);
 
+        // FEAT-079: Check arbitration before closing pane (kill action)
+        if let Err(blocked) = self.check_arbitration(Resource::Pane(pane_id), Action::Kill) {
+            return blocked;
+        }
+
         // First, find the pane to get session info
         let (session_id, window_id) = {
             let session_manager = self.session_manager.read().await;
@@ -410,6 +424,14 @@ impl HandlerContext {
             "Resize pane {} to {}x{} request from {}",
             pane_id, cols, rows, self.client_id
         );
+
+        // FEAT-079: Check arbitration before resizing
+        if let Err(blocked) = self.check_arbitration(Resource::Pane(pane_id), Action::Layout) {
+            return blocked;
+        }
+
+        // FEAT-079: Record human activity if this is a human actor
+        self.record_human_activity(Resource::Pane(pane_id), Action::Layout);
 
         // Resize PTY if exists
         {

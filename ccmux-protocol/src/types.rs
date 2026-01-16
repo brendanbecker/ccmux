@@ -167,6 +167,30 @@ pub enum PaneStuckStatus {
     Stuck { duration: u64, reason: String },
 }
 
+/// Actions that can be performed
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Action {
+    /// Change focus/selection
+    Focus,
+    /// Send text input
+    Input,
+    /// Mutate layout (resize, split)
+    Layout,
+    /// Destructive actions (kill)
+    Kill,
+}
+
+/// Type of client (FEAT-079)
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ClientType {
+    /// Interactive Terminal UI
+    Tui,
+    /// Automated Agent (MCP)
+    Agent,
+    /// Command-line tool
+    Cli,
+}
+
 /// Priority for mailbox messages (FEAT-073)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MailPriority {
