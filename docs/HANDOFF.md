@@ -10,15 +10,69 @@
 
 ## Current State (2026-01-16)
 
-**All Parallel Streams Merged**. The codebase is currently unified and stable.
+**Post-QA Assessment**: Hands-on QA testing revealed critical MCP stability issues. Three new bugs filed (BUG-043, BUG-044, BUG-045). MCP tools are intermittently unusable due to bridge hangs.
 
-### Active Workstreams (Next Tasks)
+### Active Workstreams
 
-| Stream | Focus | Worktree | Objective | Status |
-|--------|-------|----------|-----------|--------|
-| **Stream A** | User Interface | `../ccmux-stream-a` | Implement TUI Mailbox widget and info pane (FEAT-073). | **Completed** (Ready to Merge) |
-| **Stream B** | UX / Safety | `../ccmux-stream-b` | Implement Collaborative Editing Infra (FEAT-083). | Ready |
-| **Stream C** | Observability | `../ccmux-stream-c` | Implement Backend Telemetry (FEAT-074). | **Needs Attention** (Re-init required) |
+| Stream | Name | Branch | Worktree | Current Task | Status |
+|--------|------|--------|----------|--------------|--------|
+| **A** | MCP Stability | `stream-a-mcp-stability` | `../ccmux-stream-a` | BUG-043: Unwrap Sequenced | **DO FIRST** |
+| **B** | Client/TUI | `stream-b-client-tui` | `../ccmux-stream-b` | BUG-045: Windows as splits | Ready (after A) |
+| **C** | Core Daemon | `stream-c-core-daemon` | `../ccmux-stream-c` | BUG-031: Metadata persistence | Ready (parallel) |
+| **D** | Architecture | `stream-d-architecture` | `../ccmux-stream-d` | FEAT-085: ADR Dumb Pipe | Ready (parallel) |
+
+### Execution Plan
+
+**Streams A, C, D can run in parallel** - they touch completely different files:
+
+| Stream | Files Modified | Can Parallel? |
+|--------|----------------|---------------|
+| A | `ccmux-server/src/mcp/bridge/connection.rs` | Yes |
+| C | `ccmux-persistence/`, `ccmux-server/src/handlers/session.rs` | Yes |
+| D | `docs/adr/ADR-001-*.md` (new file) | Yes |
+| B | `ccmux-client/src/app.rs`, `ccmux-client/src/ui/` | **Wait for A** |
+
+```
+    A (BUG-043) ─────┐
+    C (BUG-031) ─────┼──→ merge all ──→ B (BUG-045)
+    D (FEAT-085) ────┘
+```
+
+**Stream B should wait** because verifying window rendering fixes is easier with working MCP tools (after BUG-043 is merged).
+
+### How to Start
+
+Each worktree has a `SESSION.md` with detailed task instructions:
+```bash
+cd ../ccmux-stream-a && cat SESSION.md  # BUG-043: Unwrap Sequenced
+cd ../ccmux-stream-c && cat SESSION.md  # BUG-031: Metadata persistence
+cd ../ccmux-stream-d && cat SESSION.md  # FEAT-085: ADR Dumb Pipe
+```
+
+Launch Claude sessions in each worktree to begin parallel work.
+
+### Stream Details
+
+**Stream A: MCP Stability (CRITICAL PATH)**
+- **BUG-043** (P1): MCP handlers fail to unwrap `Sequenced` message wrapper. Fix: unwrap in `recv_response_from_daemon()`.
+- **BUG-044** (P1): MCP bridge hangs indefinitely, stops reading stdin. Root cause unclear - async/sync mixing suspected.
+- **BUG-037** (P2): close_pane returns AbortError.
+- **FEAT-063** (P1): Add file logging to MCP bridge for debugging.
+
+**Stream B: Client/TUI**
+- **BUG-041** (P1): Claude Code crashes on paste inside ccmux.
+- **BUG-045** (P2): Windows rendered as horizontal splits instead of tabs.
+- **FEAT-061** (P2): Screen redraw command.
+- **FEAT-073** (P2): Visibility dashboard (stuck detection, mailbox).
+
+**Stream C: Core Daemon**
+- **BUG-031** (P1): Metadata not persisting across restarts.
+
+**Stream D: Architecture**
+- **FEAT-064/065** (P2): Refactor MCP bridge into modular components.
+- **FEAT-083** (P1): Protocol Generalization - Generic Widget System.
+- **FEAT-084** (P2): Protocol Generalization - Abstract Agent State.
+- **FEAT-085** (P1): ADR: The "Dumb Pipe" Strategy.
 
 ### Recent Activity (2026-01-16)
 
@@ -38,20 +92,27 @@
 - **FEAT-073 (P2)**: Visibility dashboard TUI views (Stream A).
 - **FEAT-074 (P2)**: Telemetry and observability dashboard (Stream C).
 
-## Backlog Highlights
+## Backlog Summary
 
-### High Priority (P0/P1)
-- **FEAT-074**: Backend Telemetry (Crucial for large-scale orchestration monitoring).
-- **BUG-039**: MCP tools hang intermittently (Added robust logging, need to monitor).
+### Open Bugs (7)
+| Priority | Bugs |
+|----------|------|
+| P1 | BUG-043, BUG-044, BUG-041, BUG-031 |
+| P2 | BUG-045, BUG-037 |
+| P3 | BUG-042 |
 
-### Architecture & Refactoring (Protocol Normalization)
-- **FEAT-085 (P1)**: ADR: The "Dumb Pipe" Strategy. (Formalize the shift away from monolithic agent OS).
-- **FEAT-083 (P1)**: Protocol Generalization: Generic Widget System. (Replace hardcoded BeadsTask).
-- **FEAT-084 (P2)**: Abstract Agent State. (Generalize ClaudeState).
+### Backlog Features (13)
+| Priority | Features |
+|----------|----------|
+| P1 | FEAT-063, FEAT-083, FEAT-085 |
+| P2 | FEAT-061, FEAT-064, FEAT-065, FEAT-073, FEAT-074, FEAT-084 |
+| P3 | FEAT-062, FEAT-076, FEAT-058, FEAT-059 |
 
-### Strategic Features
-- **FEAT-083**: Collaborative Editing Infrastructure (Stream B).
-- **FEAT-076+**: Peer-to-peer sideband synchronization.
+### Critical Path
+1. **BUG-043** → Simple fix, unblocks MCP response parsing
+2. **FEAT-063** → Enables debugging for BUG-044
+3. **BUG-044** → Fixes MCP bridge hang (may be complex)
+4. Then: Stream B/C/D work can proceed in parallel
 
 ## Reference
 
@@ -61,7 +122,46 @@
 
 ---
 
-## Session Log (2026-01-16) - Adaptive Layout & Unified Core
+## Session Log (2026-01-16) - QA Testing & Bug Discovery
+
+### Work Completed This Session
+
+1. **Hands-on QA Testing**
+   - Attempted to run DEMO-QA.md comprehensive test suite.
+   - MCP tools work initially but bridge hangs after several operations.
+   - Discovered response parsing issues with `Sequenced` message wrapper.
+
+2. **Bug Discovery & Filing**
+   - **BUG-043**: MCP handlers fail to unwrap `Sequenced` wrapper from daemon responses. Root cause identified in `is_broadcast_message()` and `recv_response_from_daemon()`.
+   - **BUG-044**: MCP bridge hangs indefinitely, stops reading stdin. Socket analysis showed 1323 bytes stuck in stdin queue, 6912 bytes from Claude Code blocked. Killing bridge and respawning works as workaround.
+   - **BUG-045**: Windows rendered as horizontal splits instead of tabs. `create_window` splits the view rather than creating a separate tab.
+
+3. **Workstream Reorganization**
+   - Reorganized backlog into 4 focused streams (A: MCP Stability, B: Client/TUI, C: Core Daemon, D: Architecture).
+   - Stream A is critical path - MCP is currently unreliable.
+
+### Key Findings
+
+**BUG-043 Root Cause** (confirmed):
+- Daemon wraps responses in `ServerMessage::Sequenced { seq, inner }` for persistence (FEAT-075).
+- `is_broadcast_message()` doesn't include `Sequenced` variant.
+- Tool handlers receive `Sequenced { inner: PaneList }` but expect `PaneList`.
+- Fix: Unwrap `Sequenced` in `recv_response_from_daemon()`.
+
+**BUG-044 Root Cause** (suspected):
+- Main loop uses sync `stdin.lock().lines()` inside async function.
+- When `handle_request().await` blocks, stdin reading stops.
+- 25-second timeout not triggering despite code being present.
+- May be related to BUG-043 causing unexpected control flow.
+
+### Next Steps
+- **Immediate**: Fix BUG-043 (simple fix, high impact).
+- **Then**: Add FEAT-063 (MCP bridge logging) to diagnose BUG-044.
+- **Then**: Fix BUG-044 (may require async stdin refactor).
+
+---
+
+## Session Log (2026-01-16 earlier) - Adaptive Layout & Unified Core
 
 ### Work Completed This Session
 1. **Adaptive Layout Engine (FEAT-082)**
@@ -76,8 +176,3 @@
 
 3. **Strategic Planning**
    - Defined work items for Protocol Generalization (FEAT-083, FEAT-084) and "Dumb Pipe" ADR (FEAT-085).
-
-### Next Steps
-- **Immediate Action**: Merge Stream A (Dashboard UI) into main. Expect conflicts in `app.rs` due to Adaptive Layout changes.
-- **Stream C Recovery**: Reset Stream C (`git checkout main && git reset --hard origin/main`) to clear the stalled cherry-pick state before starting Telemetry work.
-- **Strategic**: Begin implementing the "Dumb Pipe" ADR (FEAT-085).

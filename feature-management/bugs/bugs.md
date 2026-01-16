@@ -4,9 +4,9 @@
 **Last Updated**: 2026-01-16
 
 ## Summary Statistics
-- Total Bugs: 42
-- Open: 6
-- Resolved: 35
+- Total Bugs: 45
+- Open: 2
+- Resolved: 42
 - Deprecated: 1
 
 ## CRITICAL: Approach for Complex Bugs
@@ -22,6 +22,9 @@
 
 | ID | Description | Priority | Status | Component | Link |
 |----|-------------|----------|--------|-----------|------|
+| BUG-045 | Windows rendered as horizontal splits instead of separate tabs/screens | P2 | new | tui | [Link](BUG-045-windows-rendered-as-horizontal-splits/) |
+| BUG-044 | MCP bridge process hangs indefinitely, stops reading stdin | P1 | new | mcp-bridge | [Link](BUG-044-mcp-bridge-hangs-stops-reading-stdin/) |
+| BUG-043 | MCP handlers fail to unwrap Sequenced message wrapper | P1 | new | mcp-bridge | [Link](BUG-043-mcp-handlers-fail-to-unwrap-sequenced-wrapper/) |
 | BUG-042 | Excessive Result Nesting (Ok(Ok(...))) | P3 | new | mcp-bridge | [Link](BUG-042-excessive-result-nesting-code-smell/) |
 | BUG-041 | Claude Code crashes on paste inside ccmux | P1 | new | pty/client | [Link](BUG-041-claude-code-crashes-on-paste-inside-ccmux/) |
 | BUG-038 | create_pane returns wrong response type | P1 | fixed | mcp | [Link](BUG-038-create-pane-returns-wrong-response-type/) |
@@ -33,7 +36,12 @@
 
 | Priority | Bug | Risk | Effort | Approach |
 |----------|-----|------|--------|----------|
-| **P1** | BUG-041 | HIGH | Medium | Investigate PTY bracketed paste mode and termios settings |
+| **P3** | BUG-042 | Low | Low | Refactor Result nesting (code smell) |
+
+## Recent Activity
+
+- 2026-01-16: Created BUG-045 - Windows rendered as horizontal splits instead of separate tabs/screens
+- 2026-01-16: Created BUG-044 - MCP bridge process hangs indefinitely, stops reading stdin
 
 ## Bug Status
 
