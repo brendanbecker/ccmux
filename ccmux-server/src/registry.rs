@@ -1206,6 +1206,7 @@ mod tests {
             name: None,
             title: Some("test".to_string()),
             cwd: None,
+            stuck_status: None,
         };
         let broadcast_msg = ServerMessage::PaneCreated {
             pane: pane_info,
