@@ -1583,6 +1583,22 @@ impl HandlerContext {
             );
         };
 
+        // Release lock before persistence call
+        drop(session_manager);
+
+        // Log to persistence (BUG-031: metadata must persist across restarts)
+        if let Some(persistence_lock) = &self.persistence {
+            let persistence = persistence_lock.read().await;
+            if let Ok(seq) = persistence.log_session_metadata_set(session_id, &key, &value) {
+                persistence.push_replay(seq, ServerMessage::MetadataSet {
+                    session_id,
+                    session_name: session_name.clone(),
+                    key: key.clone(),
+                    value: value.clone(),
+                });
+            }
+        }
+
         HandlerResult::Response(ServerMessage::MetadataSet {
             session_id,
             session_name,
