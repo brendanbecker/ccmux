@@ -31,6 +31,7 @@ const BEADS_REFRESH_INTERVAL_TICKS: u64 = 300;
 use crossterm::event::{Event as CrosstermEvent, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
+use ratatui::widgets::canvas::{Canvas, Rectangle};
 use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use uuid::Uuid;
 
@@ -63,10 +64,30 @@ pub enum AppState {
     Quitting,
 }
 
+/// View mode within Attached state
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewMode {
+    /// Normal pane view
+    Panes,
+    /// System-wide dashboard
+    Dashboard,
+}
+
+/// Message in the mailbox widget
+#[derive(Debug, Clone)]
+pub struct MailboxMessage {
+    pub pane_id: Uuid,
+    pub timestamp: std::time::SystemTime,
+    pub priority: ccmux_protocol::MailPriority,
+    pub summary: String,
+}
+
 /// Main application
 pub struct App {
     /// Current application state
     state: AppState,
+    /// Current view mode
+    view_mode: ViewMode,
     /// Client ID
     client_id: Uuid,
     /// Server connection
@@ -81,6 +102,10 @@ pub struct App {
     windows: HashMap<Uuid, WindowInfo>,
     /// Panes in current session
     panes: HashMap<Uuid, PaneInfo>,
+    /// Mailbox messages (FEAT-073)
+    mailbox: Vec<MailboxMessage>,
+    /// List state for mailbox UI
+    mailbox_state: ListState,
     /// Active pane ID
     active_pane_id: Option<Uuid>,
     /// Last (previously active) pane ID for Ctrl-b ; (tmux last-pane)
@@ -123,6 +148,7 @@ impl App {
 
         Ok(Self {
             state: AppState::Disconnected,
+            view_mode: ViewMode::Panes,
             client_id: Uuid::new_v4(),
             connection: Connection::new(),
             events,
@@ -130,6 +156,8 @@ impl App {
             session: None,
             windows: HashMap::new(),
             panes: HashMap::new(),
+            mailbox: Vec::new(),
+            mailbox_state: ListState::default(),
             active_pane_id: None,
             last_pane_id: None,
             last_window_id: None,
@@ -155,6 +183,7 @@ impl App {
 
         Ok(Self {
             state: AppState::Disconnected,
+            view_mode: ViewMode::Panes,
             client_id: Uuid::new_v4(),
             connection: Connection::with_socket_path(socket_path),
             events,
@@ -162,6 +191,8 @@ impl App {
             session: None,
             windows: HashMap::new(),
             panes: HashMap::new(),
+            mailbox: Vec::new(),
+            mailbox_state: ListState::default(),
             active_pane_id: None,
             last_pane_id: None,
             last_window_id: None,
@@ -388,6 +419,14 @@ impl App {
                 if self.state == AppState::SessionSelect {
                     return self.handle_session_select_input(key).await;
                 }
+                
+                // In Dashboard mode, handle keys directly if not a prefix combo
+                if self.state == AppState::Attached && self.view_mode == ViewMode::Dashboard {
+                    if !self.input_handler.is_prefix_key(&key) && self.input_handler.mode() == InputMode::Normal {
+                        return self.handle_dashboard_input(key).await;
+                    }
+                }
+                
                 CrosstermEvent::Key(key)
             }
             InputEvent::Mouse(mouse) => CrosstermEvent::Mouse(mouse),
@@ -417,6 +456,58 @@ impl App {
             self.previous_input_mode = mode_after;
         }
 
+        Ok(())
+    }
+
+    /// Handle input specifically for the dashboard view
+    async fn handle_dashboard_input(&mut self, key: crossterm::event::KeyEvent) -> Result<()> {
+        match key.code {
+            KeyCode::Up | KeyCode::Char('k') => {
+                let i = match self.mailbox_state.selected() {
+                    Some(i) => {
+                        if i == 0 {
+                            self.mailbox.len().saturating_sub(1)
+                        } else {
+                            i - 1
+                        }
+                    }
+                    None => 0,
+                };
+                self.mailbox_state.select(Some(i));
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let i = match self.mailbox_state.selected() {
+                    Some(i) => {
+                        if i >= self.mailbox.len().saturating_sub(1) {
+                            0
+                        } else {
+                            i + 1
+                        }
+                    }
+                    None => 0,
+                };
+                self.mailbox_state.select(Some(i));
+            }
+            KeyCode::Enter => {
+                // Jump to pane associated with the mailbox message
+                if let Some(i) = self.mailbox_state.selected() {
+                    // mailbox is rev() in draw, so index is reversed
+                    let actual_idx = self.mailbox.len().saturating_sub(1).saturating_sub(i);
+                    if let Some(msg) = self.mailbox.get(actual_idx) {
+                        self.active_pane_id = Some(msg.pane_id);
+                        self.pane_manager.set_active(msg.pane_id);
+                        if let Some(ref mut layout) = self.layout {
+                            layout.set_active_pane(msg.pane_id);
+                        }
+                        self.view_mode = ViewMode::Panes;
+                        self.connection
+                            .send(ClientMessage::SelectPane { pane_id: msg.pane_id })
+                            .await?;
+                    }
+                }
+            }
+            _ => {}
+        }
         Ok(())
     }
 
@@ -944,6 +1035,15 @@ impl App {
 
             ClientCommand::ToggleZoom => {
                 self.status_message = Some("Zoom toggle not yet implemented".to_string());
+            }
+
+            ClientCommand::ToggleDashboard => {
+                self.view_mode = if self.view_mode == ViewMode::Panes {
+                    ViewMode::Dashboard
+                } else {
+                    ViewMode::Panes
+                };
+                self.status_message = Some(format!("View mode: {:?}", self.view_mode));
             }
 
             ClientCommand::ShowHelp => {
@@ -1520,6 +1620,24 @@ impl App {
                 // TODO: Handle orchestration messages in UI
                 let _ = (from_session_id, message);
             }
+            ServerMessage::MailReceived { pane_id, priority, summary } => {
+                let msg = MailboxMessage {
+                    pane_id,
+                    timestamp: std::time::SystemTime::now(),
+                    priority,
+                    summary,
+                };
+                self.mailbox.push(msg);
+                // Keep mailbox size reasonable (e.g., last 100 messages)
+                if self.mailbox.len() > 100 {
+                    self.mailbox.remove(0);
+                }
+                
+                // If we are in Dashboard view, ensure selection is valid
+                if self.view_mode == ViewMode::Dashboard && self.mailbox_state.selected().is_none() {
+                    self.mailbox_state.select(Some(0));
+                }
+            }
             ServerMessage::OrchestrationDelivered { delivered_count } => {
                 // Orchestration message was delivered to other sessions
                 self.status_message = Some(format!(
@@ -1820,7 +1938,15 @@ impl App {
     }
 
     /// Draw attached state (main pane view)
-    fn draw_attached(&self, frame: &mut ratatui::Frame, area: Rect) {
+    fn draw_attached(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+        match self.view_mode {
+            ViewMode::Panes => self.draw_panes(frame, area),
+            ViewMode::Dashboard => self.draw_dashboard(frame, area),
+        }
+    }
+
+    /// Draw the normal pane view
+    fn draw_panes(&mut self, frame: &mut ratatui::Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Min(3), Constraint::Length(1)])
@@ -1875,6 +2001,121 @@ impl App {
         let status = self.build_status_bar();
         let status_widget = Paragraph::new(status).style(Style::default().bg(Color::DarkGray));
         frame.render_widget(status_widget, chunks[1]);
+    }
+
+    /// Draw the visibility dashboard
+    fn draw_dashboard(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Min(3), Constraint::Length(1)])
+            .split(area);
+
+        let dashboard_area = chunks[0];
+        
+        let dashboard_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(dashboard_area);
+
+        // Mailbox widget (Left)
+        self.draw_mailbox(frame, dashboard_chunks[0]);
+
+        // System Graph (Right)
+        self.draw_system_graph(frame, dashboard_chunks[1]);
+
+        // Status bar
+        let status = self.build_status_bar();
+        let status_widget = Paragraph::new(status).style(Style::default().bg(Color::DarkGray));
+        frame.render_widget(status_widget, chunks[1]);
+    }
+
+    /// Draw the system graph widget
+    fn draw_system_graph(&self, frame: &mut ratatui::Frame, area: Rect) {
+        let canvas = Canvas::default()
+            .block(Block::default().borders(Borders::ALL).title("System Graph"))
+            .x_bounds([0.0, 100.0])
+            .y_bounds([0.0, 100.0])
+            .paint(|ctx| {
+                // Draw nodes for each pane
+                let panes: Vec<_> = self.panes.values().collect();
+                let num_panes = panes.len();
+                
+                if num_panes == 0 {
+                    ctx.print(40.0, 50.0, "No active panes");
+                    return;
+                }
+
+                // Simple grid layout for nodes
+                let cols = (num_panes as f64).sqrt().ceil() as usize;
+                let rows = (num_panes as f64 / cols as f64).ceil() as usize;
+                
+                let cell_width = 100.0 / cols as f64;
+                let cell_height = 100.0 / rows as f64;
+
+                for (i, pane) in panes.iter().enumerate() {
+                    let r = i / cols;
+                    let c = i % cols;
+
+                    let x = c as f64 * cell_width + cell_width / 2.0;
+                    let y = 100.0 - (r as f64 * cell_height + cell_height / 2.0);
+
+                    let color = match &pane.stuck_status {
+                        Some(ccmux_protocol::PaneStuckStatus::Stuck { .. }) => Color::Red,
+                        Some(ccmux_protocol::PaneStuckStatus::Slow { .. }) => Color::Yellow,
+                        _ => match &pane.state {
+                            ccmux_protocol::PaneState::Normal => Color::Green,
+                            ccmux_protocol::PaneState::Claude(cs) => match cs.activity {
+                                ccmux_protocol::ClaudeActivity::Idle => Color::Blue,
+                                _ => Color::Cyan,
+                            },
+                            ccmux_protocol::PaneState::Exited { .. } => Color::Gray,
+                        }
+                    };
+
+                    // Draw node as a rectangle
+                    ctx.draw(&Rectangle {
+                        x: x - 5.0,
+                        y: y - 5.0,
+                        width: 10.0,
+                        height: 10.0,
+                        color,
+                    });
+
+                    // Print pane label
+                    let label = pane.name.as_deref().unwrap_or_else(|| {
+                        pane.title.as_deref().unwrap_or("?")
+                    });
+                    let short_label = if label.len() > 8 { &label[0..8] } else { label };
+                    ctx.print(x - 4.0, y - 2.0, short_label.to_string());
+                }
+            });
+
+        frame.render_widget(canvas, area);
+    }
+
+    /// Draw the mailbox widget
+    fn draw_mailbox(&mut self, frame: &mut ratatui::Frame, area: Rect) {
+        let items: Vec<ListItem> = self.mailbox.iter().rev().map(|msg| {
+            let priority_style = match msg.priority {
+                ccmux_protocol::MailPriority::Info => Style::default().fg(Color::Cyan),
+                ccmux_protocol::MailPriority::Warning => Style::default().fg(Color::Yellow),
+                ccmux_protocol::MailPriority::Error => Style::default().fg(Color::Red),
+            };
+
+            let pane_name = self.panes.get(&msg.pane_id)
+                .and_then(|p| p.name.as_ref())
+                .cloned()
+                .unwrap_or_else(|| format!("Pane {}", self.panes.get(&msg.pane_id).map(|p| p.index).unwrap_or(0)));
+
+            ListItem::new(format!("[{}] {}", pane_name, msg.summary)).style(priority_style)
+        }).collect();
+
+        let list = List::new(items)
+            .block(Block::default().borders(Borders::ALL).title("Mailbox"))
+            .highlight_style(Style::default().bg(Color::DarkGray).add_modifier(Modifier::BOLD))
+            .highlight_symbol("> ");
+
+        frame.render_stateful_widget(list, area, &mut self.mailbox_state);
     }
 
     /// Get title for active pane

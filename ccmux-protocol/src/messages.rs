@@ -431,6 +431,13 @@ pub enum ServerMessage {
         message: OrchestrationMessage,
     },
 
+    /// Mail received from a worker pane (FEAT-073)
+    MailReceived {
+        pane_id: Uuid,
+        priority: MailPriority,
+        summary: String,
+    },
+
     /// Orchestration message was delivered
     OrchestrationDelivered {
         /// Number of sessions that received the message
@@ -1680,6 +1687,29 @@ tags: HashSet::new(),
             assert_eq!(m, message);
         } else {
             panic!("Wrong variant");
+        }
+    }
+
+    #[test]
+    fn test_server_message_mail_received() {
+        let pane_id = Uuid::new_v4();
+        let msg = ServerMessage::MailReceived {
+            pane_id,
+            priority: MailPriority::Warning,
+            summary: "Disk space low".to_string(),
+        };
+
+        if let ServerMessage::MailReceived {
+            pane_id: pid,
+            priority,
+            summary,
+        } = msg
+        {
+            assert_eq!(pid, pane_id);
+            assert_eq!(priority, MailPriority::Warning);
+            assert_eq!(summary, "Disk space low");
+        } else {
+            panic!("Expected MailReceived variant");
         }
     }
 
