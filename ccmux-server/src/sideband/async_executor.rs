@@ -563,8 +563,20 @@ impl AsyncCommandExecutor {
             source_pane, priority, summary
         );
 
-        // TODO: Broadcast mail to dashboard/mailbox widget
-        // For now, log it and potentially implement client broadcast later
+        // Find session ID for broadcast
+        let session_id = {
+            let manager = self.session_manager.read().await;
+            manager.find_pane(source_pane).map(|(s, _, _)| s.id())
+        };
+
+        if let Some(session_id) = session_id {
+            let msg = ServerMessage::MailReceived {
+                pane_id: source_pane,
+                priority,
+                summary,
+            };
+            self.registry.try_broadcast_to_session(session_id, msg);
+        }
 
         Ok(())
     }

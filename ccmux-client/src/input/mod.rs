@@ -389,6 +389,9 @@ impl InputHandler {
             // Redraw screen
             KeyCode::Char('r') => InputAction::Command(ClientCommand::Redraw),
 
+            // Dashboard (FEAT-073)
+            KeyCode::Char('D') => InputAction::Command(ClientCommand::ToggleDashboard),
+
             // Session management
             KeyCode::Char('d') => InputAction::Detach,
             KeyCode::Char('s') => InputAction::Command(ClientCommand::ListSessions),
@@ -582,7 +585,7 @@ impl InputHandler {
     }
 
     /// Check if a key matches the prefix key
-    fn is_prefix_key(&self, key: &KeyEvent) -> bool {
+    pub fn is_prefix_key(&self, key: &KeyEvent) -> bool {
         key.code == self.prefix.code && key.modifiers == self.prefix.modifiers
     }
 }

@@ -10,8 +10,7 @@ use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use ccmux_protocol::{
-    ClientCodec, ClientMessage, ServerMessage, PROTOCOL_VERSION,
-    messages::ClientType,
+    ClientCodec, ClientMessage, ClientType, ServerMessage, PROTOCOL_VERSION,
 };
 use ccmux_utils::socket_path;
 
@@ -125,7 +124,7 @@ impl ConnectionManager {
         self.send_to_daemon(ClientMessage::Connect {
             client_id: self.client_id,
             protocol_version: PROTOCOL_VERSION,
-            client_type: Some(ClientType::Mcp),
+            client_type: ClientType::Mcp,
         })
         .await?;
 

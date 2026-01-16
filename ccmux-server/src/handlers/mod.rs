@@ -14,15 +14,15 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
-use ccmux_protocol::{ClientMessage, ErrorCode, ServerMessage};
+use ccmux_protocol::{ClientMessage, ErrorCode, ServerMessage, messages::ErrorDetails};
 
+use crate::arbitration::{Action, Actor, Arbitrator, Resource};
 use crate::config::AppConfig;
 use crate::persistence::PersistenceManager;
 use crate::pty::{PaneClosedNotification, PtyManager};
 use crate::registry::{ClientId, ClientRegistry};
 use crate::session::{Session, SessionManager, Window};
 use crate::sideband::AsyncCommandExecutor;
-use crate::user_priority::Arbitrator;
 
 /// Context for message handlers
 ///
@@ -42,8 +42,8 @@ pub struct HandlerContext {
     pub pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
     /// Sideband command executor for processing Claude commands
     pub command_executor: Arc<AsyncCommandExecutor>,
-    /// User priority lock manager (FEAT-056)
-    pub user_priority: Arc<Arbitrator>,
+    /// Human-Control Arbitrator (FEAT-079)
+    pub arbitrator: Arc<Arbitrator>,
     /// Persistence manager for state logging (optional)
     pub persistence: Option<Arc<RwLock<PersistenceManager>>>,
 }
@@ -66,7 +66,7 @@ pub enum HandlerResult {
         response: ServerMessage,
         follow_up: Vec<ServerMessage>,
     },
-    /// Response to client plus broadcast to all connected clients
+    /// Response to client plus broadcast to all clients
     ResponseWithGlobalBroadcast {
         response: ServerMessage,
         broadcast: ServerMessage,
@@ -93,7 +93,7 @@ impl HandlerContext {
         client_id: ClientId,
         pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
         command_executor: Arc<AsyncCommandExecutor>,
-        user_priority: Arc<Arbitrator>,
+        arbitrator: Arc<Arbitrator>,
         persistence: Option<Arc<RwLock<PersistenceManager>>>,
     ) -> Self {
         Self {
@@ -104,8 +104,38 @@ impl HandlerContext {
             client_id,
             pane_closed_tx,
             command_executor,
-            user_priority,
+            arbitrator,
             persistence,
+        }
+    }
+
+    /// Get the actor for this context based on client type
+    pub fn actor(&self) -> Actor {
+        match self.registry.get_client_type(self.client_id) {
+            Some(ccmux_protocol::ClientType::Mcp) => Actor::Agent,
+            // Treat TUI or unknown as Human
+            _ => Actor::Human(self.client_id),
+        }
+    }
+
+    /// Record activity for the current actor if they are human
+    pub fn record_human_activity(&self, resource: Resource, action: Action) {
+        if let Actor::Human(_) = self.actor() {
+            self.arbitrator.record_activity(resource, action);
+        }
+    }
+
+    /// Check if the current actor is allowed to perform an action on a resource
+    pub fn check_arbitration(&self, resource: Resource, action: Action) -> Result<(), HandlerResult> {
+        match self.arbitrator.check_access(self.actor(), resource, action) {
+            crate::arbitration::ArbitrationResult::Allowed => Ok(()),
+            crate::arbitration::ArbitrationResult::Blocked { remaining_ms, reason, .. } => {
+                Err(HandlerContext::error_with_details(
+                    ErrorCode::UserPriorityActive,
+                    format!("Blocked by {}: retry after {}ms", reason, remaining_ms),
+                    ErrorDetails::HumanControl { remaining_ms },
+                ))
+            }
         }
     }
 
@@ -385,16 +415,16 @@ impl HandlerContext {
     }
 
     // ==================== User Priority Lock Handlers (FEAT-056) ====================
-
+ 
     /// Handle user command mode entered (prefix key pressed)
     fn handle_user_command_mode_entered(&self, timeout_ms: u32) -> HandlerResult {
-        self.user_priority.set_focus_lock(self.client_id, timeout_ms);
+        self.arbitrator.set_lock(self.client_id, timeout_ms, "Prefix Key".to_string());
         HandlerResult::NoResponse
     }
-
+ 
     /// Handle user command mode exited (command completed/cancelled/timed out)
     fn handle_user_command_mode_exited(&self) -> HandlerResult {
-        self.user_priority.release_focus_lock(self.client_id);
+        self.arbitrator.release_lock(self.client_id);
         HandlerResult::NoResponse
     }
 
@@ -472,7 +502,7 @@ impl HandlerContext {
 
         let client_count = self.registry.client_count();
         let session_count = self.session_manager.read().await.session_count();
-        let human_control_active = self.user_priority.check_focus_lock().is_some();
+        let human_control_active = self.arbitrator.is_any_lock_active().is_some();
 
         HandlerResult::Response(ServerMessage::ServerStatus {
             commit_seq,
@@ -519,6 +549,7 @@ mod tests {
     use super::*;
     use ccmux_protocol::PROTOCOL_VERSION;
     use tokio::sync::mpsc;
+    use ccmux_protocol::ClientType;
 
     fn create_test_context() -> HandlerContext {
         let session_manager = Arc::new(RwLock::new(SessionManager::new()));
@@ -530,7 +561,7 @@ mod tests {
             Arc::clone(&pty_manager),
             Arc::clone(&registry),
         ));
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
 
         // Register a test client
         let (tx, _rx) = mpsc::channel(10);
@@ -547,7 +578,7 @@ mod tests {
             client_id,
             pane_closed_tx,
             command_executor,
-            user_priority,
+            arbitrator,
             None,
         )
     }
@@ -570,7 +601,7 @@ mod tests {
             .route_message(ClientMessage::Connect {
                 client_id: Uuid::new_v4(),
                 protocol_version: PROTOCOL_VERSION,
-                client_type: None,
+                client_type: ClientType::Tui,
             })
             .await;
 
@@ -587,7 +618,7 @@ mod tests {
             .route_message(ClientMessage::Connect {
                 client_id: Uuid::new_v4(),
                 protocol_version: 9999,
-                client_type: None,
+                client_type: ClientType::Tui,
             })
             .await;
 

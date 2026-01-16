@@ -5,7 +5,7 @@
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use ccmux_protocol::{ErrorCode, ServerMessage, PROTOCOL_VERSION, messages::ClientType};
+use ccmux_protocol::{ClientType, ErrorCode, ServerMessage, PROTOCOL_VERSION};
 
 use crate::observability::Metrics;
 use super::{HandlerContext, HandlerResult};
@@ -16,12 +16,11 @@ impl HandlerContext {
         &self,
         client_uuid: Uuid,
         protocol_version: u32,
-        client_type: Option<ClientType>,
+        client_type: ClientType,
     ) -> HandlerResult {
-        let client_type = client_type.unwrap_or(ClientType::Unknown);
         
         info!(
-            "Client {} (UUID: {}, Type: {:?}) connecting with protocol version {}",
+            "Client {} (UUID: {}, type: {:?}) connecting with protocol version {}",
             self.client_id, client_uuid, client_type, protocol_version
         );
 
@@ -249,7 +248,7 @@ mod tests {
     use crate::pty::PtyManager;
     use crate::registry::ClientRegistry;
     use crate::session::SessionManager;
-    use crate::user_priority::Arbitrator;
+    use crate::arbitration::Arbitrator;
     use std::sync::Arc;
     use tokio::sync::{mpsc, RwLock};
 
@@ -258,7 +257,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -277,7 +276,7 @@ mod tests {
             client_id,
             pane_closed_tx,
             command_executor,
-            user_priority,
+            arbitrator,
             None,
         )
     }
@@ -286,7 +285,7 @@ mod tests {
     async fn test_handle_connect_success() {
         let ctx = create_test_context();
         let result = ctx
-            .handle_connect(Uuid::new_v4(), PROTOCOL_VERSION, Some(ClientType::Tui))
+            .handle_connect(Uuid::new_v4(), PROTOCOL_VERSION, ClientType::Tui)
             .await;
 
         match result {
@@ -299,13 +298,13 @@ mod tests {
         }
         
         // Verify client type stored
-        assert_eq!(ctx.registry.get_client_type(ctx.client_id), ClientType::Tui);
+        assert_eq!(ctx.registry.get_client_type(ctx.client_id), Some(ClientType::Tui));
     }
 
     #[tokio::test]
     async fn test_handle_connect_version_mismatch() {
         let ctx = create_test_context();
-        let result = ctx.handle_connect(Uuid::new_v4(), 9999, None).await;
+        let result = ctx.handle_connect(Uuid::new_v4(), 9999, ClientType::Tui).await;
 
         match result {
             HandlerResult::Response(ServerMessage::Error { code, message, .. }) => {

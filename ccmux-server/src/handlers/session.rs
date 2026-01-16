@@ -6,13 +6,15 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 use ccmux_utils::CcmuxError;
 
+use crate::arbitration::{Action, Resource};
 use crate::pty::{PtyConfig, PtyOutputPoller};
 
 use ccmux_protocol::{
+    ClientType,
     ErrorCode,
     ServerMessage,
     SplitDirection,
-    messages::{ClientType, ErrorDetails}
+    messages::ErrorDetails
 };
 
 use super::{HandlerContext, HandlerResult};
@@ -308,6 +310,11 @@ impl HandlerContext {
             session_id, self.client_id
         );
 
+        // FEAT-079: Check arbitration before destroying session (kill action)
+        if let Err(blocked) = self.check_arbitration(Resource::Session(session_id), Action::Kill) {
+            return blocked;
+        }
+
         // Collect pane IDs and session name for PTY cleanup before removing session
         let (pane_ids, window_ids, session_name): (Vec<Uuid>, Vec<Uuid>, String) = {
             let session_manager = self.session_manager.read().await;
@@ -327,17 +334,10 @@ impl HandlerContext {
             }
         };
 
-        // FEAT-079: Arbitrate session destruction
-        let client_type = self.registry.get_client_type(self.client_id);
-        if client_type == ClientType::Mcp {
-            for window_id in window_ids {
-                if let Err(remaining) = self.user_priority.check_layout_access(window_id) {
-                    return HandlerContext::error_with_details(
-                        ErrorCode::UserPriorityActive,
-                        format!("Session destruction blocked by human activity in window {}, retry after {}ms", window_id, remaining),
-                        ErrorDetails::HumanControl { remaining_ms: remaining },
-                    );
-                }
+        // FEAT-079: Arbitrate session destruction (check layout access on all windows)
+        for window_id in window_ids {
+            if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
+                return blocked;
             }
         }
 
@@ -742,7 +742,7 @@ impl HandlerContext {
         debug!("SelectSession {} request from {}", session_id, self.client_id);
 
         // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.check_focus_lock() {
+        if let Some((_client_id, remaining_ms)) = self.arbitrator.is_any_lock_active() {
             debug!(
                 "SelectSession blocked by user priority lock, retry after {}ms",
                 remaining_ms
@@ -790,7 +790,7 @@ impl HandlerContext {
         debug!("SelectWindow {} request from {}", window_id, self.client_id);
 
         // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.check_focus_lock() {
+        if let Some((_client_id, remaining_ms)) = self.arbitrator.is_any_lock_active() {
             debug!(
                 "SelectWindow blocked by user priority lock, retry after {}ms",
                 remaining_ms
@@ -846,7 +846,7 @@ mod tests {
     use crate::pty::PtyManager;
     use crate::registry::ClientRegistry;
     use crate::session::SessionManager;
-    use crate::user_priority::Arbitrator;
+    use crate::arbitration::Arbitrator;
     use std::sync::Arc;
     use tokio::sync::{mpsc, RwLock};
 
@@ -855,7 +855,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -865,9 +865,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(10);
         let client_id = registry.register_client(tx);
 
-        // Create cleanup channel (receiver is dropped in tests)
-        let (pane_closed_tx, _pane_closed_rx) = mpsc::channel(10);
-
+        let (pane_closed_tx, _) = mpsc::channel(10);
         HandlerContext::new(
             session_manager,
             pty_manager,
@@ -876,7 +874,7 @@ mod tests {
             client_id,
             pane_closed_tx,
             command_executor,
-            user_priority,
+            arbitrator,
             None,
         )
     }
@@ -1209,7 +1207,7 @@ mod tests {
                 response: ServerMessage::SessionRenamed {
                     previous_name,
                     new_name,
-                    ..
+                    .. 
                 },
                 broadcast: ServerMessage::SessionsChanged { sessions },
             } => {
@@ -1336,7 +1334,7 @@ mod tests {
                 response: ServerMessage::SessionRenamed {
                     previous_name,
                     new_name,
-                    ..
+                    .. 
                 },
                 ..
             } => {

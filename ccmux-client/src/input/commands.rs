@@ -93,6 +93,8 @@ pub enum ClientCommand {
     // Layout
     /// Toggle pane zoom (fullscreen)
     ToggleZoom,
+    /// Toggle visibility dashboard (FEAT-073)
+    ToggleDashboard,
     /// Select next layout preset
     NextLayout,
     /// Cycle through layout policies (Fixed, Balanced, Adaptive)

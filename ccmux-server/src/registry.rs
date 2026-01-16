@@ -14,7 +14,7 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::observability::Metrics;
-use ccmux_protocol::{ServerMessage, messages::ClientType};
+use ccmux_protocol::{ClientType, ServerMessage};
 
 /// Type alias for session IDs (matches the Uuid type used in session module)
 pub type SessionId = Uuid;
@@ -24,8 +24,7 @@ pub type SessionId = Uuid;
 pub struct ClientId(u64);
 
 impl ClientId {
-    /// Create a new ClientId from a raw value (mainly for testing)
-    #[cfg(test)]
+    /// Create a new ClientId from a raw value
     pub fn new(value: u64) -> Self {
         Self(value)
     }
@@ -73,8 +72,8 @@ impl std::fmt::Debug for ClientEntry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ClientEntry")
             .field("attached_session", &self.attached_session)
-            .field("sender_closed", &self.sender.is_closed())
             .field("client_type", &self.client_type)
+            .field("sender_closed", &self.sender.is_closed())
             .field("focus", &self.focus)
             .finish()
     }
@@ -124,9 +123,20 @@ impl ClientRegistry {
         };
 
         self.clients.insert(id, entry);
-        debug!("Registered client {}", id);
-
         id
+    }
+
+    /// Set the type for a registered client
+    pub fn set_client_type(&self, client_id: ClientId, client_type: ClientType) {
+        if let Some(mut entry) = self.clients.get_mut(&client_id) {
+            entry.client_type = client_type;
+            debug!(client = %client_id, ?client_type, "Client type updated");
+        }
+    }
+
+    /// Get the type of a client
+    pub fn get_client_type(&self, client_id: ClientId) -> Option<ClientType> {
+        self.clients.get(&client_id).map(|e| e.client_type)
     }
 
     /// Unregister a client connection
@@ -152,22 +162,6 @@ impl ClientRegistry {
     /// Get the number of connected clients
     pub fn client_count(&self) -> usize {
         self.clients.len()
-    }
-
-    /// Set the client type for a client
-    pub fn set_client_type(&self, client_id: ClientId, client_type: ClientType) {
-        if let Some(mut entry) = self.clients.get_mut(&client_id) {
-            entry.client_type = client_type;
-            debug!("Set client type for {} to {:?}", client_id, client_type);
-        }
-    }
-
-    /// Get the client type for a client
-    pub fn get_client_type(&self, client_id: ClientId) -> ClientType {
-        self.clients
-            .get(&client_id)
-            .map(|entry| entry.client_type)
-            .unwrap_or(ClientType::Unknown)
     }
 
     // ==================== Client Focus Management ====================

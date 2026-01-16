@@ -66,24 +66,6 @@ pub enum OrchestrationTarget {
     Worktree(String),
 }
 
-/// Type of client connecting to the server
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub enum ClientType {
-    /// Terminal UI client (Human)
-    Tui,
-    /// MCP Bridge client (Agent)
-    Mcp,
-    /// CLI compatibility client (tmux wrapper)
-    Compat,
-    /// Unknown or legacy client
-    Unknown,
-}
-
-impl Default for ClientType {
-    fn default() -> Self {
-        Self::Unknown
-    }
-}
 
 /// Messages sent from client to server
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -92,10 +74,8 @@ pub enum ClientMessage {
     Connect {
         client_id: Uuid,
         protocol_version: u32,
-        /// Type of client (TUI, MCP, etc.)
-        /// Optional for backward compatibility with v1 clients
-        #[serde(default)]
-        client_type: Option<ClientType>,
+        /// Type of client identifying its role (FEAT-079)
+        client_type: ClientType,
     },
 
     /// Request list of sessions
@@ -539,6 +519,13 @@ pub enum ServerMessage {
         message: OrchestrationMessage,
     },
 
+    /// Mail received from a worker pane (FEAT-073)
+    MailReceived {
+        pane_id: Uuid,
+        priority: MailPriority,
+        summary: String,
+    },
+
     /// Orchestration message was delivered
     OrchestrationDelivered {
         /// Number of sessions that received the message
@@ -821,7 +808,7 @@ mod tests {
         let msg = ClientMessage::Connect {
             client_id,
             protocol_version: 1,
-            client_type: Some(ClientType::Tui),
+            client_type: crate::ClientType::Tui,
         };
 
         // Test clone
@@ -1824,6 +1811,29 @@ tags: HashSet::new(),
             assert_eq!(m, message);
         } else {
             panic!("Wrong variant");
+        }
+    }
+
+    #[test]
+    fn test_server_message_mail_received() {
+        let pane_id = Uuid::new_v4();
+        let msg = ServerMessage::MailReceived {
+            pane_id,
+            priority: MailPriority::Warning,
+            summary: "Disk space low".to_string(),
+        };
+
+        if let ServerMessage::MailReceived {
+            pane_id: pid,
+            priority,
+            summary,
+        } = msg
+        {
+            assert_eq!(pid, pane_id);
+            assert_eq!(priority, MailPriority::Warning);
+            assert_eq!(summary, "Disk space low");
+        } else {
+            panic!("Expected MailReceived variant");
         }
     }
 

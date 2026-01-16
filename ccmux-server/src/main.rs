@@ -17,6 +17,7 @@ use handlers::{HandlerContext, HandlerResult};
 use ccmux_protocol::{ServerCodec, ServerMessage};
 use ccmux_utils::Result;
 
+mod arbitration;
 mod beads;
 mod claude;
 mod config;
@@ -33,8 +34,8 @@ mod reply;
 mod session;
 pub mod sideband;
 mod tcp;
-mod user_priority;
 
+pub use arbitration::Arbitrator;
 pub use registry::{ClientId, ClientRegistry};
 pub use reply::{ReplyError, ReplyHandler};
 
@@ -46,7 +47,6 @@ use persistence::{
 use pty::{PaneClosedNotification, PtyManager, PtyOutputPoller};
 use session::SessionManager;
 use sideband::AsyncCommandExecutor;
-use user_priority::Arbitrator;
 
 /// Shared state for concurrent access by client handlers
 ///
@@ -68,8 +68,8 @@ pub struct SharedState {
     pub pane_closed_tx: mpsc::Sender<PaneClosedNotification>,
     /// Sideband command executor for processing Claude commands
     pub command_executor: Arc<AsyncCommandExecutor>,
-    /// User priority lock manager (FEAT-056)
-    pub user_priority: Arc<Arbitrator>,
+    /// Human-Control Arbitrator (FEAT-079)
+    pub arbitrator: Arc<Arbitrator>,
     /// Persistence manager for state logging (optional)
     pub persistence: Option<Arc<RwLock<PersistenceManager>>>,
 }
@@ -586,7 +586,7 @@ where
         client_id,
         shared_state.pane_closed_tx.clone(),
         Arc::clone(&shared_state.command_executor),
-        Arc::clone(&shared_state.user_priority),
+        Arc::clone(&shared_state.arbitrator),
         shared_state.persistence.clone(),
     );
 
@@ -744,8 +744,8 @@ where
         }
     }
 
-    // Clean up: release any user priority lock (FEAT-056)
-    shared_state.user_priority.on_client_disconnect(client_id);
+    // Release any user priority lock when client disconnects
+    shared_state.arbitrator.on_client_disconnect(client_id);
 
     // Unregister client from registry
     shared_state.registry.unregister_client(client_id);
@@ -853,7 +853,7 @@ async fn run_daemon(tcp_override: Option<String>) -> Result<()> {
         shutdown_tx: shutdown_tx.clone(),
         pane_closed_tx,
         command_executor,
-        user_priority: Arc::new(Arbitrator::new()),
+        arbitrator: Arc::new(Arbitrator::new()),
         persistence: server.persistence.clone(),
     };
 
@@ -1276,7 +1276,7 @@ EXAMPLES:
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ccmux_protocol::{ClientMessage, PROTOCOL_VERSION, messages::ClientType};
+    use ccmux_protocol::{ClientMessage, ClientType, PROTOCOL_VERSION};
     use tempfile::TempDir;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -1299,14 +1299,14 @@ mod tests {
             Arc::clone(&registry),
         ));
         SharedState {
-            session_manager,
-            pty_manager,
-            registry,
-            config: Arc::new(config::AppConfig::default()),
+            session_manager: Arc::new(RwLock::new(SessionManager::new())),
+            pty_manager: Arc::new(RwLock::new(PtyManager::new())),
+            registry: Arc::new(ClientRegistry::new()),
+            config: Arc::new(AppConfig::default()),
             shutdown_tx,
             pane_closed_tx,
             command_executor,
-            user_priority: Arc::new(user_priority::Arbitrator::new()),
+            arbitrator: Arc::new(Arbitrator::new()),
             persistence: None,
         }
     }
@@ -1489,7 +1489,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: PROTOCOL_VERSION,
-            client_type: None,
+            client_type: ClientType::Tui,
         };
         tokio_util::codec::Encoder::encode(&mut client_codec, connect_msg, &mut buf).unwrap();
         client_stream.write_all(&buf).await.unwrap();
@@ -1546,7 +1546,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: 9999, // Invalid version
-            client_type: None,
+            client_type: ClientType::Tui,
         };
         tokio_util::codec::Encoder::encode(&mut client_codec, connect_msg, &mut buf).unwrap();
         client_stream.write_all(&buf).await.unwrap();
@@ -1699,7 +1699,7 @@ mod tests {
             client_id,
             shared_state.pane_closed_tx,
             shared_state.command_executor,
-            shared_state.user_priority,
+            shared_state.arbitrator,
             None,
         )
     }
@@ -1802,7 +1802,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: PROTOCOL_VERSION,
-            client_type: Some(ClientType::Tui),
+            client_type: ClientType::Tui,
         };
         Encoder::encode(&mut tui_codec, connect_msg, &mut buf).unwrap();
         tui_client_stream.write_all(&buf).await.unwrap();
@@ -1877,7 +1877,7 @@ mod tests {
         let connect_msg = ClientMessage::Connect {
             client_id: uuid::Uuid::new_v4(),
             protocol_version: PROTOCOL_VERSION,
-            client_type: Some(ClientType::Mcp),
+            client_type: ClientType::Mcp,
         };
         Encoder::encode(&mut mcp_codec, connect_msg, &mut buf).unwrap();
         mcp_client_stream.write_all(&buf).await.unwrap();
@@ -1948,16 +1948,8 @@ mod tests {
                 }
             }
             Err(_) => {
-                panic!(
-                    "TIMEOUT: TUI did not receive PaneCreated broadcast within 2 seconds. \
-                     This confirms BUG-010: MCP pane creation broadcast is not reaching TUI."
-                );
+                panic!("Timed out waiting for PaneCreated broadcast");
             }
         }
-
-        // Clean up
-        drop(tui_client_stream);
-        drop(mcp_client_stream);
-        tui_server_handle.await.ok();
     }
 }

@@ -7,11 +7,12 @@ use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use ccmux_protocol::{
-    ErrorCode, PaneListEntry, PaneState, ServerMessage, SplitDirection, WindowInfo, messages::{ClientType, ErrorDetails},
+    ClientType, ErrorCode, PaneListEntry, PaneState, ServerMessage, SplitDirection, WindowInfo, messages::ErrorDetails,
 };
 
 use crate::pty::{PtyConfig, PtyOutputPoller};
 use crate::session::SessionManager;
+use crate::arbitration::{Action, Resource};
 
 use super::{HandlerContext, HandlerResult};
 
@@ -361,18 +362,10 @@ impl HandlerContext {
         };
 
         // FEAT-079: Arbitrate layout access
-        let client_type = self.registry.get_client_type(self.client_id);
-        if client_type == ClientType::Mcp {
-            if let Err(remaining) = self.user_priority.check_layout_access(window_id) {
-                return HandlerContext::error_with_details(
-                    ErrorCode::UserPriorityActive,
-                    format!("CreatePane blocked by human activity, retry after {}ms", remaining),
-                    ErrorDetails::HumanControl { remaining_ms: remaining },
-                );
-            }
-        } else if client_type == ClientType::Tui {
-            self.user_priority.record_human_layout(window_id);
+        if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
+            return blocked;
         }
+        self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
         // Create the pane
         let window = match session.get_window_mut(window_id) {
@@ -559,7 +552,7 @@ impl HandlerContext {
                 should_focus: select,
             },
             session_id,
-            broadcast: ServerMessage::PaneCreated { 
+            broadcast: ServerMessage::PaneCreated {
                 pane: pane_info, 
                 direction,
                 should_focus: false, // Don't steal focus from TUI users
@@ -958,18 +951,10 @@ impl HandlerContext {
         let window_id = window.id();
 
         // FEAT-079: Arbitrate layout access
-        let client_type = self.registry.get_client_type(self.client_id);
-        if client_type == ClientType::Mcp {
-            if let Err(remaining) = self.user_priority.check_layout_access(window_id) {
-                return HandlerContext::error_with_details(
-                    ErrorCode::UserPriorityActive,
-                    format!("SplitPane blocked by human activity, retry after {}ms", remaining),
-                    ErrorDetails::HumanControl { remaining_ms: remaining },
-                );
-            }
-        } else if client_type == ClientType::Tui {
-            self.user_priority.record_human_layout(window_id);
+        if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
+            return blocked;
         }
+        self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
         // Drop read lock before taking write lock
         drop(session_manager);
@@ -1117,18 +1102,10 @@ impl HandlerContext {
         let window_id = pane.window_id();
 
         // FEAT-079: Arbitrate layout access
-        let client_type = self.registry.get_client_type(self.client_id);
-        if client_type == ClientType::Mcp {
-            if let Err(remaining) = self.user_priority.check_layout_access(window_id) {
-                return HandlerContext::error_with_details(
-                    ErrorCode::UserPriorityActive,
-                    format!("ResizePane blocked by human activity, retry after {}ms", remaining),
-                    ErrorDetails::HumanControl { remaining_ms: remaining },
-                );
-            }
-        } else if client_type == ClientType::Tui {
-            self.user_priority.record_human_layout(window_id);
+        if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
+            return blocked;
         }
+        self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
         // Drop read lock before taking write lock
         drop(session_manager);
@@ -1286,18 +1263,10 @@ impl HandlerContext {
             };
 
             // FEAT-079: Arbitrate layout access
-            let client_type = self.registry.get_client_type(self.client_id);
-            if client_type == ClientType::Mcp {
-                if let Err(remaining) = self.user_priority.check_layout_access(window_id) {
-                    return HandlerContext::error_with_details(
-                        ErrorCode::UserPriorityActive,
-                        format!("CreateLayout blocked by human activity, retry after {}ms", remaining),
-                        ErrorDetails::HumanControl { remaining_ms: remaining },
-                    );
-                }
-            } else if client_type == ClientType::Tui {
-                self.user_priority.record_human_layout(window_id);
+            if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
+                return blocked;
             }
+            self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
             // Parse and create layout, collecting PTY configs for later spawning
             // BUG-032: Also collect PaneInfo for TUI broadcast
@@ -1430,7 +1399,7 @@ impl HandlerContext {
             // Store config for later PTY spawning (Phase 2)
             pty_configs.push((pane_id, config));
 
-            return Ok(());
+            return Ok(())
         }
 
         // Check if this is a split definition
@@ -1451,7 +1420,7 @@ impl HandlerContext {
                     pty_configs,
                 )?;
             }
-            return Ok(());
+            return Ok(())
         }
 
         Err("Invalid layout specification: must contain 'pane' or 'splits'".to_string())
@@ -1812,7 +1781,7 @@ mod tests {
     use crate::pty::PtyManager;
     use crate::registry::ClientRegistry;
     use crate::session::SessionManager;
-    use crate::user_priority::Arbitrator;
+    use crate::arbitration::Arbitrator;
     use std::sync::Arc;
     use tokio::sync::{mpsc, RwLock};
 
@@ -1821,7 +1790,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -1840,7 +1809,7 @@ mod tests {
             client_id,
             pane_closed_tx,
             command_executor,
-            user_priority,
+            arbitrator,
             None,
         )
     }
@@ -2133,7 +2102,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -2180,7 +2149,7 @@ mod tests {
             mcp_client_id,
             pane_closed_tx,
             Arc::clone(&command_executor),
-            Arc::clone(&user_priority),
+            Arc::clone(&arbitrator),
             None,
         );
 
@@ -2235,7 +2204,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -2286,7 +2255,7 @@ mod tests {
             mcp_client_id,
             pane_closed_tx,
             Arc::clone(&command_executor),
-            Arc::clone(&user_priority),
+            Arc::clone(&arbitrator),
             None,
         );
 
@@ -2346,7 +2315,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -2387,7 +2356,7 @@ mod tests {
             mcp_client_id,
             pane_closed_tx,
             Arc::clone(&command_executor),
-            Arc::clone(&user_priority),
+            Arc::clone(&arbitrator),
             None,
         );
 
@@ -2437,7 +2406,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -2478,7 +2447,7 @@ mod tests {
             mcp_client_id,
             pane_closed_tx,
             Arc::clone(&command_executor),
-            Arc::clone(&user_priority),
+            Arc::clone(&arbitrator),
             None,
         );
 
@@ -2847,11 +2816,16 @@ mod tests {
         let ctx = create_test_context();
         let (_session_id, window_id, _pane_id) = create_session_with_pane(&ctx).await;
 
-        // Set client type to MCP
-        ctx.registry.set_client_type(ctx.client_id, ClientType::Mcp);
+        // Create a separate "human" client context to record activity
+        let (tx, _rx) = mpsc::channel(10);
+        let human_id = ctx.registry.register_client(tx);
+        ctx.registry.set_client_type(human_id, ClientType::Tui);
+        
+        // Record activity directly on the arbitrator as if it came from the human client
+        ctx.arbitrator.record_activity(Resource::Window(window_id), Action::Layout);
 
-        // Record human activity on the window
-        ctx.user_priority.record_human_layout(window_id);
+        // Set the test context client to MCP (Agent)
+        ctx.registry.set_client_type(ctx.client_id, ClientType::Mcp);
 
         // Try to create pane - should be blocked
         let result = ctx
@@ -2861,7 +2835,7 @@ mod tests {
         match result {
             HandlerResult::Response(ServerMessage::Error { code, message, details }) => {
                 assert_eq!(code, ErrorCode::UserPriorityActive);
-                assert!(message.contains("blocked by human activity"));
+                assert!(message.contains("Human layout active"));
                 match details {
                     Some(ErrorDetails::HumanControl { remaining_ms }) => {
                         assert!(remaining_ms > 0);
@@ -2869,7 +2843,7 @@ mod tests {
                     _ => panic!("Expected HumanControl details"),
                 }
             }
-            _ => panic!("Expected UserPriorityActive error"),
+            _ => panic!("Expected UserPriorityActive error, got {:?}", std::mem::discriminant(&result)),
         }
     }
 }

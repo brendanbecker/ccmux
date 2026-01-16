@@ -7,8 +7,9 @@ use std::path::PathBuf;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use ccmux_protocol::{ErrorCode, ServerMessage, SplitDirection, messages::{ClientType, ErrorDetails}};
+use ccmux_protocol::{ClientType, ErrorCode, ServerMessage, SplitDirection, messages::ErrorDetails};
 
+use crate::arbitration::{Action, Resource};
 use crate::beads::{self, metadata_keys};
 use crate::pty::{PtyConfig, PtyOutputPoller};
 
@@ -29,11 +30,13 @@ impl HandlerContext {
             window_id, self.client_id, direction
         );
 
-        // FEAT-079: Record human layout activity
-        let client_type = self.registry.get_client_type(self.client_id);
-        if client_type == ClientType::Tui {
-            self.user_priority.record_human_layout(window_id);
+        // FEAT-079: Check arbitration before creating pane (layout change)
+        if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
+            return blocked;
         }
+
+        // FEAT-079: Record human activity if this is a human actor
+        self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
         // Default terminal size for new panes
         let (cols, rows) = (80, 24);
@@ -233,7 +236,7 @@ impl HandlerContext {
         debug!("SelectPane {} request from {}", pane_id, self.client_id);
 
         // Check if user priority lock is active (FEAT-056)
-        if let Some((_client_id, remaining_ms)) = self.user_priority.check_focus_lock() {
+        if let Some((_client_id, remaining_ms)) = self.arbitrator.is_any_lock_active() {
             debug!(
                 "SelectPane blocked by user priority lock, retry after {}ms",
                 remaining_ms
@@ -279,6 +282,11 @@ impl HandlerContext {
     pub async fn handle_close_pane(&self, pane_id: Uuid) -> HandlerResult {
         info!("ClosePane {} request from {}", pane_id, self.client_id);
 
+        // FEAT-079: Check arbitration before closing pane (kill action)
+        if let Err(blocked) = self.check_arbitration(Resource::Pane(pane_id), Action::Kill) {
+            return blocked;
+        }
+
         // First, find the pane to get session info
         let (session_id, window_id) = {
             let session_manager = self.session_manager.read().await;
@@ -295,25 +303,8 @@ impl HandlerContext {
             }
         };
 
-        // FEAT-079: Arbitrate layout access
-        let client_type = self.registry.get_client_type(self.client_id);
-        match client_type {
-            ClientType::Tui => self.user_priority.record_human_layout(window_id),
-            ClientType::Mcp => {
-                if let Err(remaining) = self.user_priority.check_layout_access(window_id) {
-                    debug!(
-                        "ClosePane blocked for window {} due to human activity (retry in {}ms)",
-                        window_id, remaining
-                    );
-                    return HandlerContext::error_with_details(
-                        ErrorCode::UserPriorityActive,
-                        format!("Layout mutation blocked by human activity, retry after {}ms", remaining),
-                        ErrorDetails::HumanControl { remaining_ms: remaining },
-                    );
-                }
-            }
-            _ => {}
-        }
+        // FEAT-079: Record human activity if this is a human actor
+        self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
         // Remove PTY if exists
         {
@@ -366,14 +357,13 @@ impl HandlerContext {
             pane_id, cols, rows, self.client_id
         );
 
-        // FEAT-079: Record human layout activity (TUI uses Resize)
-        let client_type = self.registry.get_client_type(self.client_id);
-        if client_type == ClientType::Tui {
-            // Need window_id to record layout activity on the window
-            // We'll find it below, but for TUI resizing we assume it's valid
-            // We can look it up efficiently or defer recording?
-            // Deferring to after lookup is better
+        // FEAT-079: Check arbitration before resizing
+        if let Err(blocked) = self.check_arbitration(Resource::Pane(pane_id), Action::Layout) {
+            return blocked;
         }
+
+        // FEAT-079: Record human activity if this is a human actor
+        self.record_human_activity(Resource::Pane(pane_id), Action::Layout);
 
         // Resize PTY if exists
         {
@@ -391,23 +381,6 @@ impl HandlerContext {
 
         match session_manager.find_pane_mut(pane_id) {
             Some(pane) => {
-                // FEAT-079: Record activity or check access
-                let window_id = pane.window_id(); // Assuming accessor exists or I check how to get it
-                
-                match client_type {
-                    ClientType::Tui => self.user_priority.record_human_layout(window_id),
-                    ClientType::Mcp => {
-                        if let Err(remaining) = self.user_priority.check_layout_access(window_id) {
-                             return HandlerContext::error_with_details(
-                                ErrorCode::UserPriorityActive,
-                                format!("Resize blocked by human activity, retry after {}ms", remaining),
-                                ErrorDetails::HumanControl { remaining_ms: remaining },
-                            );
-                        }
-                    }
-                    _ => {}
-                }
-
                 pane.resize(cols, rows);
                 debug!("Pane {} resized to {}x{}", pane_id, cols, rows);
 
@@ -478,7 +451,7 @@ mod tests {
     use crate::pty::PtyManager;
     use crate::registry::ClientRegistry;
     use crate::session::SessionManager;
-    use crate::user_priority::Arbitrator;
+    use crate::arbitration::Arbitrator;
     use std::sync::Arc;
     use tokio::sync::{mpsc, RwLock};
 
@@ -487,7 +460,7 @@ mod tests {
         let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
         let registry = Arc::new(ClientRegistry::new());
         let config = Arc::new(crate::config::AppConfig::default());
-        let user_priority = Arc::new(Arbitrator::new());
+        let arbitrator = Arc::new(Arbitrator::new());
         let command_executor = Arc::new(crate::sideband::AsyncCommandExecutor::new(
             Arc::clone(&session_manager),
             Arc::clone(&pty_manager),
@@ -497,9 +470,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel(10);
         let client_id = registry.register_client(tx);
 
-        // Create cleanup channel (receiver is dropped in tests)
-        let (pane_closed_tx, _pane_closed_rx) = mpsc::channel(10);
-
+        let (pane_closed_tx, _) = mpsc::channel(10);
         HandlerContext::new(
             session_manager,
             pty_manager,
@@ -508,7 +479,7 @@ mod tests {
             client_id,
             pane_closed_tx,
             command_executor,
-            user_priority,
+            arbitrator,
             None,
         )
     }
@@ -748,7 +719,7 @@ mod tests {
     // ==================== FEAT-056 User Priority Lockout Tests ====================
 
     #[tokio::test]
-    async fn test_select_pane_blocked_by_user_priority() {
+    async fn test_select_pane_blocked_by_arbitrator() {
         let ctx = create_test_context();
         let (session_id, window_id) = create_session_with_window(&ctx).await;
 
@@ -762,7 +733,7 @@ mod tests {
 
         // Activate user priority lock from a different client
         let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_focus_lock(other_client_id, 5000);
+        ctx.arbitrator.set_lock(other_client_id, 5000, "Test Lock".to_string());
 
         // Try to select pane - should be blocked
         let result = ctx.handle_select_pane(pane_id).await;
@@ -815,8 +786,8 @@ mod tests {
 
         // Activate then release lock
         let other_client_id = crate::registry::ClientId::new(999);
-        ctx.user_priority.set_focus_lock(other_client_id, 5000);
-        ctx.user_priority.release_focus_lock(other_client_id);
+        ctx.arbitrator.set_lock(other_client_id, 5000, "Test Lock".to_string());
+        ctx.arbitrator.release_lock(other_client_id);
 
         // Should succeed after lock released
         let result = ctx.handle_select_pane(pane_id).await;
