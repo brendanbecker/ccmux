@@ -1925,8 +1925,9 @@ impl App {
             | ServerMessage::MetadataSet { .. }
             | ServerMessage::MetadataList { .. }
             | ServerMessage::TagsSet { .. }
-            | ServerMessage::TagsList { .. } => {
-                // These messages are for the MCP bridge, not the TUI client
+            | ServerMessage::TagsList { .. }
+            | ServerMessage::ServerStatus { .. } => {
+                // These messages are for the MCP bridge or observability, not the TUI client
             }
 
             // FEAT-058: Beads status updates
