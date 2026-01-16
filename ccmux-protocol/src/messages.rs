@@ -452,6 +452,7 @@ impl ClientMessage {
             ClientMessage::RequestBeadsStatus { .. } => "RequestBeadsStatus",
             ClientMessage::RequestBeadsReadyList { .. } => "RequestBeadsReadyList",
             ClientMessage::GetEventsSince { .. } => "GetEventsSince",
+            ClientMessage::RequestWidgetUpdate { .. } => "RequestWidgetUpdate",
         }
     }
 }

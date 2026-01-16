@@ -283,6 +283,21 @@ impl PersistenceManager {
         self.recovery_manager.wal().append(&entry)
     }
 
+    /// Log a session environment variable change
+    pub fn log_session_environment_set(
+        &self,
+        session_id: Uuid,
+        key: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Result<u64> {
+        let entry = WalEntry::SessionEnvironmentSet {
+            session_id,
+            key: key.into(),
+            value: value.into(),
+        };
+        self.recovery_manager.wal().append(&entry)
+    }
+
     /// Log a window creation
     pub fn log_window_created(
         &self,
@@ -594,6 +609,7 @@ mod tests {
             active_window_id: None,
             created_at: 12345,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         };
 
         let path = manager.create_checkpoint(vec![session]).unwrap();
@@ -714,6 +730,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 0,
             metadata: HashMap::new(),
+            environment: HashMap::new(),
         }];
 
         manager.create_checkpoint(sessions.clone()).unwrap();
@@ -783,6 +800,7 @@ mod tests {
             active_window_id: Some(window_id),
             created_at: 0,
             metadata,
+            environment: HashMap::new(),
         }];
 
         manager.create_checkpoint(sessions).unwrap();
@@ -829,5 +847,33 @@ mod tests {
         let session = &state.sessions[0];
         assert_eq!(session.metadata.get("qa.tester"), Some(&"claude".to_string()));
         assert_eq!(session.metadata.get("beads.root"), Some(&"/path/to/beads".to_string()));
+    }
+
+    #[test]
+    fn test_persistence_environment_via_wal() {
+        let (temp_dir, manager) = create_test_manager();
+
+        let session_id = Uuid::new_v4();
+
+        // Log session creation and environment set (FEAT-086)
+        manager.log_session_created(session_id, "test-session").unwrap();
+        manager.log_session_environment_set(session_id, "MY_VAR", "my_value").unwrap();
+        manager.log_session_environment_set(session_id, "PATH", "/usr/bin:/bin").unwrap();
+
+        manager.finalize().unwrap();
+
+        // Recover and verify environment is preserved
+        let manager2 = PersistenceManager::new(
+            temp_dir.path().join("state"),
+            PersistenceConfig::default(),
+        )
+        .unwrap();
+
+        let state = manager2.recover().unwrap();
+
+        assert!(state.has_sessions());
+        let session = &state.sessions[0];
+        assert_eq!(session.environment.get("MY_VAR"), Some(&"my_value".to_string()));
+        assert_eq!(session.environment.get("PATH"), Some(&"/usr/bin:/bin".to_string()));
     }
 }

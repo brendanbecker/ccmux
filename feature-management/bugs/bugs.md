@@ -5,8 +5,8 @@
 
 ## Summary Statistics
 - Total Bugs: 42
-- Open: 7
-- Resolved: 34
+- Open: 5
+- Resolved: 36
 - Deprecated: 1
 
 ## CRITICAL: Approach for Complex Bugs
@@ -23,18 +23,16 @@
 | ID | Description | Priority | Status | Component | Link |
 |----|-------------|----------|--------|-----------|------|
 | BUG-042 | Excessive Result Nesting (Ok(Ok(...))) | P3 | new | mcp-bridge | [Link](BUG-042-excessive-result-nesting-code-smell/) |
-| BUG-041 | Claude Code crashes on paste inside ccmux | P1 | new | pty/client | [Link](BUG-041-claude-code-crashes-on-paste-inside-ccmux/) |
 | BUG-038 | create_pane returns wrong response type | P1 | fixed | mcp | [Link](BUG-038-create-pane-returns-wrong-response-type/) |
 | BUG-037 | close_pane returns AbortError | P2 | new | daemon | [Link](BUG-037-close-pane-aborts/) |
 | BUG-032 | MCP handlers missing TUI broadcasts for pane/window/layout ops | P0 | fixed | ccmux-server | [Link](BUG-032-mcp-handlers-missing-tui-broadcasts/) |
-| BUG-031 | Metadata not persisting across restarts | P1 | open | daemon | [Link](BUG-031-metadata-not-persisting-across-restarts/) |
 
 ## Priority Queue (Post-Retrospective)
 
 | Priority | Bug | Risk | Effort | Approach |
 |----------|-----|------|--------|----------|
-| **P1** | BUG-041 | HIGH | Medium | Investigate PTY bracketed paste mode and termios settings |
 | **P2** | BUG-037 | Medium | Low | Timeout/abort handling |
+| **P3** | BUG-042 | Low | Low | Flatten nested Result types |
 
 ## Bug Status
 
@@ -42,7 +40,9 @@
 
 | ID | Description | Priority | Resolution |
 |----|-------------|----------|------------|
+| BUG-041 | Claude Code crashes on paste inside ccmux | P1 | Fixed - bracketed paste mode handling |
 | BUG-040 | create_window returns success but doesn't create windows | P1 | Fixed - use active_session_id() instead of first session |
+| BUG-031 | Metadata not persisting across restarts | P1 | Fixed - WAL logging in handle_set_metadata (2286aab) |
 | BUG-039 | MCP tools hang intermittently through Claude Code | P1 | Fixed - connection recovery on timeout and infinite loop fixes |
 | BUG-036 | Selection tools don't switch TUI view | P0 | Fixed - use global broadcasts for focus changes |
 | BUG-035 | MCP handlers return wrong response types | P1 | Fixed - strict broadcast filtering and connection recovery |
