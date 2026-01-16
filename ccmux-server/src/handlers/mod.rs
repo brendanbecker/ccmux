@@ -163,6 +163,8 @@ impl HandlerContext {
             // Input handlers
             ClientMessage::Input { pane_id, data } => self.handle_input(pane_id, data).await,
 
+            ClientMessage::Paste { pane_id, data } => self.handle_paste(pane_id, data).await,
+
             ClientMessage::Reply { reply } => self.handle_reply(reply).await,
 
             ClientMessage::SetViewportOffset { pane_id, offset } => {

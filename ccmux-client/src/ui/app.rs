@@ -436,6 +436,7 @@ impl App {
             InputEvent::Mouse(mouse) => CrosstermEvent::Mouse(mouse),
             InputEvent::FocusGained => CrosstermEvent::FocusGained,
             InputEvent::FocusLost => CrosstermEvent::FocusLost,
+            InputEvent::Paste(text) => CrosstermEvent::Paste(text),
         };
 
         // Only use input handler when attached to a session
@@ -463,67 +464,6 @@ impl App {
         Ok(())
     }
 
-    /// Send input to a pane, handling large pastes and chunking
-    async fn send_pane_input(&mut self, pane_id: Uuid, data: Vec<u8>) -> Result<()> {
-        // FEAT-077: Update local human control lock
-        self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(2000));
-
-        // BUG-011 FIX: Handle large pastes gracefully
-        let data_len = data.len();
-
-        // Reject extremely large pastes to prevent memory issues
-        if data_len > MAX_PASTE_SIZE {
-            let size_mb = data_len as f64 / (1024.0 * 1024.0);
-            self.status_message = Some(format!(
-                "Paste too large ({:.1}MB). Maximum is {}MB.",
-                size_mb,
-                MAX_PASTE_SIZE / (1024 * 1024)
-            ));
-            tracing::warn!(
-                "Rejected paste of {} bytes ({:.1}MB) - exceeds maximum",
-                data_len,
-                size_mb
-            );
-            return Ok(());
-        }
-
-        // Chunk large inputs to avoid protocol message size limits
-        if data_len > MAX_INPUT_CHUNK_SIZE {
-            let num_chunks = (data_len + MAX_INPUT_CHUNK_SIZE - 1) / MAX_INPUT_CHUNK_SIZE;
-            tracing::debug!(
-                "Chunking large paste ({} bytes) into {} chunks",
-                data_len,
-                num_chunks
-            );
-
-            // Show feedback for large pastes
-            if data_len > 1024 * 1024 {
-                let size_mb = data_len as f64 / (1024.0 * 1024.0);
-                self.status_message = Some(format!(
-                    "Pasting {:.1}MB in {} chunks...",
-                    size_mb,
-                    num_chunks
-                ));
-            }
-
-            // Send data in chunks
-            for chunk in data.chunks(MAX_INPUT_CHUNK_SIZE) {
-                self.connection
-                    .send(ClientMessage::Input {
-                        pane_id,
-                        data: chunk.to_vec(),
-                    })
-                    .await?;
-            }
-        } else {
-            // Small input - send directly
-            self.connection
-                .send(ClientMessage::Input { pane_id, data })
-                .await?;
-        }
-        Ok(())
-    }
-
     /// Handle an InputAction from the input handler
     async fn handle_input_action(&mut self, action: InputAction) -> Result<()> {
         match action {
@@ -531,27 +471,74 @@ impl App {
 
             InputAction::SendToPane(data) => {
                 if let Some(pane_id) = self.active_pane_id {
-                    self.send_pane_input(pane_id, data).await?;
+                    // FEAT-077: Update local human control lock
+                    self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(2000));
+
+                    // Small input - send directly
+                    self.connection
+                        .send(ClientMessage::Input { pane_id, data })
+                        .await?;
                 }
             }
 
             InputAction::PasteToPane(data) => {
                 if let Some(pane_id) = self.active_pane_id {
-                    let final_data = if let Some(pane) = self.pane_manager.get(pane_id) {
-                        if pane.is_bracketed_paste_enabled() {
-                            let mut wrapped = Vec::with_capacity(data.len() + 12);
-                            wrapped.extend_from_slice(b"\x1b[200~");
-                            wrapped.extend_from_slice(&data);
-                            wrapped.extend_from_slice(b"\x1b[201~");
-                            tracing::debug!("Wrapped paste in bracketed sequences ({} bytes)", data.len());
-                            wrapped
-                        } else {
-                            data
+                    // FEAT-077: Update local human control lock
+                    self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(2000));
+
+                    // BUG-011 FIX: Handle large pastes gracefully
+                    let data_len = data.len();
+
+                    // Reject extremely large pastes to prevent memory issues
+                    if data_len > MAX_PASTE_SIZE {
+                        let size_mb = data_len as f64 / (1024.0 * 1024.0);
+                        self.status_message = Some(format!(
+                            "Paste too large ({:.1}MB). Maximum is {}MB.",
+                            size_mb,
+                            MAX_PASTE_SIZE / (1024 * 1024)
+                        ));
+                        tracing::warn!(
+                            "Rejected paste of {} bytes ({:.1}MB) - exceeds maximum",
+                            data_len,
+                            size_mb
+                        );
+                        return Ok(());
+                    }
+
+                    // Chunk large inputs to avoid protocol message size limits
+                    if data_len > MAX_INPUT_CHUNK_SIZE {
+                        let num_chunks = (data_len + MAX_INPUT_CHUNK_SIZE - 1) / MAX_INPUT_CHUNK_SIZE;
+                        tracing::debug!(
+                            "Chunking large paste ({} bytes) into {} chunks",
+                            data_len,
+                            num_chunks
+                        );
+
+                        // Show feedback for large pastes
+                        if data_len > 1024 * 1024 {
+                            let size_mb = data_len as f64 / (1024.0 * 1024.0);
+                            self.status_message = Some(format!(
+                                "Pasting {:.1}MB in {} chunks...",
+                                size_mb,
+                                num_chunks
+                            ));
+                        }
+
+                        // Send data in chunks
+                        for chunk in data.chunks(MAX_INPUT_CHUNK_SIZE) {
+                            self.connection
+                                .send(ClientMessage::Paste {
+                                    pane_id,
+                                    data: chunk.to_vec(),
+                                })
+                                .await?;
                         }
                     } else {
-                        data
-                    };
-                    self.send_pane_input(pane_id, final_data).await?;
+                        // Small input - send directly
+                        self.connection
+                            .send(ClientMessage::Paste { pane_id, data })
+                            .await?;
+                    }
                 }
             }
 

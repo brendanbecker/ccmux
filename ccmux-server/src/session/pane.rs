@@ -45,6 +45,8 @@ pub struct Pane {
     claude_detector: ClaudeDetector,
     /// Beads root directory if detected (FEAT-057)
     beads_root: Option<PathBuf>,
+    /// Whether bracketed paste mode is enabled (ESC [ ? 2004 h)
+    bracketed_paste_enabled: bool,
 }
 
 impl fmt::Debug for Pane {
@@ -104,6 +106,7 @@ impl Pane {
             parser: None,
             claude_detector: ClaudeDetector::new(),
             beads_root: None,
+            bracketed_paste_enabled: false,
         }
     }
 
@@ -146,6 +149,7 @@ impl Pane {
             parser: None,
             claude_detector,
             beads_root: None,
+            bracketed_paste_enabled: false,
         }
     }
 
@@ -402,6 +406,11 @@ impl Pane {
         self.parser = Some(Parser::new(self.rows, self.cols, 0));
     }
 
+    /// Check if bracketed paste mode is enabled
+    pub fn bracketed_paste_enabled(&self) -> bool {
+        self.bracketed_paste_enabled
+    }
+
     /// Process terminal output through the parser
     ///
     /// Returns `Some(ClaudeState)` if Claude state changed, `None` otherwise.
@@ -409,11 +418,22 @@ impl Pane {
         if let Some(parser) = &mut self.parser {
             parser.process(data);
         }
+
+        // Detect bracketed paste mode escape sequences
+        // ESC [ ? 2004 h (enable) / l (disable)
+        let text = String::from_utf8_lossy(data);
+        if text.contains("\x1b[?2004h") {
+            self.bracketed_paste_enabled = true;
+            tracing::debug!(pane_id = %self.id, "Bracketed paste mode enabled");
+        } else if text.contains("\x1b[?2004l") {
+            self.bracketed_paste_enabled = false;
+            tracing::debug!(pane_id = %self.id, "Bracketed paste mode disabled");
+        }
+
         // Also push to scrollback
         self.scrollback.push_bytes(data);
 
         // Analyze output for Claude state changes
-        let text = String::from_utf8_lossy(data);
         if let Some(_activity) = self.claude_detector.analyze(&text) {
             // State changed - update pane state and return new state
             if let Some(claude_state) = self.claude_detector.state() {
@@ -963,5 +983,25 @@ mod tests {
 
         assert_eq!(pane.dimensions(), (120, 40));
         assert!(!pane.has_parser());
+    }
+
+    #[test]
+    fn test_pane_bracketed_paste_detection() {
+        let window_id = Uuid::new_v4();
+        let mut pane = Pane::new(window_id, 0);
+
+        assert!(!pane.bracketed_paste_enabled());
+
+        // Enable bracketed paste
+        pane.process(b"\x1b[?2004h");
+        assert!(pane.bracketed_paste_enabled());
+
+        // Disable bracketed paste
+        pane.process(b"\x1b[?2004l");
+        assert!(!pane.bracketed_paste_enabled());
+
+        // Enable again with other data
+        pane.process(b"some data \x1b[?2004h more data");
+        assert!(pane.bracketed_paste_enabled());
     }
 }

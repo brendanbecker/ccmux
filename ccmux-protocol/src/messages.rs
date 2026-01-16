@@ -126,6 +126,9 @@ pub enum ClientMessage {
     /// Send input to pane
     Input { pane_id: Uuid, data: Vec<u8> },
 
+    /// Send paste to pane (may be wrapped in bracketed paste markers)
+    Paste { pane_id: Uuid, data: Vec<u8> },
+
     /// Resize pane
     Resize { pane_id: Uuid, cols: u16, rows: u16 },
 
