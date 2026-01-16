@@ -44,7 +44,7 @@ use crate::connection::Connection;
 use crate::input::{ClientCommand, InputAction, InputHandler, InputMode};
 
 use super::event::{AppEvent, EventHandler, InputEvent};
-use super::layout::{LayoutManager, SplitDirection as LayoutSplitDirection};
+use super::layout::{LayoutManager, LayoutPolicy, SplitDirection as LayoutSplitDirection};
 use super::pane::{render_pane, FocusState, PaneManager};
 use super::terminal::Terminal;
 
@@ -292,7 +292,8 @@ impl App {
                     let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
 
                     if let Some(ref layout) = self.layout {
-                        let pane_rects = layout.calculate_rects(pane_area);
+                        let weights = self.calculate_pane_weights();
+                        let pane_rects = layout.calculate_rects(pane_area, &weights);
 
                         // Resize each pane and notify server
                         for (pane_id, rect) in &pane_rects {
@@ -539,7 +540,8 @@ impl App {
                 let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
 
                 if let Some(ref layout) = self.layout {
-                    let pane_rects = layout.calculate_rects(pane_area);
+                    let weights = self.calculate_pane_weights();
+                    let pane_rects = layout.calculate_rects(pane_area, &weights);
 
                     // Find which pane contains the click point
                     if let Some((pane_id, _)) = pane_rects.iter().find(|(_, rect)| {
@@ -620,7 +622,8 @@ impl App {
                 let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
 
                 if let Some(ref layout) = self.layout {
-                    let pane_rects = layout.calculate_rects(pane_area);
+                    let weights = self.calculate_pane_weights();
+                    let pane_rects = layout.calculate_rects(pane_area, &weights);
 
                     // Resize each pane and notify server
                     for (pane_id, rect) in &pane_rects {
@@ -921,12 +924,13 @@ impl App {
             ClientCommand::MouseSelectionStart { x, y } => {
                 // Translate terminal coordinates to pane-relative coordinates
                 if let Some(pane_id) = self.active_pane_id {
+                    let weights = self.calculate_pane_weights();
                     if let Some(pane) = self.pane_manager.get_mut(pane_id) {
                         // Get pane rect from layout to translate coordinates
                         if let Some(ref layout) = self.layout {
                             let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
                             let pane_area = ratatui::layout::Rect::new(0, 0, cols, rows.saturating_sub(1));
-                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id) {
+                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id, &weights) {
                                 // Translate to pane-relative coordinates (accounting for border)
                                 let pane_x = x.saturating_sub(rect.x + 1) as usize;
                                 let pane_y = y.saturating_sub(rect.y + 1) as usize;
@@ -940,11 +944,12 @@ impl App {
 
             ClientCommand::MouseSelectionUpdate { x, y } => {
                 if let Some(pane_id) = self.active_pane_id {
+                    let weights = self.calculate_pane_weights();
                     if let Some(pane) = self.pane_manager.get_mut(pane_id) {
                         if let Some(ref layout) = self.layout {
                             let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
                             let pane_area = ratatui::layout::Rect::new(0, 0, cols, rows.saturating_sub(1));
-                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id) {
+                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id, &weights) {
                                 let pane_x = x.saturating_sub(rect.x + 1) as usize;
                                 let pane_y = y.saturating_sub(rect.y + 1) as usize;
                                 pane.mouse_selection_update(pane_y, pane_x);
@@ -956,11 +961,12 @@ impl App {
 
             ClientCommand::MouseSelectionEnd { x, y } => {
                 if let Some(pane_id) = self.active_pane_id {
+                    let weights = self.calculate_pane_weights();
                     if let Some(pane) = self.pane_manager.get_mut(pane_id) {
                         if let Some(ref layout) = self.layout {
                             let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
                             let pane_area = ratatui::layout::Rect::new(0, 0, cols, rows.saturating_sub(1));
-                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id) {
+                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id, &weights) {
                                 let pane_x = x.saturating_sub(rect.x + 1) as usize;
                                 let pane_y = y.saturating_sub(rect.y + 1) as usize;
                                 pane.mouse_selection_end(pane_y, pane_x);
@@ -973,11 +979,12 @@ impl App {
 
             ClientCommand::SelectWord { x, y } => {
                 if let Some(pane_id) = self.active_pane_id {
+                    let weights = self.calculate_pane_weights();
                     if let Some(pane) = self.pane_manager.get_mut(pane_id) {
                         if let Some(ref layout) = self.layout {
                             let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
                             let pane_area = ratatui::layout::Rect::new(0, 0, cols, rows.saturating_sub(1));
-                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id) {
+                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id, &weights) {
                                 let pane_x = x.saturating_sub(rect.x + 1) as usize;
                                 let pane_y = y.saturating_sub(rect.y + 1) as usize;
                                 pane.select_word_at(pane_y, pane_x);
@@ -990,11 +997,12 @@ impl App {
 
             ClientCommand::SelectLine { x: _, y } => {
                 if let Some(pane_id) = self.active_pane_id {
+                    let weights = self.calculate_pane_weights();
                     if let Some(pane) = self.pane_manager.get_mut(pane_id) {
                         if let Some(ref layout) = self.layout {
                             let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
                             let pane_area = ratatui::layout::Rect::new(0, 0, cols, rows.saturating_sub(1));
-                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id) {
+                            if let Some(rect) = layout.get_pane_rect(pane_area, pane_id, &weights) {
                                 let pane_y = y.saturating_sub(rect.y + 1) as usize;
                                 pane.select_line_at(pane_y);
                                 self.status_message = Some("Line selected - press 'y' to yank".to_string());
@@ -1006,6 +1014,19 @@ impl App {
 
             ClientCommand::ToggleZoom => {
                 self.status_message = Some("Zoom toggle not yet implemented".to_string());
+            }
+
+            ClientCommand::CycleLayoutPolicy => {
+                if let Some(ref mut layout) = self.layout {
+                    let next_policy = match layout.policy() {
+                        LayoutPolicy::Fixed => LayoutPolicy::Balanced,
+                        LayoutPolicy::Balanced => LayoutPolicy::Adaptive,
+                        LayoutPolicy::Adaptive => LayoutPolicy::Fixed,
+                    };
+                    layout.set_policy(next_policy);
+                    self.status_message = Some(format!("Layout policy: {:?}", next_policy));
+                    self.needs_redraw = true;
+                }
             }
 
             ClientCommand::ShowHelp => {
@@ -1212,6 +1233,40 @@ impl App {
             .filter(|p| p.window_id == window_id)
             .min_by_key(|p| p.index)
             .map(|p| p.id)
+    }
+
+    /// Calculate weights for all panes based on activity and focus
+    fn calculate_pane_weights(&self) -> HashMap<Uuid, f32> {
+        let mut weights = HashMap::new();
+        for (id, pane) in self.pane_manager.iter() {
+            let mut weight = 1.0;
+
+            // Focus bonus
+            if pane.is_focused() {
+                weight *= 1.2;
+            }
+
+            // Claude activity bonus
+            if let Some(activity) = pane.claude_activity() {
+                match activity {
+                    ClaudeActivity::Thinking | ClaudeActivity::Coding | ClaudeActivity::ToolUse => {
+                        weight *= 1.5;
+                    }
+                    ClaudeActivity::AwaitingConfirmation => {
+                        weight *= 1.3;
+                    }
+                    ClaudeActivity::Idle => {}
+                }
+            }
+
+            // Exited penalty
+            if let PaneState::Exited { .. } = pane.pane_state() {
+                weight *= 0.7;
+            }
+
+            weights.insert(*id, weight);
+        }
+        weights
     }
 
     /// Handle input in session select state
@@ -1575,7 +1630,8 @@ impl App {
                 let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
 
                 if let Some(ref layout) = self.layout {
-                    let pane_rects = layout.calculate_rects(pane_area);
+                    let weights = self.calculate_pane_weights();
+                    let pane_rects = layout.calculate_rects(pane_area, &weights);
 
                     for (pane_id, rect) in &pane_rects {
                         let inner_width = rect.width.saturating_sub(2);
@@ -1603,6 +1659,7 @@ impl App {
                 }
                 // Sync state with UI pane
                 self.pane_manager.update_pane_state(pane_id, state);
+                self.needs_redraw = true;
             }
             ServerMessage::ClaudeStateChanged { pane_id, state } => {
                 let pane_state = PaneState::Claude(state);
@@ -1611,6 +1668,7 @@ impl App {
                 }
                 // Sync state with UI pane
                 self.pane_manager.update_pane_state(pane_id, pane_state);
+                self.needs_redraw = true;
             }
             ServerMessage::PaneClosed { pane_id, .. } => {
                 self.panes.remove(&pane_id);
@@ -1646,7 +1704,8 @@ impl App {
                     let pane_area = Rect::new(0, 0, cols, rows.saturating_sub(1));
 
                     if let Some(ref layout) = self.layout {
-                        let pane_rects = layout.calculate_rects(pane_area);
+                        let weights = self.calculate_pane_weights();
+                        let pane_rects = layout.calculate_rects(pane_area, &weights);
 
                         for (remaining_pane_id, rect) in &pane_rects {
                             let inner_width = rect.width.saturating_sub(2);
@@ -1875,7 +1934,8 @@ impl App {
         let pane_area = Rect::new(0, 0, term_cols, term_rows.saturating_sub(1));
 
         if let Some(ref layout) = self.layout {
-            let pane_rects = layout.calculate_rects(pane_area);
+            let weights = self.calculate_pane_weights();
+            let pane_rects = layout.calculate_rects(pane_area, &weights);
 
             for (pane_id, rect) in &pane_rects {
                 // Account for border (1 cell on each side)
@@ -1999,7 +2059,8 @@ impl App {
 
         // Render all panes using layout manager
         if let Some(ref layout) = self.layout {
-            let pane_rects = layout.calculate_rects(pane_area);
+            let weights = self.calculate_pane_weights();
+            let pane_rects = layout.calculate_rects(pane_area, &weights);
 
             // Render each pane
             for (pane_id, rect) in &pane_rects {
