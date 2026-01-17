@@ -1278,6 +1278,8 @@ mod tests {
             cwd: None,
             stuck_status: None,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
         let broadcast_msg = ServerMessage::PaneCreated {
             pane: pane_info,

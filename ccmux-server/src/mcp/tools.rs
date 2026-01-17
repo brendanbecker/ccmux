@@ -745,6 +745,26 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                 "properties": {}
             }),
         },
+        // ==================== FEAT-062: Mirror Pane Tool ====================
+        Tool {
+            name: "ccmux_mirror_pane".into(),
+            description: "Create a read-only mirror pane that displays another pane's output in real-time. Useful for 'plate spinning' visibility in multi-agent workflows.".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "source_pane_id": {
+                        "type": "string",
+                        "description": "UUID of the pane to mirror"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["horizontal", "vertical"],
+                        "description": "Split direction for the new mirror pane (default: vertical)"
+                    }
+                },
+                "required": ["source_pane_id"]
+            }),
+        },
     ]
 }
 

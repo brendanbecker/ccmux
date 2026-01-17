@@ -53,6 +53,10 @@ pub struct Pane {
     bracketed_paste_enabled: bool,
     /// Arbitrary key-value metadata for the pane (FEAT-076)
     metadata: std::collections::HashMap<String, String>,
+    /// Whether this pane is a mirror of another pane (FEAT-062)
+    is_mirror: bool,
+    /// Source pane ID if this is a mirror pane (FEAT-062)
+    mirror_source: Option<Uuid>,
 }
 
 impl fmt::Debug for Pane {
@@ -74,6 +78,8 @@ impl fmt::Debug for Pane {
             .field("parser", &self.parser.as_ref().map(|_| "Parser { ... }"))
             .field("agent_detector", &self.agent_detector)
             .field("beads_root", &self.beads_root)
+            .field("is_mirror", &self.is_mirror)
+            .field("mirror_source", &self.mirror_source)
             .finish()
     }
 }
@@ -116,6 +122,8 @@ impl Pane {
             beads_root: None,
             bracketed_paste_enabled: false,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         }
     }
 
@@ -174,6 +182,8 @@ impl Pane {
             beads_root: None,
             bracketed_paste_enabled: false,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         }
     }
 
@@ -257,6 +267,32 @@ impl Pane {
     /// Get all metadata
     pub fn metadata(&self) -> &std::collections::HashMap<String, String> {
         &self.metadata
+    }
+
+    // ==================== Mirror Pane Support (FEAT-062) ====================
+
+    /// Check if this pane is a mirror pane
+    pub fn is_mirror(&self) -> bool {
+        self.is_mirror
+    }
+
+    /// Get the source pane ID if this is a mirror pane
+    pub fn mirror_source(&self) -> Option<Uuid> {
+        self.mirror_source
+    }
+
+    /// Mark this pane as a mirror of another pane
+    pub fn set_as_mirror(&mut self, source_id: Uuid) {
+        self.is_mirror = true;
+        self.mirror_source = Some(source_id);
+    }
+
+    /// Create a new mirror pane for a source pane
+    pub fn create_mirror(window_id: Uuid, index: usize, source_id: Uuid) -> Self {
+        let mut pane = Self::new(window_id, index);
+        pane.is_mirror = true;
+        pane.mirror_source = Some(source_id);
+        pane
     }
 
     // ==================== Generic Agent Detection (FEAT-084) ====================
@@ -612,6 +648,8 @@ impl Pane {
             cwd: self.cwd.clone(),
             stuck_status: self.check_stuck_status(),
             metadata: self.metadata.clone(),
+            is_mirror: self.is_mirror,
+            mirror_source: self.mirror_source,
         }
     }
 

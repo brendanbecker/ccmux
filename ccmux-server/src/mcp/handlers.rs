@@ -1099,6 +1099,60 @@ impl<'a> ToolContext<'a> {
 
         Ok(pane_info)
     }
+
+    // ==================== FEAT-062: Mirror Pane Tool ====================
+
+    /// Create a read-only mirror pane that displays another pane's output
+    pub fn mirror_pane(
+        &mut self,
+        source_pane_id: Uuid,
+        direction: Option<&str>,
+    ) -> Result<String, McpError> {
+        // Parse direction, defaulting to vertical
+        let split_direction = match direction {
+            Some("horizontal") => ccmux_protocol::SplitDirection::Horizontal,
+            _ => ccmux_protocol::SplitDirection::Vertical,
+        };
+
+        // Find the source pane and extract IDs
+        let (session_id, window_id, session_name) = {
+            let (session, window, _pane) = self
+                .session_manager
+                .find_pane(source_pane_id)
+                .ok_or_else(|| McpError::PaneNotFound(source_pane_id.to_string()))?;
+            (session.id(), window.id(), session.name().to_string())
+        };
+
+        // Create the mirror pane
+        let session = self
+            .session_manager
+            .get_session_mut(session_id)
+            .ok_or_else(|| McpError::SessionNotFound(session_id.to_string()))?;
+
+        let window = session
+            .get_window_mut(window_id)
+            .ok_or_else(|| McpError::WindowNotFound(window_id.to_string()))?;
+
+        let index = window.pane_count();
+        let mirror_pane = crate::session::Pane::create_mirror(window_id, index, source_pane_id);
+        let mirror_id = mirror_pane.id();
+
+        window.add_pane(mirror_pane);
+
+        // Register the mirror relationship
+        self.session_manager
+            .mirror_registry_mut()
+            .register(source_pane_id, mirror_id);
+
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
+            "mirror_pane_id": mirror_id.to_string(),
+            "source_pane_id": source_pane_id.to_string(),
+            "session_name": session_name,
+            "direction": direction.unwrap_or("vertical"),
+            "status": "created"
+        }))
+        .map_err(|e| McpError::Internal(e.to_string()))?)
+    }
 }
 
 #[cfg(test)]

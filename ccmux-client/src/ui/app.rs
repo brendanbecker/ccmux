@@ -575,18 +575,30 @@ impl App {
 
             InputAction::SendToPane(data) => {
                 if let Some(pane_id) = self.active_pane_id {
-                    // FEAT-077: Update local human control lock
-                    self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(2000));
+                    // FEAT-062: Don't send input to mirror panes (read-only)
+                    if self.pane_manager.get(pane_id).map(|p| p.is_mirror()).unwrap_or(false) {
+                        // Mirror panes are read-only - ignore input
+                        tracing::trace!("Ignoring input for mirror pane {}", pane_id);
+                    } else {
+                        // FEAT-077: Update local human control lock
+                        self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(2000));
 
-                    // Small input - send directly
-                    self.connection
-                        .send(ClientMessage::Input { pane_id, data })
-                        .await?;
+                        // Small input - send directly
+                        self.connection
+                            .send(ClientMessage::Input { pane_id, data })
+                            .await?;
+                    }
                 }
             }
 
             InputAction::PasteToPane(data) => {
                 if let Some(pane_id) = self.active_pane_id {
+                    // FEAT-062: Don't paste to mirror panes (read-only)
+                    if self.pane_manager.get(pane_id).map(|p| p.is_mirror()).unwrap_or(false) {
+                        tracing::trace!("Ignoring paste for mirror pane {}", pane_id);
+                        return Ok(());
+                    }
+
                     // FEAT-077: Update local human control lock
                     self.human_control_lock_expiry = Some(Instant::now() + Duration::from_millis(2000));
 
@@ -1840,6 +1852,23 @@ impl App {
             ServerMessage::Output { pane_id, data } => {
                 // Process output through the UI pane's terminal emulator
                 self.pane_manager.process_output(pane_id, &data);
+
+                // FEAT-062: Forward output to any mirror panes of this source
+                let mirror_ids: Vec<Uuid> = self
+                    .panes
+                    .iter()
+                    .filter_map(|(id, info)| {
+                        if info.mirror_source == Some(pane_id) {
+                            Some(*id)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                for mirror_id in mirror_ids {
+                    self.pane_manager.process_output(mirror_id, &data);
+                }
             }
             ServerMessage::PaneStateChanged { pane_id, state } => {
                 if let Some(pane) = self.panes.get_mut(&pane_id) {
@@ -2111,6 +2140,85 @@ impl App {
 
             ServerMessage::SessionDestroyed { .. } => {
                 // Handled by SessionEnded?
+            }
+
+            // FEAT-062: Mirror pane created
+            ServerMessage::MirrorCreated {
+                mirror_pane,
+                source_pane_id,
+                direction,
+                should_focus: _,
+                ..
+            } => {
+                tracing::info!(
+                    mirror_id = %mirror_pane.id,
+                    source_id = %source_pane_id,
+                    ?direction,
+                    "Handling MirrorCreated broadcast from server"
+                );
+
+                let layout_direction = LayoutSplitDirection::from(direction);
+
+                // Create UI pane for the mirror
+                self.pane_manager.add_pane(mirror_pane.id, mirror_pane.rows, mirror_pane.cols);
+                if let Some(ui_pane) = self.pane_manager.get_mut(mirror_pane.id) {
+                    // Set title to indicate this is a mirror
+                    let title = format!("[MIRROR: {}]", source_pane_id.to_string().split('-').next().unwrap_or("?"));
+                    ui_pane.set_title(Some(title));
+                    // FEAT-062: Mark as mirror for styling and read-only handling
+                    ui_pane.set_is_mirror(true);
+                }
+
+                // Store pane info
+                let pane_window_id = mirror_pane.window_id;
+                self.panes.insert(mirror_pane.id, mirror_pane.clone());
+
+                // Add to layout if in active window
+                let active_window_id = self.active_window_id();
+                let pane_in_active_window = active_window_id == Some(pane_window_id);
+
+                if pane_in_active_window {
+                    if let Some(ref mut layout) = self.layout {
+                        // Find a suitable reference pane for the split
+                        let ref_pane = self.active_pane_id.or_else(|| {
+                            layout.root().pane_ids().first().copied()
+                        });
+
+                        if let Some(ref_id) = ref_pane {
+                            layout.root_mut().add_pane(ref_id, mirror_pane.id, layout_direction.into());
+                        }
+                    }
+                }
+
+                // Note: Mirror will receive output via forwarding as source produces it
+                // Initial content sync could be added later if needed
+
+                self.needs_redraw = true;
+            }
+
+            // FEAT-062: Mirror source closed
+            ServerMessage::MirrorSourceClosed {
+                mirror_pane_id,
+                source_pane_id,
+                exit_code,
+            } => {
+                tracing::info!(
+                    mirror_id = %mirror_pane_id,
+                    source_id = %source_pane_id,
+                    ?exit_code,
+                    "Mirror source pane closed"
+                );
+
+                // Display a message in the mirror pane
+                if let Some(ui_pane) = self.pane_manager.get_mut(mirror_pane_id) {
+                    let msg = format!(
+                        "\r\n\x1b[1;33m[Source pane closed{}]\x1b[0m\r\n\x1b[2mPress 'q' or Escape to close this mirror\x1b[0m\r\n",
+                        exit_code.map(|c| format!(" with exit code {}", c)).unwrap_or_default()
+                    );
+                    self.pane_manager.process_output(mirror_pane_id, msg.as_bytes());
+                }
+
+                self.needs_redraw = true;
             }
 
             // MCP bridge messages - not used by TUI client

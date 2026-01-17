@@ -443,6 +443,102 @@ impl HandlerContext {
 
         HandlerResult::NoResponse
     }
+
+    // ==================== Mirror Pane Handler (FEAT-062) ====================
+
+    /// Handle CreateMirror message - create a read-only mirror of another pane
+    pub async fn handle_create_mirror(
+        &self,
+        source_pane_id: Uuid,
+        _target_pane_id: Option<Uuid>,
+        direction: Option<SplitDirection>,
+    ) -> HandlerResult {
+        info!(
+            "CreateMirror request from {} for source pane {}",
+            self.client_id, source_pane_id
+        );
+
+        let direction = direction.unwrap_or(SplitDirection::Vertical);
+
+        // Get the source pane information
+        let (session_id, window_id, session_name) = {
+            let session_manager = self.session_manager.read().await;
+
+            // Find the pane
+            let pane_info = match session_manager.find_pane(source_pane_id) {
+                Some((session, window, pane)) => {
+                    (session.id(), window.id(), session.name().to_string())
+                }
+                None => {
+                    return HandlerContext::error(
+                        ErrorCode::PaneNotFound,
+                        format!("Source pane '{}' not found", source_pane_id),
+                    );
+                }
+            };
+
+            pane_info
+        };
+
+        // Create the mirror pane
+        let mirror_pane_info = {
+            let mut session_manager = self.session_manager.write().await;
+
+            let session = match session_manager.get_session_mut(session_id) {
+                Some(s) => s,
+                None => {
+                    return HandlerContext::error(
+                        ErrorCode::SessionNotFound,
+                        "Session not found for mirror creation".to_string(),
+                    );
+                }
+            };
+
+            let window = match session.get_window_mut(window_id) {
+                Some(w) => w,
+                None => {
+                    return HandlerContext::error(
+                        ErrorCode::WindowNotFound,
+                        "Window not found for mirror creation".to_string(),
+                    );
+                }
+            };
+
+            // Create a mirror pane (special pane type that doesn't have a PTY)
+            let index = window.pane_count();
+            let mirror_pane = crate::session::Pane::create_mirror(window_id, index, source_pane_id);
+            let mirror_info = mirror_pane.to_info();
+
+            // Add the pane to the window
+            window.add_pane(mirror_pane);
+
+            mirror_info
+        };
+
+        // Register the mirror relationship
+        {
+            let mut session_manager = self.session_manager.write().await;
+            session_manager.mirror_registry_mut().register(source_pane_id, mirror_pane_info.id);
+        }
+
+        info!(
+            "Mirror pane {} created for source pane {}",
+            mirror_pane_info.id, source_pane_id
+        );
+
+        // Broadcast mirror creation
+        let broadcast = ServerMessage::MirrorCreated {
+            mirror_pane: mirror_pane_info.clone(),
+            source_pane_id,
+            session_id,
+            session_name,
+            window_id,
+            direction,
+            should_focus: false,
+        };
+
+        HandlerResult::BroadcastToSession { session_id, broadcast }
+    }
 }
 
 #[cfg(test)]

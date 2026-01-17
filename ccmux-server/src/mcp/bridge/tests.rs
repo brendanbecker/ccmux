@@ -85,7 +85,7 @@ mod tests {
                 name: None,
                 title: None,
                 cwd: None,
-                stuck_status: None, metadata: std::collections::HashMap::new(),
+                stuck_status: None, metadata: std::collections::HashMap::new(), is_mirror: false, mirror_source: None,
             },
             direction: SplitDirection::Horizontal,
         };

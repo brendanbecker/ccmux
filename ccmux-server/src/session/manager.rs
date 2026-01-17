@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use uuid::Uuid;
 use ccmux_utils::{CcmuxError, Result};
 
-use super::{Pane, Session, Window};
+use super::{MirrorRegistry, Pane, Session, Window};
 use crate::orchestration::WorktreeDetector;
 
 /// Manages all sessions
@@ -14,6 +14,8 @@ pub struct SessionManager {
     name_to_id: HashMap<String, Uuid>,
     /// The currently active session (used when no session is explicitly specified)
     active_session_id: Option<Uuid>,
+    /// Mirror pane registry for tracking mirror relationships (FEAT-062)
+    mirror_registry: MirrorRegistry,
 }
 
 impl SessionManager {
@@ -397,6 +399,28 @@ impl SessionManager {
         }
 
         by_repo
+    }
+
+    // ==================== Mirror Registry (FEAT-062) ====================
+
+    /// Get a reference to the mirror registry
+    pub fn mirror_registry(&self) -> &MirrorRegistry {
+        &self.mirror_registry
+    }
+
+    /// Get a mutable reference to the mirror registry
+    pub fn mirror_registry_mut(&mut self) -> &mut MirrorRegistry {
+        &mut self.mirror_registry
+    }
+
+    /// Get all mirror pane IDs for a source pane
+    pub fn get_mirrors_for_pane(&self, source_id: Uuid) -> Vec<Uuid> {
+        self.mirror_registry.get_mirrors(source_id)
+    }
+
+    /// Check if a pane is a mirror
+    pub fn is_mirror_pane(&self, pane_id: Uuid) -> bool {
+        self.mirror_registry.is_mirror(pane_id)
     }
 }
 

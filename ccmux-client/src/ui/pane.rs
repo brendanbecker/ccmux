@@ -155,6 +155,8 @@ pub struct Pane {
     paste_buffer: Option<String>,
     /// Whether bracketed paste mode is enabled by the application
     bracketed_paste_enabled: bool,
+    /// Whether this pane is a mirror of another pane (FEAT-062)
+    is_mirror: bool,
 }
 
 impl Pane {
@@ -173,6 +175,7 @@ impl Pane {
             selection: None,
             paste_buffer: None,
             bracketed_paste_enabled: false,
+            is_mirror: false,
         }
     }
 
@@ -275,6 +278,18 @@ impl Pane {
     /// Check if bracketed paste mode is enabled
     pub fn is_bracketed_paste_enabled(&self) -> bool {
         self.bracketed_paste_enabled
+    }
+
+    // ==================== Mirror Pane Support (FEAT-062) ====================
+
+    /// Check if this pane is a mirror pane
+    pub fn is_mirror(&self) -> bool {
+        self.is_mirror
+    }
+
+    /// Set whether this pane is a mirror pane
+    pub fn set_is_mirror(&mut self, is_mirror: bool) {
+        self.is_mirror = is_mirror;
     }
 
     /// Resize the terminal
@@ -727,7 +742,13 @@ impl PaneWidget {
     /// Get the border block for a pane
     pub fn create_block(pane: &Pane) -> Block<'static> {
         let title = pane.display_title();
-        let border_style = Self::border_style(pane.focus_state());
+
+        // FEAT-062: Use dim cyan border for mirror panes
+        let border_style = if pane.is_mirror() {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::DIM)
+        } else {
+            Self::border_style(pane.focus_state())
+        };
 
         let mut block = Block::default()
             .borders(Borders::ALL)
@@ -738,6 +759,11 @@ impl PaneWidget {
         if pane.is_scrolled() {
             let scroll_indicator = format!(" [{}↑] ", pane.scroll_offset);
             block = block.title_bottom(scroll_indicator);
+        }
+
+        // FEAT-062: Add mirror indicator for mirror panes
+        if pane.is_mirror() {
+            block = block.title_bottom(" [READ-ONLY] ");
         }
 
         block

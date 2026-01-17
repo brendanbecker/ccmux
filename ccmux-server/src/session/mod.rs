@@ -9,12 +9,14 @@
 #![allow(clippy::module_inception)]
 
 mod manager;
+mod mirror;
 mod pane;
 #[allow(clippy::module_inception)]
 mod session;
 mod window;
 
 pub use manager::SessionManager;
+pub use mirror::MirrorRegistry;
 pub use pane::Pane;
 pub use session::Session;
 pub use window::Window;

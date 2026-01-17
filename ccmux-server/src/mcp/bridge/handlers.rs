@@ -1609,4 +1609,55 @@ impl<'a> ToolHandlers<'a> {
     msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
     }
     }
+
+    // ==================== FEAT-062: Mirror Pane Tool ====================
+
+    /// Create a read-only mirror pane that displays another pane's output
+    pub async fn tool_mirror_pane(
+        &mut self,
+        source_pane_id: Uuid,
+        direction: Option<&str>,
+    ) -> Result<ToolResult, McpError> {
+        let split_direction = match direction {
+            Some("horizontal") => SplitDirection::Horizontal,
+            _ => SplitDirection::Vertical,
+        };
+
+        self.connection
+            .send_to_daemon(ClientMessage::CreateMirror {
+                source_pane_id,
+                target_pane_id: None,
+                direction: Some(split_direction),
+            })
+            .await?;
+
+        match self.connection
+            .recv_filtered(|msg| matches!(msg, ServerMessage::MirrorCreated { source_pane_id: src_id, .. } if *src_id == source_pane_id))
+            .await?
+        {
+            ServerMessage::MirrorCreated {
+                mirror_pane,
+                source_pane_id,
+                session_name,
+                direction,
+                ..
+            } => {
+                let result = serde_json::json!({
+                    "mirror_pane_id": mirror_pane.id.to_string(),
+                    "source_pane_id": source_pane_id.to_string(),
+                    "session_name": session_name,
+                    "direction": format!("{:?}", direction).to_lowercase(),
+                    "status": "created"
+                });
+
+                let json = serde_json::to_string_pretty(&result)
+                    .map_err(|e| McpError::Internal(e.to_string()))?;
+                Ok(ToolResult::text(json))
+            }
+            ServerMessage::Error { code, message, .. } => {
+                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+            }
+            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+        }
+    }
 }

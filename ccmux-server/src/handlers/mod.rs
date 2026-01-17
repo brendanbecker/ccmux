@@ -420,6 +420,16 @@ impl HandlerContext {
             ClientMessage::GetEventsSince { last_commit_seq } => {
                 self.handle_get_events_since(last_commit_seq).await
             }
+
+            // Mirror pane handler (FEAT-062)
+            ClientMessage::CreateMirror {
+                source_pane_id,
+                target_pane_id,
+                direction,
+            } => {
+                self.handle_create_mirror(source_pane_id, target_pane_id, direction)
+                    .await
+            }
         }
     }
 

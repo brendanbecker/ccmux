@@ -399,6 +399,22 @@ pub enum ClientMessage {
         /// Last seen commit sequence (0 = none)
         last_commit_seq: u64,
     },
+
+    // ==================== Mirror Pane (FEAT-062) ====================
+
+    /// Create a mirror pane that displays another pane's output (FEAT-062)
+    ///
+    /// Mirror panes are read-only views of a source pane's terminal output.
+    /// They have independent scrollback and can be used for "plate spinning"
+    /// visibility in multi-agent workflows.
+    CreateMirror {
+        /// The pane to mirror
+        source_pane_id: Uuid,
+        /// Optional target pane to convert to a mirror (creates new split if None)
+        target_pane_id: Option<Uuid>,
+        /// Split direction if creating a new pane (default: Vertical)
+        direction: Option<SplitDirection>,
+    },
 }
 
 impl ClientMessage {
@@ -453,6 +469,7 @@ impl ClientMessage {
             ClientMessage::RequestBeadsReadyList { .. } => "RequestBeadsReadyList",
             ClientMessage::GetEventsSince { .. } => "GetEventsSince",
             ClientMessage::RequestWidgetUpdate { .. } => "RequestWidgetUpdate",
+            ClientMessage::CreateMirror { .. } => "CreateMirror",
         }
     }
 }
@@ -827,6 +844,39 @@ pub enum ServerMessage {
         pane_id: Uuid,
         /// The widget update containing metadata and widget items
         update: crate::types::WidgetUpdate,
+    },
+
+    // ==================== Mirror Pane (FEAT-062) ====================
+
+    /// Mirror pane created successfully (FEAT-062)
+    MirrorCreated {
+        /// The newly created mirror pane
+        mirror_pane: PaneInfo,
+        /// The source pane being mirrored
+        source_pane_id: Uuid,
+        /// Session information
+        session_id: Uuid,
+        session_name: String,
+        /// Window information
+        window_id: Uuid,
+        /// Split direction for layout
+        direction: SplitDirection,
+        /// Whether the receiving client should focus this pane
+        #[serde(default)]
+        should_focus: bool,
+    },
+
+    /// Mirror source pane closed (FEAT-062)
+    ///
+    /// Sent to mirror panes when their source pane closes.
+    /// The mirror pane should display a message and allow the user to close it.
+    MirrorSourceClosed {
+        /// The mirror pane affected
+        mirror_pane_id: Uuid,
+        /// The source pane that closed
+        source_pane_id: Uuid,
+        /// Exit code of the source pane (if available)
+        exit_code: Option<i32>,
     },
 }
 
@@ -1206,6 +1256,8 @@ tags: HashSet::new(),
                                 cwd: None,
                                 stuck_status: None,
                                 metadata: HashMap::new(),
+                                is_mirror: false,
+                                mirror_source: None,
                             }],            commit_seq: 100,
         };
 
@@ -1260,6 +1312,8 @@ tags: HashSet::new(),
             cwd: Some("/home/user".to_string()),
             stuck_status: None,
             metadata: HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         let msg = ServerMessage::PaneCreated {

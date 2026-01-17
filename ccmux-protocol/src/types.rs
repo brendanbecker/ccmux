@@ -290,6 +290,12 @@ pub struct PaneInfo {
     /// Arbitrary key-value metadata for the pane (FEAT-076)
     #[serde(default)]
     pub metadata: std::collections::HashMap<String, String>,
+    /// Whether this pane is a mirror of another pane (FEAT-062)
+    #[serde(default)]
+    pub is_mirror: bool,
+    /// Source pane ID if this is a mirror pane (FEAT-062)
+    #[serde(default)]
+    pub mirror_source: Option<Uuid>,
 }
 
 /// Pane stuck/health status (FEAT-073)
@@ -1265,6 +1271,8 @@ mod tests {
             cwd: None,
             stuck_status: None,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         assert_eq!(pane.index, 0);
@@ -1291,6 +1299,8 @@ mod tests {
             cwd: Some("/home/user/project".to_string()),
             stuck_status: Some(PaneStuckStatus::Slow { duration: 10 }),
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         assert_eq!(pane.id, id);
@@ -1318,6 +1328,8 @@ mod tests {
             cwd: Some("/tmp".to_string()),
             stuck_status: None,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         let cloned = pane.clone();
@@ -1341,6 +1353,8 @@ mod tests {
             cwd: None,
             stuck_status: None,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         let pane2 = PaneInfo {
@@ -1355,6 +1369,8 @@ mod tests {
             cwd: None,
             stuck_status: None,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         let pane3 = PaneInfo {
@@ -1369,6 +1385,8 @@ mod tests {
             cwd: None,
             stuck_status: None,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         assert_eq!(pane1, pane2);
@@ -1671,6 +1689,8 @@ tags: HashSet::new(),
             cwd: Some("/home".to_string()),
             stuck_status: None,
             metadata: std::collections::HashMap::new(),
+            is_mirror: false,
+            mirror_source: None,
         };
 
         let serialized = bincode::serialize(&pane).unwrap();

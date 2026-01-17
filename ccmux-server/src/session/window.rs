@@ -147,6 +147,16 @@ impl Window {
         self.panes.get(&pane_id).unwrap()
     }
 
+    /// Add an existing pane to this window (FEAT-062)
+    ///
+    /// Used for mirror panes and other special pane types that are created
+    /// externally rather than through create_pane.
+    pub fn add_pane(&mut self, pane: Pane) {
+        let pane_id = pane.id();
+        self.panes.insert(pane_id, pane);
+        self.pane_order.push(pane_id);
+    }
+
     /// Get a pane by ID
     pub fn get_pane(&self, pane_id: Uuid) -> Option<&Pane> {
         self.panes.get(&pane_id)

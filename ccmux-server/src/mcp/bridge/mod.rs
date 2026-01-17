@@ -569,6 +569,11 @@ impl McpBridge {
                     .transpose()?;
                 handlers.tool_beads_pane_history(pane_id).await
             }
+            "ccmux_mirror_pane" => {
+                let source_pane_id = parse_uuid(arguments, "source_pane_id")?;
+                let direction = arguments["direction"].as_str();
+                handlers.tool_mirror_pane(source_pane_id, direction).await
+            }
             _ => Err(McpError::UnknownTool(name.into())),
         }
     }
