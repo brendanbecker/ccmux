@@ -586,16 +586,16 @@ impl<'a> ToolContext<'a> {
         // Determine data to send based on input or key parameter
         match (input, key) {
             (Some(text), None) => {
-                // Regular text input
-                handle
-                    .write_all(text.as_bytes())
-                    .map_err(|e| McpError::Pty(e.to_string()))?;
-
+                // Regular text input - combine with Enter key if submit is true
+                // This ensures atomic write to avoid race conditions where PTY
+                // might process input and Enter separately
+                let mut data = text.as_bytes().to_vec();
                 if submit {
-                    handle
-                        .write_all(b"\r")
-                        .map_err(|e| McpError::Pty(e.to_string()))?;
+                    data.push(b'\r');
                 }
+                handle
+                    .write_all(&data)
+                    .map_err(|e| McpError::Pty(e.to_string()))?;
             }
             (None, Some(key_name)) => {
                 // Special key lookup
