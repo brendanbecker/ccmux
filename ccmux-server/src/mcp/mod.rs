@@ -14,6 +14,7 @@
 pub mod bridge;
 mod error;
 mod handlers;
+pub mod keys;
 mod protocol;
 mod server;
 mod tools;

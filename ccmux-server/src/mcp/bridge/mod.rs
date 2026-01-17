@@ -346,11 +346,10 @@ impl McpBridge {
             }
             "ccmux_send_input" => {
                 let pane_id = parse_uuid(arguments, "pane_id")?;
-                let input = arguments["input"]
-                    .as_str()
-                    .ok_or_else(|| McpError::InvalidParams("Missing 'input' parameter".into()))?;
+                let input = arguments["input"].as_str().map(String::from);
+                let key = arguments["key"].as_str().map(String::from);
                 let submit = arguments["submit"].as_bool().unwrap_or(false);
-                handlers.tool_send_input(pane_id, input, submit).await
+                handlers.tool_send_input(pane_id, input, key, submit).await
             }
             "ccmux_close_pane" => {
                 let pane_id = parse_uuid(arguments, "pane_id")?;

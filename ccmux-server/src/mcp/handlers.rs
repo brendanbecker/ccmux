@@ -539,6 +539,80 @@ impl<'a> ToolContext<'a> {
         Ok(r#"{"status": "sent"}"#.into())
     }
 
+    /// Send input or a special key to a pane (FEAT-093)
+    ///
+    /// Either `input` or `key` must be provided (but not both).
+    /// - `input`: Regular text input to send
+    /// - `key`: Special key name (e.g., "Escape", "Ctrl+C", "ArrowUp")
+    /// - `submit`: If true and using `input`, appends carriage return
+    pub fn send_input_with_key(
+        &self,
+        pane_id: Uuid,
+        input: Option<&str>,
+        key: Option<&str>,
+        submit: bool,
+    ) -> Result<String, McpError> {
+        // Verify pane exists
+        let _ = self
+            .session_manager
+            .find_pane(pane_id)
+            .ok_or_else(|| McpError::PaneNotFound(pane_id.to_string()))?;
+
+        // Get PTY handle
+        let handle = self
+            .pty_manager
+            .get(pane_id)
+            .ok_or_else(|| McpError::Pty(format!("No PTY for pane {}", pane_id)))?;
+
+        // Determine data to send based on input or key parameter
+        match (input, key) {
+            (Some(text), None) => {
+                // Regular text input
+                handle
+                    .write_all(text.as_bytes())
+                    .map_err(|e| McpError::Pty(e.to_string()))?;
+
+                if submit {
+                    handle
+                        .write_all(b"\r")
+                        .map_err(|e| McpError::Pty(e.to_string()))?;
+                }
+            }
+            (None, Some(key_name)) => {
+                // Special key lookup
+                use super::keys::get_key_sequence;
+                match get_key_sequence(key_name) {
+                    Some(sequence) => {
+                        handle
+                            .write_all(sequence)
+                            .map_err(|e| McpError::Pty(e.to_string()))?;
+                    }
+                    None => {
+                        return Err(McpError::InvalidParams(format!(
+                            "Unknown key '{}'. Supported keys include: Escape, Ctrl+C, Ctrl+D, Ctrl+Z, \
+                            ArrowUp, ArrowDown, ArrowLeft, ArrowRight, F1-F12, Home, End, \
+                            PageUp, PageDown, Tab, Enter, Backspace, Delete, Insert, Space. \
+                            Use Ctrl+<letter> for control sequences (e.g., 'Ctrl+C').",
+                            key_name
+                        )));
+                    }
+                }
+            }
+            (Some(_), Some(_)) => {
+                return Err(McpError::InvalidParams(
+                    "Provide either 'input' or 'key', not both".into(),
+                ));
+            }
+            (None, None) => {
+                return Err(McpError::InvalidParams(
+                    "Either 'input' or 'key' parameter is required".into(),
+                ));
+            }
+        }
+
+        Ok(r#"{"status": "sent"}"#.into())
+    }
+
     /// Get detailed status of a pane
     #[allow(deprecated)]
     pub fn get_status(&self, pane_id: Uuid) -> Result<String, McpError> {
