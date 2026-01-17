@@ -236,6 +236,8 @@ pub enum ClientMessage {
         name: Option<String>,
         /// Command to run in default pane (default: shell)
         command: Option<String>,
+        /// Working directory for the window (BUG-050)
+        cwd: Option<String>,
     },
 
     /// Rename a session (for MCP bridge)

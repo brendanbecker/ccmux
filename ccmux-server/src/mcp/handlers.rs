@@ -195,6 +195,17 @@ impl<'a> ToolContext<'a> {
             }
         };
 
+        // BUG-050: Capture active pane's cwd for inheritance before creating new pane
+        let inherited_cwd = if cwd.is_none() {
+            session.get_window(window_id)
+                .and_then(|w| w.active_pane_id())
+                .and_then(|active_id| session.get_window(window_id)?.get_pane(active_id))
+                .and_then(|p| p.cwd())
+                .map(String::from)
+        } else {
+            None
+        };
+
         // Create the pane
         let window = session
             .get_window_mut(window_id)
@@ -242,8 +253,11 @@ impl<'a> ToolContext<'a> {
         for arg in &args {
             config = config.with_arg(arg);
         }
+        // BUG-050: Apply explicit cwd, or inherit from parent pane
         if let Some(cwd) = cwd {
             config = config.with_cwd(cwd);
+        } else if let Some(ref inherited) = inherited_cwd {
+            config = config.with_cwd(inherited);
         }
         config = config.with_ccmux_context(session_id, &session_name, window_id, pane_id);
 
@@ -406,6 +420,7 @@ impl<'a> ToolContext<'a> {
         session_filter: Option<&str>,
         window_name: Option<&str>,
         command: Option<&str>,
+        cwd: Option<&str>,
     ) -> Result<String, McpError> {
         // Find the session
         let session_id = if let Some(filter) = session_filter {
@@ -485,6 +500,10 @@ impl<'a> ToolContext<'a> {
         let mut config = PtyConfig::command(&actual_cmd);
         for arg in &args {
             config = config.with_arg(arg);
+        }
+        // BUG-050: Apply cwd if provided
+        if let Some(cwd) = cwd {
+            config = config.with_cwd(cwd);
         }
         config = config.with_ccmux_context(session_id, &session_name, window_id, pane_id);
 
@@ -1396,7 +1415,7 @@ mod tests {
         let mut pty_manager = PtyManager::new();
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
 
-        let result = ctx.create_window(None, None, None);
+        let result = ctx.create_window(None, None, None, None);
         assert!(result.is_err());
     }
 
@@ -1408,7 +1427,7 @@ mod tests {
         session_manager.create_session("default").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_window(None, Some("new-window"), None).unwrap();
+        let result = ctx.create_window(None, Some("new-window"), None, None).unwrap();
 
         assert!(result.contains("window_id"));
         assert!(result.contains("pane_id"));
@@ -1425,7 +1444,7 @@ mod tests {
         session_manager.create_session("other").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_window(Some("target"), None, None).unwrap();
+        let result = ctx.create_window(Some("target"), None, None, None).unwrap();
 
         assert!(result.contains("target"));
     }
@@ -1438,7 +1457,7 @@ mod tests {
         session_manager.create_session("existing").unwrap();
 
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
-        let result = ctx.create_window(Some("nonexistent"), None, None);
+        let result = ctx.create_window(Some("nonexistent"), None, None, None);
 
         assert!(result.is_err());
     }
@@ -1464,7 +1483,7 @@ mod tests {
         let mut ctx = create_test_context(&mut session_manager, &mut pty_manager);
 
         // Create window without specifying session - should use active session (session1)
-        let result = ctx.create_window(None, Some("test-window"), None).unwrap();
+        let result = ctx.create_window(None, Some("test-window"), None, None).unwrap();
 
         // Verify the window was created in session1, not session2
         assert!(result.contains("session1"));
@@ -1528,7 +1547,7 @@ mod tests {
         let _select_result = ctx.select_session(session1_id).unwrap();
 
         // Now create_window should use dev-qa, not session-0
-        let create_result = ctx.create_window(None, Some("new-window"), None).unwrap();
+        let create_result = ctx.create_window(None, Some("new-window"), None, None).unwrap();
 
         // Verify window was created in dev-qa
         assert!(create_result.contains("dev-qa"));

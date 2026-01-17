@@ -291,11 +291,13 @@ impl<'a> ToolHandlers<'a> {
     session_filter: Option<String>,
     name: Option<String>,
     command: Option<String>,
+    cwd: Option<String>,
     ) -> Result<ToolResult, McpError> {
     self.connection.send_to_daemon(ClientMessage::CreateWindowWithOptions {
     session_filter,
     name,
     command,
+    cwd,
     })
     .await?;
 

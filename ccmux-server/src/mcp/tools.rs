@@ -241,6 +241,10 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                     "command": {
                         "type": "string",
                         "description": "Command to run in the default pane (default: shell)"
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "Working directory for the new pane"
                     }
                 }
             }),

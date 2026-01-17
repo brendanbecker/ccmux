@@ -33,6 +33,7 @@ pub async fn new_window(
         session_filter,
         name,
         command: cmd,
+        cwd: None, // BUG-050: Default to inheriting from session
     };
 
     match client.request(msg).await? {
