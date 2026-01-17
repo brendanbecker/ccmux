@@ -390,20 +390,65 @@ impl<'a> ToolHandlers<'a> {
     }
     }
 
+    /// Send input or a special key to a pane (FEAT-093)
+    ///
+    /// Either `input` or `key` must be provided (but not both).
+    /// - `input`: Regular text input to send
+    /// - `key`: Special key name (e.g., "Escape", "Ctrl+C", "ArrowUp")
+    /// - `submit`: If true and using `input`, appends carriage return
     pub async fn tool_send_input(
-    &mut self,
-    pane_id: Uuid,
-    input: &str,
-    submit: bool,
+        &mut self,
+        pane_id: Uuid,
+        input: Option<String>,
+        key: Option<String>,
+        submit: bool,
     ) -> Result<ToolResult, McpError> {
-    let mut data = input.as_bytes().to_vec();
-    if submit {
-    data.push(b'\r');
-    }
+        // Determine data to send based on input or key parameter
+        let data = match (input, key) {
+            (Some(text), None) => {
+                // Regular text input
+                let mut data = text.as_bytes().to_vec();
+                if submit {
+                    data.push(b'\r');
+                }
+                data
+            }
+            (None, Some(key_name)) => {
+                // Special key lookup
+                use crate::mcp::keys::get_key_sequence;
+                match get_key_sequence(&key_name) {
+                    Some(sequence) => sequence.to_vec(),
+                    None => {
+                        // Return error with helpful message listing some valid keys
+                        return Ok(ToolResult::error(format!(
+                            "Unknown key '{}'. Supported keys include: Escape, Ctrl+C, Ctrl+D, Ctrl+Z, \
+                            ArrowUp, ArrowDown, ArrowLeft, ArrowRight, F1-F12, Home, End, \
+                            PageUp, PageDown, Tab, Enter, Backspace, Delete, Insert, Space. \
+                            Use Ctrl+<letter> for control sequences (e.g., 'Ctrl+C').",
+                            key_name
+                        )));
+                    }
+                }
+            }
+            (Some(_), Some(_)) => {
+                // Both provided - error
+                return Err(McpError::InvalidParams(
+                    "Provide either 'input' or 'key', not both".into(),
+                ));
+            }
+            (None, None) => {
+                // Neither provided - error
+                return Err(McpError::InvalidParams(
+                    "Either 'input' or 'key' parameter is required".into(),
+                ));
+            }
+        };
 
-    self.connection.send_to_daemon(ClientMessage::Input { pane_id, data }).await?;
+        self.connection
+            .send_to_daemon(ClientMessage::Input { pane_id, data })
+            .await?;
 
-    Ok(ToolResult::text(r#"{"status": "sent"}"#.to_string()))
+        Ok(ToolResult::text(r#"{"status": "sent"}"#.to_string()))
     }
 
     pub async fn tool_close_pane(&mut self, pane_id: Uuid) -> Result<ToolResult, McpError> {

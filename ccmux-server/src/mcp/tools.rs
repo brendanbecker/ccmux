@@ -103,13 +103,17 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                         "type": "string",
                         "description": "Text to send to the pane"
                     },
+                    "key": {
+                        "type": "string",
+                        "description": "Special key name to send (alternative to 'input'). Supported keys: Escape, Ctrl+C, Ctrl+D, Ctrl+Z, Ctrl+L, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, F1-F12, Home, End, PageUp, PageDown, Insert, Delete, Tab, Enter, Backspace, Space. Use Ctrl+<letter> for control sequences (e.g., 'Ctrl+C')."
+                    },
                     "submit": {
                         "type": "boolean",
                         "default": false,
-                        "description": "If true, press Enter after sending input (sends carriage return)"
+                        "description": "If true, press Enter after sending input (sends carriage return). Only applies when using 'input', not 'key'."
                     }
                 },
-                "required": ["pane_id", "input"]
+                "required": ["pane_id"]
             }),
         },
         Tool {

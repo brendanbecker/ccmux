@@ -197,10 +197,8 @@ impl McpServer {
             },
             "ccmux_send_input" => ToolParams::SendInput {
                 pane_id: parse_uuid(arguments, "pane_id")?,
-                input: arguments["input"]
-                    .as_str()
-                    .ok_or_else(|| McpError::InvalidParams("Missing 'input' parameter".into()))?
-                    .to_string(),
+                input: arguments["input"].as_str().map(String::from),
+                key: arguments["key"].as_str().map(String::from),
                 submit: arguments["submit"].as_bool().unwrap_or(false),
             },
             "ccmux_get_status" => ToolParams::GetStatus {
@@ -279,7 +277,9 @@ impl McpServer {
                     select,
                 )
             }
-            ToolParams::SendInput { pane_id, input, submit } => ctx.send_input(pane_id, &input, submit),
+            ToolParams::SendInput { pane_id, input, key, submit } => {
+                ctx.send_input_with_key(pane_id, input.as_deref(), key.as_deref(), submit)
+            }
             ToolParams::GetStatus { pane_id } => ctx.get_status(pane_id),
             ToolParams::ClosePane { pane_id } => ctx.close_pane(pane_id),
             ToolParams::FocusPane { pane_id } => ctx.focus_pane(pane_id),
@@ -357,7 +357,7 @@ enum ToolParams {
         cwd: Option<String>,
         select: bool,
     },
-    SendInput { pane_id: Uuid, input: String, submit: bool },
+    SendInput { pane_id: Uuid, input: Option<String>, key: Option<String>, submit: bool },
     GetStatus { pane_id: Uuid },
     ClosePane { pane_id: Uuid },
     FocusPane { pane_id: Uuid },
