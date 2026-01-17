@@ -128,30 +128,39 @@ impl McpBridge {
             let response = self.handle_request(request.clone()).await;
             let elapsed_ms = start.elapsed().as_millis();
 
-            // Log response at info level
-            let is_error = matches!(response, JsonRpcResponse { error: Some(_), .. });
-            if is_error {
-                warn!(
-                    req_id = log_req_id,
-                    method = %request.method,
-                    elapsed_ms = %elapsed_ms,
-                    error = ?response.error,
-                    "JSON-RPC request completed with error"
-                );
+            if let Some(response) = response {
+                // Log response at info level
+                let is_error = matches!(response, JsonRpcResponse { error: Some(_), .. });
+                if is_error {
+                    warn!(
+                        req_id = log_req_id,
+                        method = %request.method,
+                        elapsed_ms = %elapsed_ms,
+                        error = ?response.error,
+                        "JSON-RPC request completed with error"
+                    );
+                } else {
+                    info!(
+                        req_id = log_req_id,
+                        method = %request.method,
+                        elapsed_ms = %elapsed_ms,
+                        "JSON-RPC request completed successfully"
+                    );
+                }
+
+                // Write response
+                let json = serde_json::to_string(&response)?;
+                debug!(req_id = log_req_id, raw = %json, "Sending raw JSON-RPC response");
+                writeln!(stdout, "{}", json)?;
+                stdout.flush()?;
             } else {
                 info!(
                     req_id = log_req_id,
                     method = %request.method,
                     elapsed_ms = %elapsed_ms,
-                    "JSON-RPC request completed successfully"
+                    "Notification handled (no response)"
                 );
             }
-
-            // Write response
-            let json = serde_json::to_string(&response)?;
-            debug!(req_id = log_req_id, raw = %json, "Sending raw JSON-RPC response");
-            writeln!(stdout, "{}", json)?;
-            stdout.flush()?;
         }
 
         info!("MCP bridge shutting down");
@@ -159,19 +168,28 @@ impl McpBridge {
     }
 
     /// Handle a JSON-RPC request
-    async fn handle_request(&mut self, request: JsonRpcRequest) -> JsonRpcResponse {
+    async fn handle_request(&mut self, request: JsonRpcRequest) -> Option<JsonRpcResponse> {
+        let is_notification = request.id.is_null();
         let result = match request.method.as_str() {
             "initialize" => self.handle_initialize(&request.params),
-            "initialized" => Ok(serde_json::json!({})),
+            "initialized" | "notifications/initialized" => Ok(serde_json::json!({})),
+            "ping" => Ok(serde_json::json!({})),
             "tools/list" => self.handle_tools_list(),
             "tools/call" => self.handle_tools_call(&request.params).await,
             _ => Err(McpError::MethodNotFound(request.method.clone())),
         };
 
-        match result {
+        if is_notification {
+            if let Err(e) = result {
+                warn!(method = %request.method, error = %e, "Notification handling failed");
+            }
+            return None;
+        }
+
+        Some(match result {
             Ok(value) => JsonRpcResponse::success(request.id, value),
             Err(e) => JsonRpcResponse::error(request.id, e.into()),
-        }
+        })
     }
 
     /// Handle initialize request

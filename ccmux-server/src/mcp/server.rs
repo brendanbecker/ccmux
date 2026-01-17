@@ -4,7 +4,7 @@
 
 use std::io::{BufRead, Write};
 
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::pty::PtyManager;
@@ -95,11 +95,13 @@ impl McpServer {
             // Handle request
             let response = self.handle_request(request);
 
-            // Write response
-            let json = serde_json::to_string(&response)?;
-            debug!("Sending: {}", json);
-            writeln!(stdout, "{}", json)?;
-            stdout.flush()?;
+            // Write response for requests (notifications have no id)
+            if let Some(response) = response {
+                let json = serde_json::to_string(&response)?;
+                debug!("Sending: {}", json);
+                writeln!(stdout, "{}", json)?;
+                stdout.flush()?;
+            }
         }
 
         info!("MCP server shutting down");
@@ -107,22 +109,28 @@ impl McpServer {
     }
 
     /// Handle a JSON-RPC request
-    fn handle_request(&mut self, request: JsonRpcRequest) -> JsonRpcResponse {
+    fn handle_request(&mut self, request: JsonRpcRequest) -> Option<JsonRpcResponse> {
+        let is_notification = request.id.is_null();
         let result = match request.method.as_str() {
             "initialize" => self.handle_initialize(&request.params),
-            "initialized" => {
-                // Notification, no response needed but we'll acknowledge
-                Ok(serde_json::json!({}))
-            }
+            "initialized" | "notifications/initialized" => Ok(serde_json::json!({})),
+            "ping" => Ok(serde_json::json!({})),
             "tools/list" => self.handle_tools_list(),
             "tools/call" => self.handle_tools_call(&request.params),
             _ => Err(McpError::MethodNotFound(request.method.clone())),
         };
 
-        match result {
+        if is_notification {
+            if let Err(e) = result {
+                warn!(method = %request.method, error = %e, "Notification handling failed");
+            }
+            return None;
+        }
+
+        Some(match result {
             Ok(value) => JsonRpcResponse::success(request.id, value),
             Err(e) => JsonRpcResponse::error(request.id, e.into()),
-        }
+        })
     }
 
     /// Handle initialize request

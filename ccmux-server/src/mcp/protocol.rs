@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 pub struct JsonRpcRequest {
     /// JSON-RPC version (always "2.0")
     pub jsonrpc: String,
-    /// Request ID (can be string, number, or null)
+    /// Request ID (can be string, number, or null). Notifications may omit this field.
+    #[serde(default)]
     pub id: serde_json::Value,
     /// Method name
     pub method: String,
