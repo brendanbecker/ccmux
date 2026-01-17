@@ -301,7 +301,12 @@ impl App {
         while !self.should_quit() {
             // Draw UI
             if self.needs_redraw {
-                terminal.clear()?;
+                // NOTE: Commented out to fix flicker on session completion.
+                // PaneStateChanged/ClaudeStateChanged set needs_redraw=true, which
+                // triggered terminal.clear() causing visible flash. Ratatui's
+                // differential rendering should handle layout changes without clearing.
+                // If visual artifacts appear, uncomment this line.
+                // terminal.clear()?;
                 self.needs_redraw = false;
             }
             self.draw(&mut terminal)?;

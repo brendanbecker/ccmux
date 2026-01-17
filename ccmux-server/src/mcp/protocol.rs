@@ -255,6 +255,14 @@ mod tests {
     }
 
     #[test]
+    fn test_json_rpc_notification_missing_id() {
+        let json = r#"{"method":"notifications/initialized","jsonrpc":"2.0"}"#;
+        let request: JsonRpcRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.method, "notifications/initialized");
+        assert!(request.id.is_null());
+    }
+
+    #[test]
     fn test_json_rpc_response_success() {
         let response = JsonRpcResponse::success(
             serde_json::json!(1),

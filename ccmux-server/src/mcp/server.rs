@@ -451,7 +451,7 @@ mod tests {
         };
 
         let response = server.handle_request(request);
-        assert!(response.error.is_some());
+        assert!(response.unwrap().error.is_some());
     }
 
     #[test]
@@ -526,7 +526,7 @@ mod tests {
             params: serde_json::json!({}),
         };
         let response = server.handle_request(init_request);
-        assert!(response.error.is_none());
+        assert!(response.unwrap().error.is_none());
 
         // List tools
         let tools_request = JsonRpcRequest {
@@ -536,7 +536,7 @@ mod tests {
             params: serde_json::json!({}),
         };
         let response = server.handle_request(tools_request);
-        assert!(response.error.is_none());
+        assert!(response.unwrap().error.is_none());
 
         // Call list_panes tool
         let call_request = JsonRpcRequest {
@@ -549,6 +549,6 @@ mod tests {
             }),
         };
         let response = server.handle_request(call_request);
-        assert!(response.error.is_none());
+        assert!(response.unwrap().error.is_none());
     }
 }

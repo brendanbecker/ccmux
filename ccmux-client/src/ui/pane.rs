@@ -251,6 +251,10 @@ impl Pane {
     }
 
     /// Process output data through the terminal parser
+    ///
+    /// Implements viewport pinning:
+    /// - If user was at bottom (scroll_offset == 0), stay at bottom
+    /// - If user has scrolled up, don't yank them back down
     pub fn process_output(&mut self, data: &[u8]) {
         // Scan for bracketed paste mode sequences
         // \x1b[?2004h = Enable
@@ -264,11 +268,13 @@ impl Pane {
             self.bracketed_paste_enabled = false;
         }
 
+        let was_at_bottom = self.scroll_offset == 0;
         self.parser.process(data);
-        // Reset scroll to bottom when new output arrives
-        self.parser.set_scrollback(0);
-        // Read back to ensure consistency with parser state
-        self.scroll_offset = self.parser.screen().scrollback();
+        if was_at_bottom {
+            self.parser.set_scrollback(0);
+            self.scroll_offset = 0;
+        }
+        // If user was scrolled up, leave scroll_offset unchanged
     }
 
     /// Check if bracketed paste mode is enabled
@@ -289,15 +295,18 @@ impl Pane {
     }
 
     /// Resize the terminal
+    ///
+    /// Respects viewport pinning: only reset scroll if already at bottom
     pub fn resize(&mut self, rows: u16, cols: u16) {
         let (current_rows, current_cols) = self.size();
         if current_rows != rows || current_cols != cols {
+            let was_at_bottom = self.scroll_offset == 0;
             self.parser.set_size(rows, cols);
-            // Reset scroll position to bottom after resize to prevent viewport offset issues
-            // when the terminal size changes and scrollback becomes invalid
-            self.parser.set_scrollback(0);
-            // Read back to ensure consistency with parser state
-            self.scroll_offset = self.parser.screen().scrollback();
+            if was_at_bottom {
+                self.parser.set_scrollback(0);
+                self.scroll_offset = 0;
+            }
+            // If user was scrolled up, leave scroll_offset unchanged
         }
     }
 
