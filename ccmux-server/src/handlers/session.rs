@@ -768,9 +768,23 @@ impl HandlerContext {
             
             // Update client focus
             self.registry.update_client_focus(self.client_id, Some(session_id), active_window, active_pane);
-            
+
+            // BUG-046: Also update TUI clients in the same session (session-level isolation)
+            // When MCP selects a session, TUI clients attached to the same session should
+            // also switch their view to maintain collaborative viewing behavior.
+            // Skip the calling client to avoid duplicate messages.
+            if let Some(my_session) = self.registry.get_client_session(self.client_id) {
+                for tui_client_id in self.registry.tui_clients_in_session(my_session) {
+                    if tui_client_id == self.client_id {
+                        continue; // Don't notify the caller - they get the normal response
+                    }
+                    self.registry.update_client_focus(tui_client_id, Some(session_id), active_window, active_pane);
+                    let _ = self.registry.send_to_client(tui_client_id, ServerMessage::SessionFocused { session_id }).await;
+                }
+            }
+
             debug!("Client {} selected session {}", self.client_id, session_id);
-            
+
             // Send confirmation ONLY to the requesting client
             HandlerResult::Response(ServerMessage::SessionFocused { session_id })
         } else {
@@ -820,9 +834,23 @@ impl HandlerContext {
             Some((session_id, active_pane_id)) => {
                 // Update client focus
                 self.registry.update_client_focus(self.client_id, Some(session_id), Some(window_id), active_pane_id);
-                
+
+                // BUG-046: Also update TUI clients in the same session (session-level isolation)
+                // When MCP selects a window, TUI clients attached to the same session should
+                // also switch their view to maintain collaborative viewing behavior.
+                // Skip the calling client to avoid duplicate messages.
+                if let Some(my_session) = self.registry.get_client_session(self.client_id) {
+                    for tui_client_id in self.registry.tui_clients_in_session(my_session) {
+                        if tui_client_id == self.client_id {
+                            continue; // Don't notify the caller - they get the normal response
+                        }
+                        self.registry.update_client_focus(tui_client_id, Some(session_id), Some(window_id), active_pane_id);
+                        let _ = self.registry.send_to_client(tui_client_id, ServerMessage::WindowFocused { session_id, window_id }).await;
+                    }
+                }
+
                 debug!("Client {} selected window {}", self.client_id, window_id);
-                
+
                 // Send confirmation ONLY to the requesting client
                 HandlerResult::Response(ServerMessage::WindowFocused {
                     session_id,

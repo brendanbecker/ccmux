@@ -489,6 +489,20 @@ impl ClientRegistry {
             .unwrap_or_default()
     }
 
+    /// Get TUI client IDs attached to a specific session (BUG-046)
+    ///
+    /// Returns only clients of type TUI that are attached to the given session.
+    /// Used for session-level focus synchronization: when MCP changes focus,
+    /// TUI clients in the same session should also update their view.
+    pub fn tui_clients_in_session(&self, session_id: SessionId) -> Vec<ClientId> {
+        self.get_session_clients(session_id)
+            .into_iter()
+            .filter(|&client_id| {
+                matches!(self.get_client_type(client_id), Some(ClientType::Tui))
+            })
+            .collect()
+    }
+
     /// Get all registered client IDs
     pub fn get_all_clients(&self) -> Vec<ClientId> {
         self.clients.iter().map(|entry| *entry.key()).collect()
