@@ -1,0 +1,24 @@
+{
+  "feature_id": "FEAT-095",
+  "title": "ccmux_run_pipeline - Sequential Command Pipeline",
+  "component": "ccmux-server/mcp",
+  "priority": "P1",
+  "status": "new",
+  "type": "new_feature",
+  "created_date": "2026-01-17",
+  "updated_date": "2026-01-17",
+  "assigned_to": null,
+  "tags": [
+    "mcp",
+    "orchestration",
+    "pipeline",
+    "sequential-execution",
+    "context-reduction"
+  ],
+  "estimated_effort": "medium",
+  "dependencies": [],
+  "description": "High-level MCP tool for executing commands sequentially within a single pane. Supports stop_on_error mode to halt pipeline immediately on failure. Returns exit codes per step plus pane_id for output inspection. Designed to reduce orchestrator context consumption for multi-step workflows.",
+  "business_value": "high",
+  "technical_complexity": "medium",
+  "user_impact": "Enables orchestrators to run command sequences (build/test/deploy) with a single tool call. Automatic error handling with stop_on_error. Reduces context by eliminating per-step send_input/wait cycles. Provides structured results for each pipeline stage."
+}

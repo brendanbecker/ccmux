@@ -1,0 +1,24 @@
+{
+  "feature_id": "FEAT-094",
+  "title": "ccmux_run_parallel - Parallel Command Execution",
+  "component": "ccmux-server/mcp",
+  "priority": "P1",
+  "status": "new",
+  "type": "new_feature",
+  "created_date": "2026-01-17",
+  "updated_date": "2026-01-17",
+  "assigned_to": null,
+  "tags": [
+    "mcp",
+    "orchestration",
+    "parallel-execution",
+    "context-reduction",
+    "multi-agent"
+  ],
+  "estimated_effort": "medium",
+  "dependencies": [],
+  "description": "High-level MCP tool for executing multiple commands in parallel across separate panes. Returns aggregated results when ALL tasks complete or timeout. Supports tiled layout (visible splits) or hidden mode (separate __orchestration__ session). Maximum 10 parallel tasks. Designed to reduce orchestrator context consumption by eliminating need for manual pane management.",
+  "business_value": "high",
+  "technical_complexity": "medium",
+  "user_impact": "Enables orchestrators to run parallel commands with a single tool call instead of multiple create_pane/send_input/poll cycles. Reduces context usage by 70-80% for parallel workflows. Simplifies multi-agent coordination patterns."
+}

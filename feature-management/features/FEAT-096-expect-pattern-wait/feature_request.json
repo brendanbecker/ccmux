@@ -1,0 +1,24 @@
+{
+  "feature_id": "FEAT-096",
+  "title": "ccmux_expect - Pattern-Based Wait",
+  "component": "ccmux-server/mcp",
+  "priority": "P1",
+  "status": "new",
+  "type": "new_feature",
+  "created_date": "2026-01-17",
+  "updated_date": "2026-01-17",
+  "assigned_to": null,
+  "tags": [
+    "mcp",
+    "orchestration",
+    "polling",
+    "pattern-matching",
+    "context-reduction"
+  ],
+  "estimated_effort": "small",
+  "dependencies": [],
+  "description": "High-level MCP tool that blocks until a regex pattern appears in pane output or timeout occurs. Supports configurable actions on match: notify, close_pane, or return_output. Uses polling-based implementation with 200ms interval. Foundation primitive for FEAT-094 and FEAT-095.",
+  "business_value": "high",
+  "technical_complexity": "low",
+  "user_impact": "Enables efficient waiting for specific output patterns without manual polling loops. Reduces context consumption by replacing read_pane polling cycles with single blocking call. Provides automatic actions on pattern match (close pane, return output)."
+}
