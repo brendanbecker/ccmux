@@ -1879,7 +1879,8 @@ impl App {
                 self.needs_redraw = true;
             }
             ServerMessage::ClaudeStateChanged { pane_id, state } => {
-                let pane_state = PaneState::Claude(state);
+                // Convert ClaudeState to AgentState
+                let pane_state = PaneState::Agent(state.into());
                 if let Some(pane) = self.panes.get_mut(&pane_id) {
                     pane.state = pane_state.clone();
                 }
@@ -2548,7 +2549,6 @@ impl App {
                     let color = match &pane.stuck_status {
                         Some(PaneStuckStatus::Stuck { .. }) => Color::Red,
                         Some(PaneStuckStatus::Slow { .. }) => Color::Yellow,
-                        #[allow(deprecated)]
                         _ => match &pane.state {
                             PaneState::Normal => Color::Green,
                             PaneState::Agent(agent_state) => {
@@ -2558,10 +2558,6 @@ impl App {
                                     Color::Cyan
                                 }
                             }
-                            PaneState::Claude(cs) => match cs.activity {
-                                ClaudeActivity::Idle => Color::Blue,
-                                _ => Color::Cyan,
-                            },
                             PaneState::Exited { .. } => Color::Gray,
                         }
                     };
@@ -2623,15 +2619,11 @@ impl App {
     }
 
     /// Format pane info for display
-    #[allow(deprecated)]
     fn format_pane_info(&self, pane: &PaneInfo) -> String {
         let state_info = match &pane.state {
             PaneState::Normal => "Normal".to_string(),
             PaneState::Agent(agent_state) => {
                 format!("{}: {:?}", agent_state.agent_type, agent_state.activity)
-            }
-            PaneState::Claude(cs) => {
-                format!("Claude: {:?}", cs.activity)
             }
             PaneState::Exited { code } => {
                 format!("Exited: {:?}", code)
@@ -2687,9 +2679,6 @@ impl App {
                             PaneState::Agent(agent_state) => {
                                 format_agent_indicator(&agent_state.agent_type, &agent_state.activity, self.tick_count)
                             }
-                            PaneState::Claude(cs) => {
-                                format_claude_indicator(&cs.activity, self.tick_count)
-                            }
                             PaneState::Exited { code } => format!("[Exit:{}]", code.unwrap_or(-1)),
                         },
                     }
@@ -2698,9 +2687,6 @@ impl App {
                         PaneState::Normal => "[ ]".to_string(),
                         PaneState::Agent(agent_state) => {
                             format_agent_indicator(&agent_state.agent_type, &agent_state.activity, self.tick_count)
-                        }
-                        PaneState::Claude(cs) => {
-                            format_claude_indicator(&cs.activity, self.tick_count)
                         }
                         PaneState::Exited { code } => format!("[Exit:{}]", code.unwrap_or(-1)),
                     }

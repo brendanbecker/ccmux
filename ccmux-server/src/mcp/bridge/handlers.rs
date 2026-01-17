@@ -28,13 +28,11 @@ pub fn format_pane_list(panes: &[PaneListEntry]) -> Vec<serde_json::Value> {
     panes
     .iter()
     .map(|p| {
-    #[allow(deprecated)]
     let state_str = match &p.state {
     ccmux_protocol::PaneState::Normal => "normal",
     ccmux_protocol::PaneState::Agent(state) => {
         if state.is_claude() { "claude" } else { "agent" }
     }
-    ccmux_protocol::PaneState::Claude(_) => "claude",
     ccmux_protocol::PaneState::Exited { .. } => "exited",
     };
 
@@ -197,7 +195,6 @@ impl<'a> ToolHandlers<'a> {
     is_awaiting_input,
     is_awaiting_confirmation,
     } => {
-    #[allow(deprecated)]
     let state_json = match &state {
     ccmux_protocol::PaneState::Normal => serde_json::json!({"type": "normal"}),
     ccmux_protocol::PaneState::Agent(agent_state) => serde_json::json!({
@@ -207,13 +204,6 @@ impl<'a> ToolHandlers<'a> {
         "activity": format!("{:?}", agent_state.activity),
         "model": agent_state.get_metadata("model"),
         "tokens_used": agent_state.get_metadata("tokens_used"),
-    }),
-    ccmux_protocol::PaneState::Claude(cs) => serde_json::json!({
-        "type": "claude",
-        "session_id": cs.session_id,
-        "activity": format!("{:?}", cs.activity),
-        "model": cs.model,
-        "tokens_used": cs.tokens_used,
     }),
     ccmux_protocol::PaneState::Exited { code } => serde_json::json!({
         "type": "exited",

@@ -1366,10 +1366,10 @@ tags: HashSet::new(),
             state: PaneState::Normal,
         };
 
-        // Claude state
+        // Agent state
         let msg2 = ServerMessage::PaneStateChanged {
             pane_id,
-            state: PaneState::Claude(ClaudeState::default()),
+            state: PaneState::Agent(AgentState::new("claude")),
         };
 
         // Exited state

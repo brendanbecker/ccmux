@@ -245,13 +245,9 @@ impl Pane {
         }
     }
 
-    /// Get Claude activity if in Claude state (deprecated, use agent_activity)
-    #[allow(deprecated)]
-    pub fn claude_activity(&self) -> Option<&ClaudeActivity> {
-        match &self.pane_state {
-            PaneState::Claude(state) => Some(&state.activity),
-            _ => None,
-        }
+    /// Get Claude activity if this is a Claude pane
+    pub fn claude_activity(&self) -> Option<ClaudeActivity> {
+        self.pane_state.claude_activity()
     }
 
     /// Process output data through the terminal parser
@@ -376,7 +372,6 @@ impl Pane {
     }
 
     /// Build the title string for display
-    #[allow(deprecated)]
     pub fn display_title(&self) -> String {
         let base_title = self.title.as_deref().unwrap_or("pane");
 
@@ -397,16 +392,6 @@ impl Pane {
                 } else {
                     format!("{} [{}:{}]", base_title, state.agent_type, activity)
                 }
-            }
-            PaneState::Claude(state) => {
-                let activity = match state.activity {
-                    ClaudeActivity::Idle => "Idle",
-                    ClaudeActivity::Thinking => "Thinking...",
-                    ClaudeActivity::Coding => "Coding",
-                    ClaudeActivity::ToolUse => "Tool Use",
-                    ClaudeActivity::AwaitingConfirmation => "Confirm?",
-                };
-                format!("{} [{}]", base_title, activity)
             }
             PaneState::Exited { code } => {
                 let code_str = code.map(|c| c.to_string()).unwrap_or_else(|| "?".to_string());
@@ -827,7 +812,7 @@ pub fn render_pane(pane: &Pane, area: Rect, buf: &mut Buffer, tick_count: u64) {
         // Render agent/Claude state indicator if applicable (FEAT-084)
         if let Some(state) = pane.agent_state() {
             render_agent_indicator(state, inner, buf, tick_count);
-        } else if let Some(activity) = pane.claude_activity() {
+        } else if let Some(ref activity) = pane.claude_activity() {
             render_claude_indicator(activity, inner, buf, tick_count);
         }
     }
@@ -1209,18 +1194,16 @@ mod tests {
     }
 
     #[test]
-    fn test_display_title_claude() {
+    fn test_display_title_agent() {
         let id = Uuid::new_v4();
         let mut pane = Pane::new(id, 24, 80);
         pane.set_title(Some("claude".to_string()));
-        pane.set_pane_state(PaneState::Claude(ccmux_protocol::ClaudeState {
-            session_id: None,
-            activity: ClaudeActivity::Thinking,
-            model: None,
-            tokens_used: None,
-        }));
+        pane.set_pane_state(PaneState::Agent(
+            ccmux_protocol::AgentState::new("claude")
+                .with_activity(ccmux_protocol::AgentActivity::Processing),
+        ));
 
-        assert!(pane.display_title().contains("Thinking"));
+        assert!(pane.display_title().contains("Processing"));
     }
 
     #[test]

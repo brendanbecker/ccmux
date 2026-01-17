@@ -172,7 +172,7 @@ pub fn result_to_server_message(result: ReplyDeliveryResult) -> ServerMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ccmux_protocol::{ClaudeActivity, ClaudeState, PaneState};
+    use ccmux_protocol::{AgentActivity, AgentState, PaneState};
 
     // ==================== ReplyError Tests ====================
 
@@ -353,12 +353,9 @@ mod tests {
 
         // Set pane to Claude Thinking state (NOT awaiting input)
         let pane_mut = window.get_pane_mut(pane_id).unwrap();
-        pane_mut.set_state(PaneState::Claude(ClaudeState {
-            session_id: None,
-            activity: ClaudeActivity::Thinking,
-            model: None,
-            tokens_used: None,
-        }));
+        pane_mut.set_state(PaneState::Agent(
+            AgentState::new("claude").with_activity(AgentActivity::Processing),
+        ));
 
         let mut handler = ReplyHandler::new(&mut session_manager, &pty_manager);
         let reply = ReplyMessage::by_id(pane_id, "test");
@@ -386,12 +383,9 @@ mod tests {
 
         // Set pane to Claude AwaitingConfirmation state
         let pane_mut = window.get_pane_mut(pane_id).unwrap();
-        pane_mut.set_state(PaneState::Claude(ClaudeState {
-            session_id: None,
-            activity: ClaudeActivity::AwaitingConfirmation,
-            model: None,
-            tokens_used: None,
-        }));
+        pane_mut.set_state(PaneState::Agent(
+            AgentState::new("claude").with_activity(AgentActivity::AwaitingConfirmation),
+        ));
 
         let mut handler = ReplyHandler::new(&mut session_manager, &pty_manager);
         let reply = ReplyMessage::by_id(pane_id, "yes");
@@ -421,12 +415,9 @@ mod tests {
         // Set title and Claude state
         let pane_mut = window.get_pane_mut(pane_id).unwrap();
         pane_mut.set_title(Some("worker-3".to_string()));
-        pane_mut.set_state(PaneState::Claude(ClaudeState {
-            session_id: None,
-            activity: ClaudeActivity::AwaitingConfirmation,
-            model: None,
-            tokens_used: None,
-        }));
+        pane_mut.set_state(PaneState::Agent(
+            AgentState::new("claude").with_activity(AgentActivity::AwaitingConfirmation),
+        ));
 
         let mut handler = ReplyHandler::new(&mut session_manager, &pty_manager);
         let reply = ReplyMessage::by_name("worker-3", "yes");

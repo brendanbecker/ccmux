@@ -511,11 +511,8 @@ pub enum PaneState {
     /// Normal shell/process
     #[default]
     Normal,
-    /// Generic AI agent detected (FEAT-084)
+    /// AI agent detected (e.g., Claude, Copilot, Aider)
     Agent(AgentState),
-    /// Claude Code detected
-    #[deprecated(since = "0.2.0", note = "Use PaneState::Agent instead")]
-    Claude(ClaudeState),
     /// Process exited
     Exited { code: Option<i32> },
 }
@@ -523,26 +520,21 @@ pub enum PaneState {
 impl PaneState {
     /// Check if this pane has an active agent
     pub fn is_agent(&self) -> bool {
-        #[allow(deprecated)]
-        matches!(self, PaneState::Agent(_) | PaneState::Claude(_))
+        matches!(self, PaneState::Agent(_))
     }
 
     /// Get the agent state if this is an agent pane
     pub fn agent_state(&self) -> Option<AgentState> {
-        #[allow(deprecated)]
         match self {
             PaneState::Agent(state) => Some(state.clone()),
-            PaneState::Claude(claude) => Some(claude.clone().into()),
             _ => None,
         }
     }
 
-    /// Get Claude activity (for backward compatibility)
+    /// Get Claude activity if this is a Claude pane
     pub fn claude_activity(&self) -> Option<ClaudeActivity> {
-        #[allow(deprecated)]
         match self {
             PaneState::Agent(state) if state.is_claude() => Some(state.activity.clone().into()),
-            PaneState::Claude(claude) => Some(claude.activity.clone()),
             _ => None,
         }
     }
@@ -1180,14 +1172,14 @@ mod tests {
     }
 
     #[test]
-    fn test_pane_state_claude() {
-        let claude_state = ClaudeState::default();
-        let state = PaneState::Claude(claude_state.clone());
+    fn test_pane_state_agent() {
+        let agent_state = AgentState::new("claude");
+        let state = PaneState::Agent(agent_state.clone());
 
-        if let PaneState::Claude(cs) = &state {
-            assert_eq!(*cs, claude_state);
+        if let PaneState::Agent(as_) = &state {
+            assert_eq!(*as_, agent_state);
         } else {
-            panic!("Expected Claude variant");
+            panic!("Expected Agent variant");
         }
     }
 
@@ -1232,20 +1224,20 @@ mod tests {
     fn test_pane_state_equality() {
         let normal1 = PaneState::Normal;
         let normal2 = PaneState::Normal;
-        let claude = PaneState::Claude(ClaudeState::default());
+        let agent = PaneState::Agent(AgentState::new("claude"));
         let exited = PaneState::Exited { code: Some(0) };
 
         assert_eq!(normal1, normal2);
-        assert_ne!(normal1, claude);
+        assert_ne!(normal1, agent);
         assert_ne!(normal1, exited);
-        assert_ne!(claude, exited);
+        assert_ne!(agent, exited);
     }
 
     #[test]
     fn test_pane_state_clone() {
         let states = [
             PaneState::Normal,
-            PaneState::Claude(ClaudeState::default()),
+            PaneState::Agent(AgentState::new("claude")),
             PaneState::Exited { code: Some(42) },
         ];
 
@@ -1293,7 +1285,7 @@ mod tests {
             index: 2,
             cols: 120,
             rows: 40,
-            state: PaneState::Claude(ClaudeState::default()),
+            state: PaneState::Agent(AgentState::new("claude")),
             name: None,
             title: Some("vim".to_string()),
             cwd: Some("/home/user/project".to_string()),
@@ -1663,7 +1655,7 @@ tags: HashSet::new(),
     fn test_pane_state_serde() {
         let states = [
             PaneState::Normal,
-            PaneState::Claude(ClaudeState::default()),
+            PaneState::Agent(AgentState::new("claude")),
             PaneState::Exited { code: Some(0) },
             PaneState::Exited { code: None },
         ];

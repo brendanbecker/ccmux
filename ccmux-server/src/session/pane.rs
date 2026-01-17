@@ -149,14 +149,12 @@ impl Pane {
         #[allow(deprecated)]
         let mut claude_detector = ClaudeDetector::new();
 
-        #[allow(deprecated)]
         match &state {
             PaneState::Agent(agent_state) => {
                 agent_detector.mark_as_active(&agent_state.agent_type);
-            }
-            PaneState::Claude(_) => {
-                agent_detector.mark_as_active("claude");
-                claude_detector.mark_as_claude();
+                if agent_state.is_claude() {
+                    claude_detector.mark_as_claude();
+                }
             }
             _ => {}
         }
@@ -348,21 +346,25 @@ impl Pane {
 
     // ==================== Claude-Specific Methods (Backward Compatibility) ====================
 
-    /// Check if this is a Claude pane (includes both Agent and deprecated Claude states)
-    #[allow(deprecated)]
+    /// Check if this is a Claude pane
     pub fn is_claude(&self) -> bool {
         match &self.state {
             PaneState::Agent(state) => state.is_claude(),
-            PaneState::Claude(_) => true,
             _ => false,
         }
     }
 
-    /// Get Claude state if this is a Claude pane
-    #[allow(deprecated)]
-    pub fn claude_state(&self) -> Option<&ClaudeState> {
+    /// Get Claude state if this is a Claude pane (converts from AgentState)
+    pub fn claude_state(&self) -> Option<ClaudeState> {
         match &self.state {
-            PaneState::Claude(state) => Some(state),
+            PaneState::Agent(state) if state.is_claude() => {
+                Some(ClaudeState {
+                    session_id: state.session_id.clone(),
+                    activity: state.activity.clone().into(),
+                    model: state.metadata.get("model").and_then(|v| v.as_str().map(|s| s.to_string())),
+                    tokens_used: state.metadata.get("tokens_used").and_then(|v| v.as_u64()),
+                })
+            }
             _ => None,
         }
     }
@@ -372,43 +374,32 @@ impl Pane {
     /// Returns true if:
     /// - This is an agent pane in AwaitingConfirmation state
     /// - This is an agent pane in Idle state (also waiting for input)
-    #[allow(deprecated)]
     pub fn is_awaiting_input(&self) -> bool {
         match &self.state {
             PaneState::Agent(state) => matches!(
                 state.activity,
                 AgentActivity::AwaitingConfirmation | AgentActivity::Idle
             ),
-            PaneState::Claude(state) => matches!(
-                state.activity,
-                ClaudeActivity::AwaitingConfirmation | ClaudeActivity::Idle
-            ),
             _ => false,
         }
     }
 
     /// Check specifically if pane is awaiting confirmation (tool use approval, etc.)
-    #[allow(deprecated)]
     pub fn is_awaiting_confirmation(&self) -> bool {
         match &self.state {
             PaneState::Agent(state) => {
                 matches!(state.activity, AgentActivity::AwaitingConfirmation)
-            }
-            PaneState::Claude(state) => {
-                matches!(state.activity, ClaudeActivity::AwaitingConfirmation)
             }
             _ => false,
         }
     }
 
     /// Update Claude state (deprecated, use set_agent_state instead)
-    #[allow(deprecated)]
     #[deprecated(since = "0.2.0", note = "Use set_agent_state instead")]
     pub fn set_claude_state(&mut self, state: ClaudeState) {
-        // Keep using PaneState::Claude for backward compatibility with claude_state() reference
         self.agent_detector.mark_as_active("claude");
         self.claude_detector.mark_as_claude();
-        self.state = PaneState::Claude(state);
+        self.state = PaneState::Agent(state.into());
         self.state_changed_at = SystemTime::now();
     }
 
@@ -700,11 +691,6 @@ impl Pane {
             PaneState::Agent(state) => {
                 let is_processing = matches!(state.activity, AgentActivity::Processing);
                 let is_tool_use = matches!(state.activity, AgentActivity::ToolUse);
-                check_activity(is_processing, is_tool_use)
-            }
-            PaneState::Claude(state) => {
-                let is_processing = matches!(state.activity, ClaudeActivity::Thinking);
-                let is_tool_use = matches!(state.activity, ClaudeActivity::ToolUse);
                 check_activity(is_processing, is_tool_use)
             }
             _ => None,

@@ -80,7 +80,6 @@ impl<'a> ToolContext<'a> {
                             PaneState::Agent(state) => {
                                 if state.is_claude() { "claude" } else { "agent" }
                             }
-                            PaneState::Claude(_) => "claude",
                             PaneState::Exited { .. } => "exited",
                         },
                         "is_focused": is_focused,
@@ -571,13 +570,6 @@ impl<'a> ToolContext<'a> {
                     "activity": format!("{:?}", state.activity),
                     "model": state.get_metadata("model"),
                     "tokens_used": state.get_metadata("tokens_used"),
-                }),
-                PaneState::Claude(state) => serde_json::json!({
-                    "type": "claude",
-                    "session_id": state.session_id,
-                    "activity": format!("{:?}", state.activity),
-                    "model": state.model,
-                    "tokens_used": state.tokens_used,
                 }),
                 PaneState::Exited { code } => serde_json::json!({
                     "type": "exited",

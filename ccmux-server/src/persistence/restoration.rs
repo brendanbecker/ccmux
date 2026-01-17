@@ -305,8 +305,12 @@ impl SessionRestorer {
         };
 
         // Check if this is a Claude pane with a session ID to resume
-        let claude_session_id = if let PaneState::Claude(ref claude_state) = snapshot.state {
-            claude_state.session_id.clone()
+        let claude_session_id = if let PaneState::Agent(ref agent_state) = snapshot.state {
+            if agent_state.is_claude() {
+                agent_state.session_id.clone()
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -351,7 +355,8 @@ impl SessionRestorer {
             }
 
             // Apply isolation for Claude panes
-            if matches!(snapshot.state, PaneState::Claude(_)) {
+            let is_claude_pane = matches!(&snapshot.state, PaneState::Agent(s) if s.is_claude());
+            if is_claude_pane {
                 match isolation::ensure_config_dir(snapshot.id) {
                     Ok(config_dir) => {
                         debug!(
@@ -402,15 +407,12 @@ impl SessionRestorer {
     }
 
     /// Determine if a PTY should be spawned for a pane based on its state
-    #[allow(deprecated)]
     fn should_spawn_pty(state: &PaneState) -> bool {
         match state {
             // Normal panes always get a PTY
             PaneState::Normal => true,
             // Agent panes get a PTY (agents run in shell)
             PaneState::Agent(_) => true,
-            // Claude panes get a PTY (Claude Code runs in shell)
-            PaneState::Claude(_) => true,
             // Exited panes don't need a PTY
             PaneState::Exited { .. } => false,
         }
@@ -421,7 +423,7 @@ impl SessionRestorer {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use ccmux_protocol::ClaudeState;
+    use ccmux_protocol::{AgentState, AgentActivity};
 
     fn create_test_session_snapshot() -> SessionSnapshot {
         let session_id = Uuid::new_v4();
@@ -599,9 +601,9 @@ mod tests {
     }
 
     #[test]
-    fn test_should_spawn_pty_claude() {
-        assert!(SessionRestorer::should_spawn_pty(&PaneState::Claude(
-            ClaudeState::default()
+    fn test_should_spawn_pty_agent() {
+        assert!(SessionRestorer::should_spawn_pty(&PaneState::Agent(
+            AgentState::new("claude")
         )));
     }
 
@@ -794,11 +796,13 @@ mod tests {
                     index: 0,
                     cols: 80,
                     rows: 24,
-                    state: PaneState::Claude(ClaudeState {
-                        session_id: Some(claude_session_id.clone()),
-                        activity: ccmux_protocol::ClaudeActivity::Idle,
-                        model: Some("claude-3-opus".to_string()),
-                        tokens_used: Some(5000),
+                    state: PaneState::Agent({
+                        let mut state = AgentState::new("claude")
+                            .with_activity(AgentActivity::Idle);
+                        state.session_id = Some(claude_session_id.clone());
+                        state.set_metadata("model", serde_json::Value::String("claude-3-opus".to_string()));
+                        state.set_metadata("tokens_used", serde_json::Value::Number(5000.into()));
+                        state
                     }),
                     name: None,
                     title: Some("Claude".to_string()),
@@ -864,12 +868,9 @@ mod tests {
                     index: 0,
                     cols: 80,
                     rows: 24,
-                    state: PaneState::Claude(ClaudeState {
-                        session_id: None, // No session ID
-                        activity: ccmux_protocol::ClaudeActivity::Idle,
-                        model: None,
-                        tokens_used: None,
-                    }),
+                    state: PaneState::Agent(
+                        AgentState::new("claude").with_activity(AgentActivity::Idle)
+                    ),
                     name: None,
                     title: None,
                     cwd: None,

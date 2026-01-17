@@ -293,7 +293,7 @@ impl RecoveryState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ccmux_protocol::ClaudeState;
+    use ccmux_protocol::AgentState;
 
     #[test]
     fn test_checkpoint_new() {
@@ -361,7 +361,7 @@ mod tests {
             index: 0,
             cols: 80,
             rows: 24,
-            state: PaneState::Claude(ClaudeState::default()),
+            state: PaneState::Agent(AgentState::new("claude")),
             name: None,
             title: Some("vim".to_string()),
             cwd: Some("/home/user".to_string()),

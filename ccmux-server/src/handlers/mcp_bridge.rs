@@ -53,10 +53,7 @@ impl HandlerContext {
                 let is_active_window = Some(window.id()) == active_window_id;
 
                 for pane in window.panes() {
-                    let claude_state = match pane.state() {
-                        PaneState::Claude(cs) => Some(cs.clone()),
-                        _ => None,
-                    };
+                    let claude_state = pane.claude_state();
 
                     // FEAT-078: Pane is focused if it's the active pane for THIS client
                     let is_focused = if let Some(ref focus) = client_focus {

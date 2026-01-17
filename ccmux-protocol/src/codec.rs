@@ -394,7 +394,7 @@ mod tests {
             },
             ServerMessage::PaneStateChanged {
                 pane_id,
-                state: PaneState::Claude(ClaudeState::default()),
+                state: PaneState::Agent(AgentState::new("claude")),
             },
             ServerMessage::ClaudeStateChanged {
                 pane_id,
