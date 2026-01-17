@@ -1,0 +1,54 @@
+{
+  "bug_id": "BUG-043",
+  "title": "MCP tool handlers fail to unwrap Sequenced message wrapper from daemon responses",
+  "component": "mcp-bridge",
+  "severity": "high",
+  "priority": "P1",
+  "status": "new",
+  "reported_date": "2026-01-16",
+  "updated_date": "2026-01-16",
+  "assigned_to": null,
+  "tags": ["mcp", "sequenced", "persistence", "response-parsing", "FEAT-075"],
+  "affected_versions": [],
+  "environment": "Linux (WSL2) - MCP bridge integration",
+  "reproducibility": "always",
+  "description": "MCP tool handlers receive 'Unexpected response: Sequenced { ... }' errors because the daemon wraps responses in ServerMessage::Sequenced for persistence tracking (FEAT-075), but the MCP bridge's response reception pipeline doesn't unwrap them. This breaks multiple MCP tools that rely on recv_response_from_daemon().",
+  "steps_to_reproduce": [
+    "Start ccmux daemon with persistence enabled (FEAT-075)",
+    "Call any MCP tool that uses recv_response_from_daemon() (e.g., kill_session, set_tags, broadcast)",
+    "Observe error: 'Unexpected response: Sequenced { seq: N, inner: ActualMessage }'",
+    "Compare with working tools (create_pane, list_panes) that use recv_filtered() with specific predicates"
+  ],
+  "expected_behavior": "MCP tool handlers should receive unwrapped message types (e.g., SessionList, TagsList, Ok) regardless of whether the daemon wraps them in Sequenced for persistence tracking",
+  "actual_behavior": "Handlers receive Sequenced { seq: N, inner: Box<ActualMessage> } instead of the actual message type. Some tools receive wrong response types (e.g., broadcast gets TagsList). Operations succeed internally but MCP responses fail to parse.",
+  "evidence": {
+    "error_pattern": "Unexpected response: Sequenced { seq: N, inner: ActualMessage }",
+    "affected_tools": [
+      "kill_session",
+      "list_sessions (after changes)",
+      "set_tags",
+      "get_tags",
+      "broadcast",
+      "report_status",
+      "request_help",
+      "beads_assign",
+      "beads_find_pane",
+      "beads_pane_history"
+    ],
+    "working_tools": [
+      "create_pane",
+      "close_pane",
+      "list_panes",
+      "get_status",
+      "send_input",
+      "read_pane"
+    ],
+    "working_tools_reason": "These use recv_filtered() with specific predicates that bypass the issue",
+    "affected_files": [
+      "ccmux-server/src/mcp/bridge/connection.rs",
+      "ccmux-server/src/mcp/bridge/handlers.rs"
+    ]
+  },
+  "root_cause": "The is_broadcast_message() function (connection.rs:390-427) doesn't include ServerMessage::Sequenced variant, so wrapped responses pass through the filter unchanged. Tool handlers expect unwrapped message types like SessionList or TagsList but receive Sequenced { inner: Box<SessionList> }.",
+  "impact": "Breaks multiple MCP tools that are critical for session management, tagging, and orchestration. Operations succeed on the daemon side but fail at the MCP response parsing layer, causing confusing errors and broken functionality."
+}

@@ -1,0 +1,48 @@
+{
+  "bug_id": "BUG-045",
+  "title": "Windows rendered as horizontal splits instead of separate tabs/screens",
+  "component": "tui",
+  "severity": "medium",
+  "priority": "P2",
+  "status": "new",
+  "reported_date": "2026-01-16",
+  "updated_date": "2026-01-16",
+  "assigned_to": null,
+  "tags": ["tui", "rendering", "layout-engine", "window-management"],
+  "affected_versions": [],
+  "environment": "development",
+  "reproducibility": "always",
+  "description": "When creating a new window with create_window, it appears as a horizontal split in the current view rather than as a separate tab/screen. In tmux, windows are like tabs - only one window is visible at a time per session, and you switch between them. In ccmux, creating a new window causes both the original window and the new window to be displayed simultaneously, splitting the screen. This violates the expected tmux-like window/pane mental model where windows are independent screens and panes are splits within a window.",
+  "steps_to_reproduce": [
+    "Start ccmux with a single session and window",
+    "Call ccmux_create_window with name 'qa-test'",
+    "Observe that the new window's pane appears as a split in the current view",
+    "Both windows are now visible simultaneously, each taking half the screen height"
+  ],
+  "expected_behavior": "Creating a new window should create a separate screen/tab. Only one window should be visible at a time. User should switch between windows using select_window. Windows should behave like tmux windows (tabs), not splits.",
+  "actual_behavior": "New window appears as a horizontal split. Both windows are visible simultaneously. Screen is divided between all windows in the session. Behaves like create_pane with direction=horizontal instead of creating a separate tab.",
+  "evidence": {
+    "list_panes_output": {
+      "pane_1": {
+        "id": "b2f13e35...",
+        "window": 0,
+        "window_name": "0",
+        "rows": 22,
+        "note": "Half height - should be full height"
+      },
+      "pane_2": {
+        "id": "2d95cd9c...",
+        "window": 1,
+        "window_name": "qa-test",
+        "rows": 22,
+        "note": "Half height - should not be visible"
+      }
+    },
+    "total_rows": 46,
+    "each_pane_rows": 22,
+    "observation": "Both panes have half the screen height, indicating they are being rendered as splits"
+  },
+  "root_cause": "Layout engine appears to be rendering all windows simultaneously rather than only the active window. The window selection logic may not be filtering panes to only those belonging to the currently active window.",
+  "impact": "Confuses window/pane mental model. Users expecting tmux-like behavior will be surprised. Reduces usable screen space when multiple windows exist. May affect agent orchestration workflows that rely on window separation.",
+  "related_items": ["FEAT-082"]
+}
