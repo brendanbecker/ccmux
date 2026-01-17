@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-16
 
 ## Summary Statistics
-- Total Bugs: 45
-- Open: 2
+- Total Bugs: 48
+- Open: 5
 - Resolved: 42
 - Deprecated: 1
 
@@ -22,6 +22,9 @@
 
 | ID | Description | Priority | Status | Component | Link |
 |----|-------------|----------|--------|-----------|------|
+| BUG-049 | send_input with submit: true doesn't reliably submit input | P2 | new | mcp | [Link](BUG-049-send-input-submit-true-unreliable/) |
+| BUG-048 | TUI flickers on every keystroke when Claude Code is detected | P1 | new | tui | [Link](BUG-048-tui-flickers-on-every-keystroke/) |
+| BUG-047 | Clean up compiler warnings across ccmux crates | P3 | new | build | [Link](BUG-047-clean-up-compiler-warnings/) |
 | BUG-045 | Windows rendered as horizontal splits instead of separate tabs/screens | P2 | new | tui | [Link](BUG-045-windows-rendered-as-horizontal-splits/) |
 | BUG-044 | MCP bridge process hangs indefinitely, stops reading stdin | P1 | new | mcp-bridge | [Link](BUG-044-mcp-bridge-hangs-stops-reading-stdin/) |
 | BUG-043 | MCP handlers fail to unwrap Sequenced message wrapper | P1 | new | mcp-bridge | [Link](BUG-043-mcp-handlers-fail-to-unwrap-sequenced-wrapper/) |
@@ -36,10 +39,16 @@
 
 | Priority | Bug | Risk | Effort | Approach |
 |----------|-----|------|--------|----------|
+| **P1** | BUG-048 | Low | Low | Fix analyze() to only return on state change |
+| **P2** | BUG-049 | Low | Low | Investigate PTY write ordering for submit: true |
+| **P3** | BUG-047 | Low | Low | Clean up compiler warnings (code quality) |
 | **P3** | BUG-042 | Low | Low | Refactor Result nesting (code smell) |
 
 ## Recent Activity
 
+- 2026-01-16: Created BUG-049 - send_input with submit: true doesn't reliably submit input
+- 2026-01-16: Created BUG-048 - TUI flickers on every keystroke when Claude Code is detected
+- 2026-01-16: Created BUG-047 - Clean up compiler warnings across ccmux crates
 - 2026-01-16: Created BUG-045 - Windows rendered as horizontal splits instead of separate tabs/screens
 - 2026-01-16: Created BUG-044 - MCP bridge process hangs indefinitely, stops reading stdin
 

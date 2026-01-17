@@ -1,17 +1,20 @@
 # Feature Tracking
 
 **Project**: ccmux
-**Last Updated**: 2026-01-15
+**Last Updated**: 2026-01-16
 
 ## Summary Statistics
 
-- **Total Features**: 82
+- **Total Features**: 93
 - **Completed**: 72
-- **Backlog**: 10
+- **Backlog**: 21
 
 ## Current Status
 
-Core terminal multiplexer features complete. Ten features remain in backlog.
+Core terminal multiplexer features complete. Twenty-one features remain in backlog.
+
+**Recent Additions (2026-01-16)**:
+- FEAT-093: Add support for sending special keys (Escape, Ctrl sequences, function keys)
 
 **Recent Completions (2026-01-15)**:
 - FEAT-082 (aka 073): Multi-tier routing logic via target aliases
@@ -42,11 +45,22 @@ Core terminal multiplexer features complete. Ten features remain in backlog.
 | ID | Title | Component | Priority | Status | Notes |
 |----|-------|-----------|----------|--------|-------|
 | FEAT-063 | Add file-based logging to MCP bridge mode | ccmux-server | P1 | **Ready** | Enable file logging for mcp-bridge to debug BUG-039. Small change. |
+| FEAT-083 | Protocol Generalization: Generic Widget System | ccmux-protocol | P1 | new | Generic widget system for protocol extensibility. |
+| FEAT-085 | ADR: The Dumb Pipe Strategy | docs | P1 | new | Architecture decision record for protocol design. |
 | FEAT-061 | Screen Redraw Command | ccmux-client | P2 | **Ready** | Keybind to force full screen redraw for display corruption recovery. |
 | FEAT-074 | Observability instrumentation (metrics, tracing, status) | ccmux-server | P2 | **Ready** | Structured logging, tracing, metrics, and status fields per OBSERVABILITY.md. |
 | FEAT-073 | Visibility dashboard (stuck detection, mailbox, graph pane) | ccmux-client | P2 | **Ready** | Terminal-native visibility dashboard with activity feed/intent log and mailbox. |
 | FEAT-064 | Refactor MCP bridge.rs into modular components | ccmux-server | P2 | **Ready** | Extract connection, health, and tool modules from 33k+ token bridge.rs. |
 | FEAT-065 | Refactor handlers in MCP bridge modules | ccmux-server | P2 | **Ready** | Continue modularization of MCP bridge after FEAT-064. |
+| FEAT-084 | Protocol Generalization: Abstract Agent State | ccmux-protocol | P2 | new | Abstract agent state for protocol extensibility. |
+| FEAT-086 | Environment Variable Persistence | ccmux-server | P2 | new | Persist environment variables across sessions. |
+| FEAT-087 | Refactor client app.rs | ccmux-client | P2 | new | Code organization improvements. |
+| FEAT-088 | Refactor handlers/mcp_bridge.rs | ccmux-server | P2 | new | Code organization improvements. |
+| FEAT-089 | Refactor protocol types.rs | ccmux-protocol | P2 | new | Code organization improvements. |
+| FEAT-090 | Refactor server main.rs | ccmux-server | P2 | new | Code organization improvements. |
+| FEAT-091 | Refactor mcp_handlers.rs | ccmux-server | P2 | new | Code organization improvements. |
+| FEAT-092 | Refactor protocol messages.rs | ccmux-protocol | P2 | new | Code organization improvements. |
+| FEAT-093 | Add support for sending special keys (Escape, Ctrl sequences, function keys) | ccmux-server | P2 | new | Enable MCP clients to send Escape, Ctrl+C, arrow keys, function keys to PTY. |
 | FEAT-062 | Mirror Pane (Picture-in-Picture View) | ccmux-server, ccmux-client | P3 | **Ready** | Read-only pane that mirrors another pane's output for multi-agent monitoring. |
 | FEAT-076 | Capability signaling protocol (sideband metadata) | ccmux-server, ccmux-protocol | P3 | **Ready** | Explicit sideband capability signals stored as pane metadata. |
 | FEAT-058 | Beads Query Integration | ccmux-server, ccmux-client | P3 | **Ready** | TUI visibility into work queue. |
@@ -80,6 +94,9 @@ FEAT-059 (Blocked)
   |-- FEAT-058 (not started) - Daemon communication
   |-- FEAT-057 (complete) - Beads detection
   |-- FEAT-050 (complete) - Issue tracking infrastructure
+
+FEAT-093 (Ready)
+  |-- No dependencies
 ```
 
 ### Implementation Priority
@@ -88,9 +105,10 @@ FEAT-059 (Blocked)
 2. **FEAT-061** - P2, ready now (no dependencies, improves UX)
 3. **FEAT-064** - P2, ready now (no dependencies, improves maintainability)
 4. **FEAT-065** - P2, ready now (parallel with FEAT-064)
-5. **FEAT-062** - P3, ready now (no dependencies, improves multi-agent workflows)
-6. **FEAT-058** - P3, ready now (all dependencies complete)
-7. **FEAT-059** - P3, after FEAT-058
+5. **FEAT-093** - P2, ready now (no dependencies, unblocks interactive terminal workflows)
+6. **FEAT-062** - P3, ready now (no dependencies, improves multi-agent workflows)
+7. **FEAT-058** - P3, ready now (all dependencies complete)
+8. **FEAT-059** - P3, after FEAT-058
 
 ## Completed Features
 
@@ -212,6 +230,4 @@ The project follows a multi-crate workspace structure:
 - `ccmux-session/` - Session/window/pane hierarchy
 - `ccmux-utils/` - Shared utilities
 - `ccmux-persistence/` - WAL-based crash recovery
-- `ccmux-sandbox/` - Landlock sandboxing helper| FEAT-083 | Protocol Generalization: Generic Widget System | ccmux-protocol | P1 | new | [Link](features/FEAT-083-protocol-generalization-generic-widget-system/) |
-| FEAT-084 | Protocol Generalization: Abstract Agent State | ccmux-protocol | P2 | new | [Link](features/FEAT-084-protocol-generalization-abstract-agent-state/) |
-| FEAT-085 | ADR: The Dumb Pipe Strategy | docs | P1 | new | [Link](features/FEAT-085-adr-the-dumb-pipe-strategy/) |
+- `ccmux-sandbox/` - Landlock sandboxing helper
