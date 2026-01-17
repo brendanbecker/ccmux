@@ -312,8 +312,9 @@ impl HandlerContext {
                 session_filter,
                 name,
                 command,
+                cwd,
             } => {
-                self.handle_create_window_with_options(session_filter, name, command)
+                self.handle_create_window_with_options(session_filter, name, command, cwd)
                     .await
             }
 

@@ -364,6 +364,17 @@ impl HandlerContext {
         }
         self.record_human_activity(Resource::Window(window_id), Action::Layout);
 
+        // BUG-050: Capture active pane's cwd for inheritance before creating new pane
+        let inherited_cwd = if cwd.is_none() {
+            session.get_window(window_id)
+                .and_then(|w| w.active_pane_id())
+                .and_then(|active_id| session.get_window(window_id)?.get_pane(active_id))
+                .and_then(|p| p.cwd())
+                .map(String::from)
+        } else {
+            None
+        };
+
         // Create the pane
         let window = match session.get_window_mut(window_id) {
             Some(w) => w,
@@ -487,8 +498,11 @@ impl HandlerContext {
         } else {
             PtyConfig::command(&shell)
         };
+        // BUG-050: Apply explicit cwd, or inherit from parent pane
         if let Some(ref cwd) = cwd {
             config = config.with_cwd(cwd);
+        } else if let Some(ref inherited) = inherited_cwd {
+            config = config.with_cwd(inherited);
         }
         config = config.with_ccmux_context(session_id, &session_name, window_id, pane_id);
         // Apply session environment variables
@@ -750,10 +764,11 @@ impl HandlerContext {
         session_filter: Option<String>,
         name: Option<String>,
         command: Option<String>,
+        cwd: Option<String>,
     ) -> HandlerResult {
         info!(
-            "CreateWindowWithOptions request from {} (session: {:?}, name: {:?})",
-            self.client_id, session_filter, name
+            "CreateWindowWithOptions request from {} (session: {:?}, name: {:?}, cwd: {:?})",
+            self.client_id, session_filter, name, cwd
         );
 
         let mut session_manager = self.session_manager.write().await;
@@ -856,8 +871,12 @@ impl HandlerContext {
             PtyConfig::command("sh").with_arg("-c").with_arg(cmd)
         } else {
             PtyConfig::command(&shell)
+        };
+        // BUG-050: Apply cwd if provided
+        if let Some(ref cwd) = cwd {
+            config = config.with_cwd(cwd);
         }
-        .with_ccmux_context(session_id, &session_name, window_id, pane_id);
+        config = config.with_ccmux_context(session_id, &session_name, window_id, pane_id);
         // Apply session environment variables
         config = config.with_env_map(&session_env);
 
@@ -933,7 +952,7 @@ impl HandlerContext {
         let session_manager = self.session_manager.read().await;
 
         // Find the pane to split
-        let (session, window, _pane) = match session_manager.find_pane(pane_id) {
+        let (session, window, source_pane) = match session_manager.find_pane(pane_id) {
             Some(found) => found,
             None => {
                 return HandlerContext::error(
@@ -946,6 +965,13 @@ impl HandlerContext {
         let session_id = session.id();
         let session_name = session.name().to_string();
         let window_id = window.id();
+
+        // BUG-050: Capture source pane's cwd for inheritance
+        let inherited_cwd = if cwd.is_none() {
+            source_pane.cwd().map(String::from)
+        } else {
+            None
+        };
 
         // FEAT-079: Arbitrate layout access
         if let Err(blocked) = self.check_arbitration(Resource::Window(window_id), Action::Layout) {
@@ -1008,8 +1034,11 @@ impl HandlerContext {
         } else {
             PtyConfig::command(&shell)
         };
+        // BUG-050: Apply explicit cwd, or inherit from source pane
         if let Some(ref cwd) = cwd {
             config = config.with_cwd(cwd);
+        } else if let Some(ref inherited) = inherited_cwd {
+            config = config.with_cwd(inherited);
         }
         config = config.with_ccmux_context(session_id, &session_name, window_id, new_pane_id);
         // Apply session environment variables
@@ -2053,7 +2082,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_window_with_options_no_sessions() {
         let ctx = create_test_context();
-        let result = ctx.handle_create_window_with_options(None, None, None).await;
+        let result = ctx.handle_create_window_with_options(None, None, None, None).await;
 
         match result {
             HandlerResult::Response(ServerMessage::Error { code, .. }) => {
@@ -2069,7 +2098,7 @@ mod tests {
         create_session_with_pane(&ctx).await;
 
         let result = ctx
-            .handle_create_window_with_options(None, Some("new-window".to_string()), None)
+            .handle_create_window_with_options(None, Some("new-window".to_string()), None, None)
             .await;
 
         match result {
@@ -2771,8 +2800,8 @@ mod tests {
 
         // Create a session with multiple windows and panes to have actual data
         let _ = ctx.handle_create_session_with_options(Some("stress-test".to_string()), None, None, None, None, None).await;
-        let _ = ctx.handle_create_window_with_options(Some("stress-test".to_string()), Some("window-2".to_string()), None).await;
-        let _ = ctx.handle_create_window_with_options(Some("stress-test".to_string()), Some("window-3".to_string()), None).await;
+        let _ = ctx.handle_create_window_with_options(Some("stress-test".to_string()), Some("window-2".to_string()), None, None).await;
+        let _ = ctx.handle_create_window_with_options(Some("stress-test".to_string()), Some("window-3".to_string()), None, None).await;
 
         // Track expected response types for each operation
         let mut errors: Vec<String> = Vec::new();

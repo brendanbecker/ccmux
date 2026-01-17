@@ -325,7 +325,8 @@ impl McpBridge {
                 let session = arguments["session"].as_str().map(String::from);
                 let name = arguments["name"].as_str().map(String::from);
                 let command = arguments["command"].as_str().map(String::from);
-                handlers.tool_create_window(session, name, command).await
+                let cwd = arguments["cwd"].as_str().map(String::from);
+                handlers.tool_create_window(session, name, command, cwd).await
             }
             "ccmux_create_pane" => {
                 let session = arguments["session"].as_str().map(String::from);

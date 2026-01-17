@@ -227,6 +227,7 @@ impl McpServer {
                 session: arguments["session"].as_str().map(String::from),
                 name: arguments["name"].as_str().map(String::from),
                 command: arguments["command"].as_str().map(String::from),
+                cwd: arguments["cwd"].as_str().map(String::from),
             },
             "ccmux_rename_session" => ToolParams::RenameSession {
                 session: arguments["session"]
@@ -288,8 +289,8 @@ impl McpServer {
             ToolParams::ListSessions => ctx.list_sessions(),
             ToolParams::ListWindows { session } => ctx.list_windows(session.as_deref()),
             ToolParams::CreateSession { name } => ctx.create_session(name.as_deref()),
-            ToolParams::CreateWindow { session, name, command } => {
-                ctx.create_window(session.as_deref(), name.as_deref(), command.as_deref())
+            ToolParams::CreateWindow { session, name, command, cwd } => {
+                ctx.create_window(session.as_deref(), name.as_deref(), command.as_deref(), cwd.as_deref())
             }
             ToolParams::RenameSession { session, name } => {
                 ctx.rename_session(&session, &name)
@@ -366,7 +367,7 @@ enum ToolParams {
     ListSessions,
     ListWindows { session: Option<String> },
     CreateSession { name: Option<String> },
-    CreateWindow { session: Option<String>, name: Option<String>, command: Option<String> },
+    CreateWindow { session: Option<String>, name: Option<String>, command: Option<String>, cwd: Option<String> },
     RenameSession { session: String, name: String },
     SplitPane {
         pane_id: Uuid,
