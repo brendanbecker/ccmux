@@ -8,7 +8,9 @@ mod borders;
 mod event;
 mod layout;
 mod pane;
+mod render;
 mod resize;
+mod state;
 mod status;
 mod terminal;
 
