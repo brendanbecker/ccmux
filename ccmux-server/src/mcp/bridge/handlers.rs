@@ -410,11 +410,15 @@ impl<'a> ToolHandlers<'a> {
                 // This avoids issues with TUI apps that expect Enter as a separate event
                 // (BUG-054)
                 let data = text.as_bytes().to_vec();
-                self.connection
-                    .send_to_daemon(ClientMessage::Input { pane_id, data })
-                    .await?;
+                if !data.is_empty() {
+                    self.connection
+                        .send_to_daemon(ClientMessage::Input { pane_id, data })
+                        .await?;
+                }
 
                 if submit {
+                    // Small delay to ensure TUI sees it as separate event
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     let enter_data = b"\r".to_vec();
                     self.connection
                         .send_to_daemon(ClientMessage::Input {
