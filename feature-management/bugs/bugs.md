@@ -4,8 +4,8 @@
 **Last Updated**: 2026-01-17
 
 ## Summary Statistics
-- Total Bugs: 56
-- Open: 2
+- Total Bugs: 57
+- Open: 3
 - Resolved: 53
 - Deprecated: 1
 
@@ -13,6 +13,7 @@
 
 | ID | Description | Priority | Status | Component |
 |----|-------------|----------|--------|-----------|
+| BUG-057 | Agent detection cross-contamination between panes | P3 | new | agents |
 | BUG-047 | Clean up compiler warnings across ccmux crates | P3 | partial | build |
 | BUG-042 | Excessive Result Nesting (Ok(Ok(...))) code smell | P3 | new | mcp-bridge |
 
@@ -20,13 +21,15 @@
 
 | Priority | Bug | Risk | Effort | Notes |
 |----------|-----|------|--------|-------|
+| **P3** | BUG-057 | Low | Low | Agent detection isolation |
 | **P3** | BUG-047 | Low | Low | Code quality cleanup |
 | **P3** | BUG-042 | Low | Medium | Refactor Result nesting |
 
 ## Recent Activity
 
+- 2026-01-18: Fixed BUG-054 - Add 50ms delay before Enter for TUI compatibility (commit 6abb547, Gemini)
+- 2026-01-17: Filed BUG-057 - Agent detection cross-contamination discovered during QA
 - 2026-01-17: Fixed BUG-053 - DSR [6n] cursor position handling (commit cb1839c)
-- 2026-01-17: Fixed BUG-054 - TUI Enter handling fix (commit 3ce77dc)
 - 2026-01-17: Resolved BUG-052 - tested and confirmed working (Gemini connects to ccmux MCP)
 - 2026-01-17: Archived BUG-051 - fixed direction mapping (commit e3d83f0)
 - 2026-01-16: Fixed BUG-050 - cwd inheritance, merged to main, archived
@@ -37,7 +40,7 @@
 
 | ID | Description | Resolution | Commit |
 |----|-------------|------------|--------|
-| BUG-054 | send_input submit:true doesn't trigger Enter in TUI | Fixed - send input and enter separately | 3ce77dc |
+| BUG-054 | submit:true doesn't trigger Enter in TUI apps | Fixed - 50ms delay before Enter | 6abb547 |
 | BUG-053 | Codex CLI cursor position error (DSR [6n]) | Fixed - handle DSR escape sequence in PTY | cb1839c |
 | BUG-052 | Nested agents cannot connect to MCP | Verified working - no longer reproduces | N/A |
 | BUG-051 | Split pane direction parameter has no effect | Fixed - direction mapping in handlers | e3d83f0 |

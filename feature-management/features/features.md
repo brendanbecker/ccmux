@@ -5,9 +5,9 @@
 
 ## Summary Statistics
 
-- **Total Features**: 97
+- **Total Features**: 99
 - **Completed**: 90
-- **Backlog**: 7
+- **Backlog**: 9
 
 ## Current Status
 
@@ -24,10 +24,12 @@ Core terminal multiplexer fully functional with MCP integration, multi-agent orc
 | FEAT-096 | ccmux_expect - Pattern-Based Wait | ccmux-server/mcp | P1 | done |
 | FEAT-097 | ccmux_get_worker_status / ccmux_poll_messages | ccmux-server/mcp | P1 | done |
 
-### Medium Priority - Refactoring (P2)
+### Medium Priority (P2)
 
 | ID | Title | Component | Priority | Status |
 |----|-------|-----------|----------|--------|
+| FEAT-100 | OrchestrationContext abstraction | ccmux-server/mcp | P2 | new |
+| FEAT-099 | Dynamic orchestration session naming | ccmux-server/mcp | P2 | blocked (FEAT-100) |
 | FEAT-064 | Refactor MCP bridge.rs into modular components | ccmux-server | P2 | ready |
 | FEAT-065 | Refactor handlers in MCP bridge modules | ccmux-server | P2 | ready |
 

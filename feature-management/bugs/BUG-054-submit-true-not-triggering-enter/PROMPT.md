@@ -3,7 +3,7 @@
 **Priority**: P2
 **Component**: mcp
 **Severity**: medium
-**Status**: new
+**Status**: fixed
 
 ## Problem
 
@@ -101,6 +101,32 @@ Send text and Enter separately:
 // Second call
 {"key": "Enter"}
 ```
+
+## Recommended Fix
+
+**Option A is the simplest and most reliable approach:**
+
+Always send Enter as a separate write when `submit: true`:
+
+```rust
+// In handlers.rs send_input handler
+if let Some(text) = input {
+    handle.write_all(text.as_bytes())?;
+}
+
+if submit {
+    // Send Enter as separate write - TUI frameworks expect discrete key events
+    handle.write_all(b"\r")?;
+}
+```
+
+This mirrors what the workaround does (two separate calls) but internally, giving users the simple `submit: true` API they expect.
+
+## History
+
+- 2026-01-17: Originally marked "fixed" but fix only documented workaround
+- 2026-01-17: Reopened after QA testing confirmed `submit:true` still fails with Gemini CLI
+- Verified: separate `key: "Enter"` call works, so Option A should work
 
 ## Related
 
