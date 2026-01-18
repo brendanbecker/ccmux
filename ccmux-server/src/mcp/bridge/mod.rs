@@ -5,8 +5,8 @@
 
 pub mod connection;
 pub mod handlers;
+pub mod health;
 pub mod orchestration;
-pub mod types;
 
 #[cfg(test)]
 mod tests;
@@ -26,9 +26,9 @@ use crate::mcp::protocol::{
 };
 use crate::mcp::tools::get_tool_definitions;
 
-use self::connection::ConnectionManager;
+use self::connection::{ConnectionManager, MAX_RECONNECT_ATTEMPTS};
 use self::handlers::{ToolHandlers, parse_uuid};
-use self::types::{ConnectionState, MAX_RECONNECT_ATTEMPTS};
+use self::health::ConnectionState;
 
 /// MCP Bridge
 ///

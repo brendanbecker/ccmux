@@ -9,9 +9,9 @@ use ccmux_protocol::{
 };
 use crate::mcp::error::McpError;
 use crate::mcp::protocol::ToolResult;
-use super::connection::ConnectionManager;
+use super::connection::{ConnectionManager, MAX_RECONNECT_ATTEMPTS};
 use crate::beads::metadata_keys as beads;
-use super::types::{ConnectionState, MAX_RECONNECT_ATTEMPTS};
+use super::health::ConnectionState;
 use super::orchestration::{run_expect, ExpectAction, PipelineRunner, RunPipelineRequest};
 
 /// Parse a UUID from arguments

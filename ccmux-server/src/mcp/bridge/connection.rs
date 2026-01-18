@@ -15,10 +15,16 @@ use ccmux_protocol::{
 use ccmux_utils::socket_path;
 
 use crate::mcp::error::McpError;
-use super::types::{
-    ConnectionState, DAEMON_RESPONSE_TIMEOUT_SECS, HEARTBEAT_INTERVAL_MS, HEARTBEAT_TIMEOUT_MS,
-    MAX_RECONNECT_ATTEMPTS, RECONNECT_DELAYS_MS,
-};
+use super::health::{self, ConnectionState};
+
+/// Reconnection delays in milliseconds (exponential backoff)
+pub const RECONNECT_DELAYS_MS: &[u64] = &[100, 200, 400, 800, 1600];
+
+/// Maximum number of reconnection attempts
+pub const MAX_RECONNECT_ATTEMPTS: u8 = 5;
+
+/// BUG-037 FIX: Timeout for waiting for a daemon response (in seconds)
+pub const DAEMON_RESPONSE_TIMEOUT_SECS: u64 = 25;
 
 /// Manages connection to the ccmux daemon
 pub struct ConnectionManager {
@@ -163,7 +169,11 @@ impl ConnectionManager {
                 info!(state = "Connected", "Connection state changed");
 
                 // FEAT-060: Spawn health monitor task
-                self.health_monitor_handle = Some(self.spawn_health_monitor());
+                self.health_monitor_handle = Some(health::spawn_health_monitor(
+                    self.daemon_tx.clone(),
+                    self.state_tx.clone(),
+                    self.connection_state.clone(),
+                ));
                 debug!("Health monitor task spawned");
 
                 Ok(())
@@ -184,82 +194,6 @@ impl ConnectionManager {
                 Err(McpError::UnexpectedResponse(format!("{:?}", msg)))
             }
         }
-    }
-
-    /// Spawn a background health monitoring task
-    fn spawn_health_monitor(&self) -> JoinHandle<()> {
-        let daemon_tx = self.daemon_tx.clone();
-        let state_tx = self.state_tx.clone();
-        let connection_state = self.connection_state.clone();
-        let mut state_rx = self.state_tx.subscribe();
-
-        tokio::spawn(async move {
-            let mut interval = tokio::time::interval(Duration::from_millis(HEARTBEAT_INTERVAL_MS));
-            // Track when we last successfully communicated with daemon
-            #[allow(unused_assignments)]
-            let mut last_healthy = Instant::now();
-
-            loop {
-                tokio::select! {
-                    // Periodic heartbeat
-                    _ = interval.tick() => {
-                        // Check if we've been signaled as disconnected
-                        if *state_rx.borrow() == ConnectionState::Disconnected {
-                            info!("Health monitor: detected disconnection signal");
-                            break;
-                        }
-
-                        // Try to send a Ping
-                        if let Some(ref tx) = daemon_tx {
-                            match tx.send(ClientMessage::Ping).await {
-                                Ok(()) => {
-                                    // Ping sent successfully, daemon is reachable
-                                    last_healthy = Instant::now();
-                                    debug!("Health monitor: ping sent successfully");
-                                }
-                                Err(_) => {
-                                    // Channel closed - daemon disconnected
-                                    warn!("Health monitor: failed to send ping, daemon disconnected");
-                                    {
-                                        let mut state = connection_state.write().await;
-                                        *state = ConnectionState::Disconnected;
-                                    }
-                                    let _ = state_tx.send(ConnectionState::Disconnected);
-                                    break;
-                                }
-                            }
-                        } else {
-                            // No daemon_tx - not connected
-                            break;
-                        }
-
-                        // Check if we've exceeded the heartbeat timeout
-                        if last_healthy.elapsed() > Duration::from_millis(HEARTBEAT_TIMEOUT_MS * 2) {
-                            warn!("Health monitor: heartbeat timeout exceeded");
-                            {
-                                let mut state = connection_state.write().await;
-                                *state = ConnectionState::Disconnected;
-                            }
-                            let _ = state_tx.send(ConnectionState::Disconnected);
-                            break;
-                        }
-                    }
-
-                    // Watch for state changes (disconnection signal from I/O task)
-                    result = state_rx.changed() => {
-                        if result.is_err() {
-                            break;
-                        }
-                        if *state_rx.borrow() == ConnectionState::Disconnected {
-                            info!("Health monitor: received disconnection signal");
-                            break;
-                        }
-                    }
-                }
-            }
-
-            info!("Health monitor task exiting");
-        })
     }
 
     /// Attempt to reconnect to the daemon with exponential backoff
