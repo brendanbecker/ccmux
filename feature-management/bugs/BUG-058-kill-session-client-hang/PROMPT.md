@@ -26,6 +26,14 @@ Session is killed and client continues operating normally.
 - TUI keybindings (Ctrl+b) still work
 - Workaround: Exit to session picker (Ctrl+b s) and return
 
+### Additional Observations (2026-01-18)
+
+When killing multiple sessions in quick succession (e.g., cleaning up 8 idle agent sessions):
+- Session picker workaround (Ctrl+b s) may not be sufficient
+- Required full client restart to reattach to session
+- Daemon remained operational (tmux commands still worked)
+- Suggests client state corruption accumulates with multiple rapid kill operations
+
 ## Analysis
 
 The TUI event loop is running (keybindings work), but something is blocking the main render/update cycle. Likely causes:
@@ -55,6 +63,8 @@ The client may not be receiving or processing the session removal notification, 
 - [ ] Test killing non-current session (does it still hang?)
 - [ ] Test killing session from within that session
 - [ ] Test killing session from a different client
+- [ ] Test killing multiple sessions in rapid succession (8+ sessions)
+- [ ] Check if hang severity correlates with number of sessions killed
 
 ## Acceptance Criteria
 
