@@ -10,53 +10,49 @@
 
 ## Current State (2026-01-17)
 
-**Orchestration Tools Shipped**: Core orchestration primitives now available:
+**All P1 Features Complete!** Orchestration primitives fully shipped:
 - `ccmux_expect` - Wait for regex patterns in pane output (FEAT-096)
 - `ccmux_run_parallel` - Execute commands in parallel across panes (FEAT-094)
 - `ccmux_run_pipeline` - Execute commands sequentially in a single pane (FEAT-095)
+- `ccmux_get_worker_status` - Get worker's last reported status (FEAT-097)
+- `ccmux_poll_messages` - Poll messages from worker inbox (FEAT-097)
 
-**New**: FEAT-098 Gemini Agent Detection shipped - ccmux now detects both Claude and Gemini CLI.
+**Agent Detection**: Both Claude and Gemini CLI detected (FEAT-098).
 
-### Active Bugs (2)
+### Active Bugs (0)
 
-| Bug | Priority | Description | Status |
-|-----|----------|-------------|--------|
-| BUG-047 | P3 | 51+ compiler warnings need cleanup | Agent working |
-| BUG-042 | P3 | Excessive Result nesting (Ok(Ok(...))) | ✅ Ready for merge |
+All bugs resolved.
 
-### Active Features (7)
+### Active Features (5 backlog)
 
 | Priority | Features | Status |
 |----------|----------|--------|
-| **P1** | FEAT-097 (message receive) | Agent working |
-| P1 | FEAT-098 (Gemini detection) | ✅ Merged |
 | P2 | FEAT-064, FEAT-065 (MCP bridge refactoring) | Backlog |
 | P3 | FEAT-069, FEAT-072, FEAT-087-092 (infra + refactoring) | Backlog |
 
-### Latest Session (2026-01-17, Session 5)
+### Latest Session (2026-01-17, Session 6)
+
+**Merged remaining work items and cleanup:**
+
+| Item | Description | Commit |
+|------|-------------|--------|
+| BUG-042 | Result nesting regression test | 9cb0263 |
+| BUG-047 | 51+ compiler warnings fixed | 354e4d1 |
+| FEAT-097 | Orchestration message receive | 382f376 |
+
+**Other accomplishments:**
+- Created `DEMO-MULTI-AGENT.md` showcasing orchestration workflows
+- Removed obsolete `DEMO.md` and `DEMO-QA.md`
+- Added `Makefile` for build/install convenience
+- Closed 8 parallel agent sessions, cleaned up all worktrees
+
+**Key Discovery:** Gemini CLI menus require sending digit keys ("1", "2") rather than Enter to select options. Enter cycles through menu items.
+
+### Previous Session (2026-01-17, Session 5)
 
 **Multi-Agent Orchestration via ccmux:**
 
-Successfully running 8 parallel agents across ccmux sessions:
-
-| Session | Agent | Task | Status |
-|---------|-------|------|--------|
-| session-0 | Claude | Orchestrator | Active |
-| feat-094-parallel | Claude | PR creation | Working |
-| feat-095-pipeline | Gemini | Pipeline tool | Working |
-| feat-096-expect | Gemini | Expect tool | Working |
-| feat-097-gemini | Gemini | Message receive (FEAT-097) | Working |
-| bug-042-gemini | Gemini | Result nesting fix | ✅ Complete |
-| bug-047-claude | Claude | Compiler warnings | Working |
-| bug-053-codex | Claude | Testing | Working |
-| bug-054-tui | Gemini | TUI fix | ✅ Complete |
-
-**Completed This Session:**
-- **FEAT-098**: Gemini Agent Detection (`d684034`) - GeminiAgentDetector implementing AgentDetector trait
-- **BUG-042**: Result nesting fix - regression test added, branch ready for merge
-- **BUG-054**: TUI fix - already committed (`3ce77dc`)
-
-**Key Discovery:** Gemini CLI menus require sending digit keys ("1", "2") rather than Enter to select options. Enter cycles through menu items.
+Successfully ran 8 parallel agents across ccmux sessions for FEAT-097, BUG-042, BUG-047.
 
 ### Previous Session (2026-01-17, Session 4)
 
@@ -92,34 +88,27 @@ Attempted to launch 3 parallel background agents via Task tool, but:
 
 ## Recommended Work Order
 
+All P1 work complete. Remaining work is optional refactoring:
+
 ```
-Phase 1: Complete Orchestration (Next)
-  1. FEAT-097 (message receive) ← orchestrator polling
+Phase 1: MCP Refactoring (Optional)
+  1. FEAT-064, 065 (MCP bridge cleanup)
 
-Phase 2: Optional Refactoring
-  2. FEAT-064, 065 (MCP bridge cleanup)
-  3. BUG-047 (compiler warnings)
-  4. Other P3 items as time permits
+Phase 2: Infrastructure (Optional)
+  2. FEAT-069 (TLS/auth)
+  3. Other P3 items as time permits
 ```
-
-### Why This Order?
-
-**FEAT-097 first**: Demonstrated need during parallel agent session - orchestrators have no way to receive worker status updates without polling raw pane output.
 
 ## Backlog Summary
 
-### Bugs (2 open)
+### Bugs (0 open)
 
-| Bug | Priority | Severity | Description |
-|-----|----------|----------|-------------|
-| BUG-047 | P3 | low | 51+ compiler warnings |
-| BUG-042 | P3 | low | Result nesting code smell |
+All bugs resolved.
 
-### Features (7 backlog)
+### Features (6 backlog)
 
 | Priority | ID | Title | Effort |
 |----------|----|-------|--------|
-| **P1** | FEAT-097 | ccmux_get_worker_status / ccmux_poll_messages | Small |
 | P2 | FEAT-064 | Refactor MCP bridge.rs | Medium |
 | P2 | FEAT-065 | Refactor handlers in MCP bridge | Medium |
 | P3 | FEAT-069 | TLS/auth for TCP connections | Large |
@@ -168,11 +157,17 @@ ccmux is agent-agnostic:
 
 ## Recent Completions
 
+### 2026-01-17 (Session 6)
+| ID | Description | Commit |
+|----|-------------|--------|
+| FEAT-097 | Orchestration message receive | 382f376 |
+| BUG-047 | Compiler warnings cleanup | 354e4d1 |
+| BUG-042 | Result nesting regression test | 9cb0263 |
+
 ### 2026-01-17 (Session 5)
 | ID | Description | Commit |
 |----|-------------|--------|
 | FEAT-098 | Gemini Agent Detection | d684034 |
-| BUG-042 | Result nesting regression test | (branch ready) |
 
 ### 2026-01-17 (Session 3)
 | ID | Description | Commit |
@@ -216,11 +211,11 @@ ccmux is agent-agnostic:
 | Metric | Value |
 |--------|-------|
 | Total Bugs | 56 |
-| Open Bugs | 1 |
-| Resolution Rate | 98% |
+| Open Bugs | 0 |
+| Resolution Rate | 100% |
 | Total Features | 98 |
-| Completed Features | 90 |
-| Completion Rate | 92% |
+| Completed Features | 93 |
+| Completion Rate | 95% |
 | Test Count | 1,714+ |
 
 ---
