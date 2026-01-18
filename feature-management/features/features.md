@@ -5,13 +5,13 @@
 
 ## Summary Statistics
 
-- **Total Features**: 96
-- **Completed**: 86
-- **Backlog**: 10
+- **Total Features**: 97
+- **Completed**: 89
+- **Backlog**: 8
 
 ## Current Status
 
-Core terminal multiplexer fully functional with MCP integration, multi-agent orchestration, remote access, and observability. Ten features remain in backlog: 3 new high-level orchestration tools (P1), refactoring tasks, and infrastructure improvements.
+Core terminal multiplexer fully functional with MCP integration, multi-agent orchestration, remote access, and observability. Eight features remain in backlog: 1 orchestration tool (P1), refactoring tasks, and infrastructure improvements.
 
 ## Active Backlog
 
@@ -19,9 +19,10 @@ Core terminal multiplexer fully functional with MCP integration, multi-agent orc
 
 | ID | Title | Component | Priority | Status |
 |----|-------|-----------|----------|--------|
-| FEAT-094 | ccmux_run_parallel - Parallel Command Execution | ccmux-server/mcp | P1 | new |
-| FEAT-095 | ccmux_run_pipeline - Sequential Command Pipeline | ccmux-server/mcp | P1 | new |
-| FEAT-096 | ccmux_expect - Pattern-Based Wait | ccmux-server/mcp | P1 | new |
+| FEAT-094 | ccmux_run_parallel - Parallel Command Execution | ccmux-server/mcp | P1 | done |
+| FEAT-095 | ccmux_run_pipeline - Sequential Command Pipeline | ccmux-server/mcp | P1 | done |
+| FEAT-096 | ccmux_expect - Pattern-Based Wait | ccmux-server/mcp | P1 | done |
+| FEAT-097 | ccmux_get_worker_status / ccmux_poll_messages | ccmux-server/mcp | P1 | new |
 
 ### Medium Priority - Refactoring (P2)
 
@@ -45,26 +46,26 @@ Core terminal multiplexer fully functional with MCP integration, multi-agent orc
 
 ## Recommended Work Order
 
-### Phase 1: Orchestration Foundation (Next)
-1. **FEAT-096** (ccmux_expect) - Foundation primitive for other tools
-2. **FEAT-094** (ccmux_run_parallel) - Parallel execution
-3. **FEAT-095** (ccmux_run_pipeline) - Sequential pipelines
+### Phase 1: Complete Orchestration (Next)
+1. **FEAT-097** (ccmux_get_worker_status) - Orchestrator message polling
+
+### Phase 2: Refactoring (Optional)
+2. FEAT-064, FEAT-065 - MCP bridge cleanup
+3. Other P3 refactoring as time permits
+
+### Completed Orchestration Tools
+- **FEAT-096** (ccmux_expect) - Foundation primitive ✓
+- **FEAT-094** (ccmux_run_parallel) - Parallel execution ✓
+- **FEAT-095** (ccmux_run_pipeline) - Sequential pipelines ✓
 
 These tools reduce orchestrator context consumption by 70-90%.
-
-### Phase 2: Critical Bug Fix
-4. **BUG-052** (Nested agents cannot connect) - Blocks multi-agent use case
-
-### Phase 3: Refactoring (Optional)
-5. FEAT-064, FEAT-065 - MCP bridge cleanup
-6. Other P3 refactoring as time permits
 
 ## Parallel Workstream Candidates
 
 These have no interdependencies:
 
-**Workstream A - Orchestration Tools:**
-- FEAT-094, FEAT-095, FEAT-096 (build FEAT-096 first as foundation)
+**Workstream A - Orchestration Completion:**
+- FEAT-097 (message polling - the only remaining P1)
 
 **Workstream B - MCP Bridge Refactoring:**
 - FEAT-064, FEAT-065, FEAT-088, FEAT-091

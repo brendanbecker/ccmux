@@ -6,87 +6,86 @@
 
 **ccmux** is a Claude Code-aware terminal multiplexer in Rust.
 **Current Stage**: Stage 8 (Multi-Agent Orchestration Enhancement)
-**Status**: Production-ready core. Focus shifting to high-level orchestration primitives for reduced context consumption.
+**Status**: Production-ready core with new orchestration primitives.
 
 ## Current State (2026-01-17)
 
-**Orchestration Focus**: Core multiplexer stable. New work items target orchestrator efficiency—high-level MCP tools that reduce context consumption by 70-90% in multi-agent workflows.
+**Orchestration Tools Shipped**: Core orchestration primitives now available:
+- `ccmux_expect` - Wait for regex patterns in pane output (FEAT-096)
+- `ccmux_run_parallel` - Execute commands in parallel across panes (FEAT-094)
+- `ccmux_run_pipeline` - Execute commands sequentially in a single pane (FEAT-095)
 
-### Active Bugs (4)
+### Active Bugs (2)
 
 | Bug | Priority | Description |
 |-----|----------|-------------|
-| **BUG-053** | P1 | Codex CLI fails with cursor position error (DSR [6n not handled) |
-| BUG-054 | P2 | send_input submit:true doesn't trigger Enter in TUI apps |
 | BUG-047 | P3 | 51+ compiler warnings need cleanup |
 | BUG-042 | P3 | Excessive Result nesting (Ok(Ok(...))) code smell |
 
-### Active Features (10)
+### Active Features (7)
 
 | Priority | Features |
 |----------|----------|
-| **P1** | FEAT-094 (run_parallel), FEAT-095 (run_pipeline), FEAT-096 (expect) |
+| **P1** | FEAT-097 (message receive) |
 | P2 | FEAT-064, FEAT-065 (MCP bridge refactoring) |
 | P3 | FEAT-069, FEAT-072, FEAT-087-092 (infra + refactoring) |
 
-### Latest Session (2026-01-17)
+### Latest Session (2026-01-17, Session 3)
 
-**Created:**
-- **FEAT-094**: `ccmux_run_parallel` - Execute commands in parallel across panes
-- **FEAT-095**: `ccmux_run_pipeline` - Sequential command pipeline in single pane
-- **FEAT-096**: `ccmux_expect` - Block until regex pattern appears in output
-- **BUG-053**: Codex CLI fails with cursor position error (DSR [6n not handled)
-- **BUG-054**: send_input submit:true doesn't trigger Enter in TUI apps
+**Parallel Agent Results - 5/5 Work Items Merged:**
 
-**Archived:**
-- **BUG-051**: Split pane direction parameter fixed (commit e3d83f0)
-- **BUG-052**: Nested agents MCP connection - verified working (no longer reproduces)
+| Work Item | Agent | Status | Commit |
+|-----------|-------|--------|--------|
+| BUG-054 | Gemini | ✅ Merged | `3ce77dc` - TUI Enter handling fix |
+| FEAT-096 | Gemini | ✅ Merged | `ab34d81` - `ccmux_expect` tool |
+| FEAT-094 | Claude | ✅ Merged | `bbf060c` - `ccmux_run_parallel` tool |
+| BUG-053 | Claude | ✅ Merged | `cb1839c` - DSR cursor position fix |
+| FEAT-095 | Claude | ✅ Merged | `3f1d4ff` - `ccmux_run_pipeline` tool |
 
-**Analysis:**
-- Conducted retrospective, reprioritized backlog
-- Orchestration tools prioritized as P1 (70-90% context savings)
-- BUG-052 tested and confirmed fixed - Gemini inside ccmux successfully uses ccmux MCP
+**Key Accomplishments:**
+- Successfully ran 5 parallel agents (3 Gemini, 2 Claude) across worktrees
+- Orchestrator approved permissions remotely via `ccmux_send_input`
+- Demonstrated "plate spinning" workflow for multi-agent coordination
+- Identified FEAT-097 need: orchestrators can't receive worker status messages
+- Resolved FEAT-095 merge conflicts - integrated PipelineRunner into combined orchestration.rs
+
+### Previous Session (2026-01-17, Session 2)
+
+**Parallel Development Setup:**
+- Created 5 git worktrees for parallel work
+- Spawned mixed Claude/Gemini agents across sessions
+- Created agent cooperation model (AGENTS.md, CLAUDE.md, GEMINI.md)
 
 ## Recommended Work Order
 
 ```
-Phase 1: Orchestration Foundation (Next)
-  1. FEAT-096 (ccmux_expect) ← foundation primitive, small effort
-  2. FEAT-094 (ccmux_run_parallel) ← uses expect pattern
-  3. FEAT-095 (ccmux_run_pipeline) ← uses expect pattern
+Phase 1: Complete Orchestration (Next)
+  1. FEAT-097 (message receive) ← orchestrator polling
 
-Phase 2: Terminal Compatibility
-  4. BUG-053 (Codex CLI cursor position) ← DSR escape sequence handling
-
-Phase 3: Optional Refactoring
-  5. FEAT-064, 065 (MCP bridge cleanup)
-  6. Other P3 items as time permits
+Phase 2: Optional Refactoring
+  2. FEAT-064, 065 (MCP bridge cleanup)
+  3. BUG-047 (compiler warnings)
+  4. Other P3 items as time permits
 ```
 
 ### Why This Order?
 
-**FEAT-096 first**: The `ccmux_expect` tool provides the completion-detection primitive used by both `run_parallel` and `run_pipeline`. Building it first enables the other tools.
-
-**BUG-053 after orchestration**: Codex CLI support is desirable but not blocking - Claude Code and Gemini CLI work. The DSR escape sequence fix can be addressed after the orchestration tools.
+**FEAT-097 first**: Demonstrated need during parallel agent session - orchestrators have no way to receive worker status updates without polling raw pane output.
 
 ## Backlog Summary
 
-### Bugs (4 open)
+### Bugs (2 open)
 
 | Bug | Priority | Severity | Description |
 |-----|----------|----------|-------------|
-| **BUG-053** | P1 | high | Codex CLI cursor position error (DSR [6n) |
-| BUG-054 | P2 | medium | submit:true doesn't trigger Enter in TUI apps |
 | BUG-047 | P3 | low | 51+ compiler warnings |
 | BUG-042 | P3 | low | Result nesting code smell |
 
-### Features (10 backlog)
+### Features (7 backlog)
 
 | Priority | ID | Title | Effort |
 |----------|----|-------|--------|
-| **P1** | FEAT-096 | ccmux_expect - Pattern-based wait | Small |
-| **P1** | FEAT-094 | ccmux_run_parallel - Parallel execution | Medium |
-| **P1** | FEAT-095 | ccmux_run_pipeline - Sequential pipeline | Medium |
+| **P1** | FEAT-097 | ccmux_get_worker_status / ccmux_poll_messages | Small |
 | P2 | FEAT-064 | Refactor MCP bridge.rs | Medium |
 | P2 | FEAT-065 | Refactor handlers in MCP bridge | Medium |
 | P3 | FEAT-069 | TLS/auth for TCP connections | Large |
@@ -98,10 +97,15 @@ Phase 3: Optional Refactoring
 
 ### Orchestration Tools Design
 
-All three new tools are **bridge-only implementations**:
+All orchestration tools are **bridge-only implementations**:
 - No protocol changes required
 - Use existing primitives: `create_pane`, `send_input`, `read_pane`, `close_pane`
-- New module: `ccmux-server/src/mcp/bridge/orchestration.rs`
+- Module: `ccmux-server/src/mcp/bridge/orchestration.rs`
+
+**Available Tools:**
+- `ccmux_expect` - Wait for regex pattern match in pane output
+- `ccmux_run_parallel` - Execute up to 10 commands in parallel panes
+- `ccmux_run_pipeline` - Execute commands sequentially in a single pane
 
 **Completion Detection Pattern:**
 ```bash
@@ -113,11 +117,11 @@ Poll `read_pane` for exit marker to detect command completion.
 
 | Component | Location |
 |-----------|----------|
+| Orchestration tools | `ccmux-server/src/mcp/bridge/orchestration.rs` |
 | MCP bridge handlers | `ccmux-server/src/mcp/bridge/handlers.rs` |
 | MCP tool schemas | `ccmux-server/src/mcp/tools.rs` |
+| PTY output (DSR fix) | `ccmux-server/src/pty/output.rs` |
 | Protocol types | `ccmux-protocol/src/types.rs` |
-| Agent detection | `ccmux-server/src/agents/` |
-| Persistence | `ccmux-server/src/persistence/` |
 
 ### ADR-001: The Dumb Pipe Strategy
 
@@ -129,7 +133,16 @@ ccmux is agent-agnostic:
 
 ## Recent Completions
 
-### 2026-01-17
+### 2026-01-17 (Session 3)
+| ID | Description | Commit |
+|----|-------------|--------|
+| FEAT-095 | ccmux_run_pipeline tool | 3f1d4ff |
+| FEAT-096 | ccmux_expect tool | ab34d81 |
+| FEAT-094 | ccmux_run_parallel tool | bbf060c |
+| BUG-054 | TUI Enter handling fix | 3ce77dc |
+| BUG-053 | DSR [6n] cursor position | cb1839c |
+
+### 2026-01-17 (Sessions 1-2)
 | ID | Description | Commit |
 |----|-------------|--------|
 | BUG-052 | Nested agents MCP connection | Verified working |
@@ -149,24 +162,25 @@ ccmux is agent-agnostic:
 
 - **Features**: `feature-management/features/features.md`
 - **Bugs**: `feature-management/bugs/bugs.md`
-- **Retrospective**: `feature-management/RETROSPECTIVE_2026_01_17.md`
-- **ADR**: `docs/adr/ADR-001-dumb-pipe-strategy.md`
+- **Agent Cooperation**: `docs/AGENT_COOPERATION.md` - Status reporting protocol
+- **Agent Instructions**: `AGENTS.md` - Instructions for AI agents
 - **Orchestration Tool Specs**:
   - `feature-management/features/FEAT-094-run-parallel-command-execution/PROMPT.md`
   - `feature-management/features/FEAT-095-run-pipeline-sequential-commands/PROMPT.md`
   - `feature-management/features/FEAT-096-expect-pattern-wait/PROMPT.md`
+  - `feature-management/features/FEAT-097-orchestration-message-receive/PROMPT.md`
 
 ## Metrics
 
 | Metric | Value |
 |--------|-------|
-| Total Bugs | 54 |
-| Open Bugs | 4 |
-| Resolution Rate | 93% |
-| Total Features | 96 |
-| Completed Features | 86 |
-| Completion Rate | 90% |
-| Test Count | 1,676+ |
+| Total Bugs | 56 |
+| Open Bugs | 2 |
+| Resolution Rate | 96% |
+| Total Features | 97 |
+| Completed Features | 89 |
+| Completion Rate | 92% |
+| Test Count | 1,714 |
 
 ---
 
