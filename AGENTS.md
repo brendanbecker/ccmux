@@ -85,6 +85,29 @@ git branch --show-current
 
 Ensure you're on the correct feature/bug branch before committing.
 
+### Cross-Device Link Error in Worktrees
+
+When building in worktrees, you may encounter:
+```
+error: could not write to ... Invalid cross-device link (os error 18)
+```
+
+**Cause:** Cargo uses hard links for incremental compilation. Hard links can't span filesystems. If `/tmp` (cargo's temp location) is on a different filesystem than your worktree, builds fail.
+
+**Workarounds:**
+```bash
+# Option 1: Use a target dir on the same filesystem
+CARGO_TARGET_DIR=./target cargo build
+
+# Option 2: Disable incremental compilation
+CARGO_INCREMENTAL=0 cargo build
+
+# Option 3: Set TMPDIR to same filesystem
+TMPDIR=./tmp cargo build
+```
+
+This is an environment issue, not a ccmux bug.
+
 ## Feature Management
 
 - Features: `feature-management/features/`
