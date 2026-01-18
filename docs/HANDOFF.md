@@ -32,18 +32,16 @@
 
 ### Latest Session (2026-01-17, Session 4)
 
-**Parallel Workstreams Launched:**
+**Background Agent Experiment - Aborted:**
 
-| Worktree | Branch | Work Items | Status |
-|----------|--------|------------|--------|
-| ccmux-feat-097 | feat-097-message-receive | FEAT-097 | 🔄 In Progress |
-| ccmux-refactor-protocol | refactor-protocol | FEAT-089, 092 | 🔄 In Progress |
-| ccmux-refactor-client | refactor-client | FEAT-087, 090 | 🔄 In Progress |
+Attempted to launch 3 parallel background agents via Task tool, but:
+1. Agents worked in main instead of assigned worktrees
+2. One agent got blocked on permission issues
+3. Reset main to discard untrusted changes
 
-**Session Goals:**
-- Complete FEAT-097 (message receive) - last P1 orchestration item
-- Refactor protocol crate (types.rs → modules)
-- Refactor client crate (app.rs → modules)
+**Lesson:** Background Task agents don't respect worktree assignments - they need external orchestration (e.g., ccmux sessions) for true isolation.
+
+**Remaining P1:** FEAT-097 (message receive) still needs implementation.
 
 ### Previous Session (2026-01-17, Session 3)
 
