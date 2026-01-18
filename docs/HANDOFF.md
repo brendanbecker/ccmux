@@ -32,35 +32,53 @@
 
 ### Active Features
 
-**5 Parallel Gemini Workers Running (Session 7 continued):**
+**Parallel Refactoring (Session 8) - 2 Merged, 3 In Progress:**
 
 | Session | Branch | Feature | Status |
 |---------|--------|---------|--------|
-| `feat-064-gemini` | `feat/feat-064-refactor-bridge` | FEAT-064: Refactor MCP bridge.rs | In Progress |
-| `feat-065-gemini` | `feat/feat-065-refactor-handlers` | FEAT-065: Refactor MCP handlers | In Progress |
+| `feat-088-gemini` | `feat/feat-088-refactor-mcp-bridge-handlers` | FEAT-088: Refactor handlers/mcp_bridge.rs | ✅ **Merged** |
+| `feat-089-gemini` | `feat/feat-089-refactor-protocol-types` | FEAT-089: Refactor protocol types.rs | ✅ **Merged** |
+| `feat-065-codex-review` | `feat/feat-065-refactor-handlers` | FEAT-065: Refactor MCP handlers | Codex Reviewing |
+| `feat-064-codex-review` | `feat/feat-064-refactor-bridge` | FEAT-064: Refactor MCP bridge.rs | Codex Reviewing |
 | `feat-087-gemini` | `feat/feat-087-refactor-client-app` | FEAT-087: Refactor client app.rs | In Progress |
-| `feat-088-gemini` | `feat/feat-088-refactor-mcp-bridge-handlers` | FEAT-088: Refactor handlers/mcp_bridge.rs | In Progress |
-| `feat-089-gemini` | `feat/feat-089-refactor-protocol-types` | FEAT-089: Refactor protocol types.rs | In Progress |
 
-**Worktrees:**
+**Active Worktrees:**
 ```
-../ccmux-feat-064
-../ccmux-feat-065
-../ccmux-feat-087
-../ccmux-feat-088
-../ccmux-feat-089
+../ccmux-feat-064  (Codex reviewing)
+../ccmux-feat-065  (Codex reviewing)
+../ccmux-feat-087  (Gemini in progress)
 ```
 
-**Next Step:** When Gemini commits, Codex will review before merge.
+**Workflow:** Gemini commits → Codex reviews → Merge to main.
 
 **Remaining Backlog:**
 
 | Priority | Features | Status |
 |----------|----------|--------|
-| P2 | FEAT-100, FEAT-101 (OrchestrationContext, Codex detection) | Backlog |
+| P2 | FEAT-102 (Agent Status Pane), FEAT-100, FEAT-101 | Backlog |
 | P3 | FEAT-069, FEAT-072, FEAT-090-092 (infra + remaining refactoring) | Backlog |
 
-### Latest Session (2026-01-18, Session 7)
+### Latest Session (2026-01-18, Session 8)
+
+**Parallel Refactoring with Gemini + Codex Review**
+
+Continuing multi-agent refactoring from Session 7.
+
+**Merged this session:**
+| ID | Description | Changes |
+|----|-------------|---------|
+| FEAT-088 | Refactor handlers/mcp_bridge.rs | Split into 9 modules (pane, session, window, layout, etc.) |
+| FEAT-089 | Refactor protocol types.rs | Split into 6 modules (agent, common, pane, session, widget, window) |
+
+**Still in progress:**
+- FEAT-064, FEAT-065: Codex reviewing
+- FEAT-087: Gemini working
+
+**Other updates:**
+- Added cross-device link workaround docs to AGENTS.md
+- New feature spec: **FEAT-102 (Agent Status Pane)** - dedicated pane for real-time agent monitoring
+
+### Previous Session (2026-01-18, Session 7)
 
 **Multi-Agent Orchestration Demo - Retrospective**
 
@@ -277,10 +295,10 @@ Poll `read_pane` for exit marker to detect command completion.
 |-----------|----------|
 | Agent detection | `ccmux-server/src/agents/` (Claude, Gemini) |
 | Orchestration tools | `ccmux-server/src/mcp/bridge/orchestration.rs` |
-| MCP bridge handlers | `ccmux-server/src/mcp/bridge/handlers.rs` |
+| MCP bridge handlers | `ccmux-server/src/handlers/mcp_bridge/` (refactored) |
 | MCP tool schemas | `ccmux-server/src/mcp/tools.rs` |
 | PTY output (DSR fix) | `ccmux-server/src/pty/output.rs` |
-| Protocol types | `ccmux-protocol/src/types.rs` |
+| Protocol types | `ccmux-protocol/src/types/` (refactored) |
 
 ### ADR-001: The Dumb Pipe Strategy
 
@@ -291,6 +309,12 @@ ccmux is agent-agnostic:
 - See: `docs/adr/ADR-001-dumb-pipe-strategy.md`
 
 ## Recent Completions
+
+### 2026-01-18 (Session 8)
+| ID | Description | Commit |
+|----|-------------|--------|
+| FEAT-088 | Refactor handlers/mcp_bridge.rs | ed9c8da |
+| FEAT-089 | Refactor protocol types.rs | 2d4f1db |
 
 ### 2026-01-17 (Session 6)
 | ID | Description | Commit |
@@ -348,9 +372,9 @@ ccmux is agent-agnostic:
 | Total Bugs | 60 |
 | Open Bugs | 6 |
 | Resolution Rate | 90% |
-| Total Features | 101 |
-| Completed Features | 90 |
-| Completion Rate | 89% |
+| Total Features | 102 |
+| Completed Features | 92 |
+| Completion Rate | 90% |
 | Test Count | 1,714+ |
 
 ---

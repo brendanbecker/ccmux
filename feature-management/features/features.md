@@ -5,13 +5,13 @@
 
 ## Summary Statistics
 
-- **Total Features**: 101
-- **Completed**: 90
-- **Backlog**: 11
+- **Total Features**: 102
+- **Completed**: 92
+- **Backlog**: 10
 
 ## Current Status
 
-Core terminal multiplexer fully functional with MCP integration, multi-agent orchestration, remote access, and observability. Agent detection supports Claude and Gemini; Codex detection (FEAT-101) is next. Eleven features remain in backlog: agent detection, orchestration improvements, and refactoring tasks.
+Core terminal multiplexer fully functional with MCP integration, multi-agent orchestration, remote access, and observability. Agent detection supports Claude and Gemini. Ten features remain in backlog: agent status pane (FEAT-102), Codex detection, orchestration improvements, and refactoring tasks.
 
 ## Active Backlog
 
@@ -28,6 +28,7 @@ Core terminal multiplexer fully functional with MCP integration, multi-agent orc
 
 | ID | Title | Component | Priority | Status |
 |----|-------|-----------|----------|--------|
+| FEAT-102 | Agent Status Pane | ccmux-client | P2 | new |
 | FEAT-101 | Codex CLI agent detection | ccmux-server/agents | P2 | new |
 | FEAT-100 | OrchestrationContext abstraction | ccmux-server/mcp | P2 | new |
 | FEAT-099 | Dynamic orchestration session naming | ccmux-server/mcp | P2 | blocked (FEAT-100) |
@@ -41,7 +42,7 @@ Core terminal multiplexer fully functional with MCP integration, multi-agent orc
 | FEAT-069 | TLS/auth for direct TCP connections | ccmux-server | P3 | backlog |
 | FEAT-072 | Per-pane MCP mode control | ccmux-server | P3 | backlog |
 | FEAT-087 | Refactor client app.rs | ccmux-client | P3 | ready |
-| FEAT-088 | Refactor handlers/mcp_bridge.rs | ccmux-server | P3 | ready |
+| FEAT-088 | Refactor handlers/mcp_bridge.rs | ccmux-server | P3 | done |
 | FEAT-089 | Refactor protocol types.rs | ccmux-protocol | P3 | done |
 | FEAT-090 | Refactor server main.rs | ccmux-server | P3 | ready |
 | FEAT-091 | Refactor mcp_handlers.rs | ccmux-server | P3 | ready |
