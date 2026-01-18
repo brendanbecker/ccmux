@@ -433,6 +433,15 @@ impl HandlerContext {
                 self.handle_create_mirror(source_pane_id, target_pane_id, direction)
                     .await
             }
+
+            // FEAT-097: Orchestration Message Receive
+            ClientMessage::GetWorkerStatus { worker_id } => {
+                self.handle_get_worker_status(worker_id).await
+            }
+
+            ClientMessage::PollMessages { worker_id } => {
+                self.handle_poll_messages(worker_id).await
+            }
         }
     }
 
