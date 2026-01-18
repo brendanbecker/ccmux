@@ -23,6 +23,7 @@
 //! ```
 
 pub mod claude;
+pub mod gemini;
 
 use std::collections::HashMap;
 use ccmux_protocol::{AgentActivity, AgentState, JsonValue};
@@ -96,10 +97,11 @@ impl DetectorRegistry {
         }
     }
 
-    /// Create a registry with default detectors (currently just Claude)
+    /// Create a registry with default detectors (Claude, Gemini)
     pub fn with_defaults() -> Self {
         let mut registry = Self::new();
         registry.register(Box::new(claude::ClaudeAgentDetector::new()));
+        registry.register(Box::new(gemini::GeminiAgentDetector::new()));
         registry
     }
 
@@ -220,8 +222,9 @@ mod tests {
     fn test_registry_with_defaults() {
         let registry = DetectorRegistry::with_defaults();
         assert!(!registry.detectors.is_empty());
-        // Should have at least Claude detector
+        // Should have Claude and Gemini detectors
         assert!(registry.detectors.iter().any(|d| d.agent_type() == "claude"));
+        assert!(registry.detectors.iter().any(|d| d.agent_type() == "gemini"));
     }
 
     #[test]
@@ -272,5 +275,28 @@ mod tests {
 
         registry.reset();
         assert!(!registry.is_agent_active());
+    }
+
+    #[test]
+    fn test_registry_analyze_detects_gemini() {
+        let mut registry = DetectorRegistry::with_defaults();
+
+        let state = registry.analyze("Welcome to Gemini CLI");
+        assert!(state.is_some());
+
+        let state = state.unwrap();
+        assert_eq!(state.agent_type, "gemini");
+        assert!(registry.is_agent_active());
+        assert!(!registry.is_claude());
+    }
+
+    #[test]
+    fn test_registry_mark_gemini_as_active() {
+        let mut registry = DetectorRegistry::with_defaults();
+
+        assert!(registry.mark_as_active("gemini"));
+        assert!(registry.is_agent_active());
+        assert_eq!(registry.active_agent_type(), Some("gemini"));
+        assert!(!registry.is_claude());
     }
 }
