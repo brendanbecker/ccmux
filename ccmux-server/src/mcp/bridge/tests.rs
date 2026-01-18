@@ -283,4 +283,19 @@ mod tests {
         };
         assert!(parsed.get("pane").is_some());
     }
+
+    // ==================== BUG-042: Excessive Result Nesting Tests ====================
+
+    #[tokio::test]
+    async fn test_bug042_recv_response_from_daemon_returns_flat_result() {
+        // This test verifies that recv_response_from_daemon returns a flat Result<ServerMessage, McpError>
+        // and not a nested Result<Result<...>>. The explicit type annotation ensures compilation
+        // fails if the return type changes.
+        let mut connection = ConnectionManager::new();
+        
+        // Since we are not connected, this returns Err(McpError::NotConnected)
+        let result: Result<ServerMessage, McpError> = connection.recv_response_from_daemon().await;
+        
+        assert!(matches!(result, Err(McpError::NotConnected)));
+    }
 }
