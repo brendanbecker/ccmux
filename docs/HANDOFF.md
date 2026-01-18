@@ -30,12 +30,35 @@
 | BUG-047 | Compiler warnings cleanup | P3 | build |
 | BUG-042 | Result nesting code smell | P3 | mcp |
 
-### Active Features (5 backlog)
+### Active Features
+
+**5 Parallel Gemini Workers Running (Session 7 continued):**
+
+| Session | Branch | Feature | Status |
+|---------|--------|---------|--------|
+| `feat-064-gemini` | `feat/feat-064-refactor-bridge` | FEAT-064: Refactor MCP bridge.rs | In Progress |
+| `feat-065-gemini` | `feat/feat-065-refactor-handlers` | FEAT-065: Refactor MCP handlers | In Progress |
+| `feat-087-gemini` | `feat/feat-087-refactor-client-app` | FEAT-087: Refactor client app.rs | In Progress |
+| `feat-088-gemini` | `feat/feat-088-refactor-mcp-bridge-handlers` | FEAT-088: Refactor handlers/mcp_bridge.rs | In Progress |
+| `feat-089-gemini` | `feat/feat-089-refactor-protocol-types` | FEAT-089: Refactor protocol types.rs | In Progress |
+
+**Worktrees:**
+```
+../ccmux-feat-064
+../ccmux-feat-065
+../ccmux-feat-087
+../ccmux-feat-088
+../ccmux-feat-089
+```
+
+**Next Step:** When Gemini commits, Codex will review before merge.
+
+**Remaining Backlog:**
 
 | Priority | Features | Status |
 |----------|----------|--------|
-| P2 | FEAT-064, FEAT-065 (MCP bridge refactoring) | Backlog |
-| P3 | FEAT-069, FEAT-072, FEAT-087-092 (infra + refactoring) | Backlog |
+| P2 | FEAT-100, FEAT-101 (OrchestrationContext, Codex detection) | Backlog |
+| P3 | FEAT-069, FEAT-072, FEAT-090-092 (infra + remaining refactoring) | Backlog |
 
 ### Latest Session (2026-01-18, Session 7)
 
