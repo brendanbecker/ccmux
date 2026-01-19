@@ -545,6 +545,37 @@ impl HandlerContext {
             session_manager.mirror_registry_mut().register(source_pane_id, mirror_pane_info.id);
         }
 
+        // BUG-066: Copy existing scrollback from source pane to mirror pane
+        // This ensures the mirror shows existing content, not just new output.
+        // We send the existing content as an Output message to the mirror's session.
+        {
+            let session_manager = self.session_manager.read().await;
+            if let Some((_, _, source_pane)) = session_manager.find_pane(source_pane_id) {
+                // Get existing scrollback content
+                let scrollback_content: Vec<u8> = source_pane.scrollback()
+                    .get_lines()
+                    .collect::<Vec<_>>()
+                    .join("\n")
+                    .into_bytes();
+
+                if !scrollback_content.is_empty() {
+                    // Send existing content to the mirror's session
+                    let initial_output = ServerMessage::Output {
+                        pane_id: mirror_pane_info.id,
+                        data: scrollback_content,
+                    };
+                    self.registry.broadcast_to_session(target_session_id, initial_output).await;
+
+                    debug!(
+                        source_pane = %source_pane_id,
+                        mirror_pane = %mirror_pane_info.id,
+                        target_session = %target_session_id,
+                        "Sent initial scrollback content to cross-session mirror"
+                    );
+                }
+            }
+        }
+
         info!(
             "Mirror pane {} created in session {} for source pane {}",
             mirror_pane_info.id, target_session_name, source_pane_id

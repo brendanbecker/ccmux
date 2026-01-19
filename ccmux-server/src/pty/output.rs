@@ -677,7 +677,7 @@ impl PtyOutputPoller {
         // Broadcast output to session clients
         let msg = ServerMessage::Output {
             pane_id: self.pane_id,
-            data,
+            data: data.clone(),
         };
 
         let delivered = self.registry.broadcast_to_session(self.session_id, msg).await;
@@ -688,6 +688,47 @@ impl PtyOutputPoller {
                 session_id = %self.session_id,
                 "No clients received output (session may have no attached clients)"
             );
+        }
+
+        // BUG-066: Forward output to mirror panes in other sessions
+        // Mirror panes are read-only views of a source pane. When the source produces
+        // output, we need to forward it to all mirrors so they display the content.
+        if let Some(executor) = &self.command_executor {
+            let session_manager = executor.session_manager();
+            let manager = session_manager.read().await;
+
+            // Get all mirror pane IDs for this source pane
+            let mirrors = manager.get_mirrors_for_pane(self.pane_id);
+
+            for mirror_id in mirrors {
+                // Find which session the mirror pane is in
+                if let Some((mirror_session, _, _)) = manager.find_pane(mirror_id) {
+                    let mirror_session_id = mirror_session.id();
+
+                    // Only forward if mirror is in a different session
+                    // (same-session mirrors receive output via normal broadcast)
+                    if mirror_session_id != self.session_id {
+                        // Create output message with the MIRROR's pane_id
+                        // so the TUI routes it to the correct pane
+                        let mirror_msg = ServerMessage::Output {
+                            pane_id: mirror_id,
+                            data: data.clone(),
+                        };
+
+                        let mirror_delivered = self.registry
+                            .broadcast_to_session(mirror_session_id, mirror_msg)
+                            .await;
+
+                        trace!(
+                            source_pane = %self.pane_id,
+                            mirror_pane = %mirror_id,
+                            mirror_session = %mirror_session_id,
+                            delivered = mirror_delivered,
+                            "Forwarded output to cross-session mirror pane"
+                        );
+                    }
+                }
+            }
         }
     }
 }
@@ -1472,5 +1513,222 @@ mod tests {
         // Typical Codex CLI startup sequence
         let codex_startup = b"\x1b[?2004h\x1b[>7u\x1b[?1004h\x1b[6n";
         assert!(PtyOutputPoller::contains_dsr_cpr(codex_startup));
+    }
+
+    // ==================== Cross-Session Mirror Tests (BUG-066) ====================
+
+    /// Helper to create a test setup with two sessions for mirror testing
+    async fn create_cross_session_mirror_setup() -> (
+        Arc<RwLock<SessionManager>>,
+        Arc<RwLock<PtyManager>>,
+        Arc<ClientRegistry>,
+        Arc<AsyncCommandExecutor>,
+        Uuid, // source_session_id
+        Uuid, // source_pane_id
+        Uuid, // mirror_session_id
+        Uuid, // mirror_pane_id
+    ) {
+        let session_manager = Arc::new(RwLock::new(SessionManager::new()));
+        let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
+        let registry = Arc::new(ClientRegistry::new());
+
+        let executor = Arc::new(AsyncCommandExecutor::new(
+            session_manager.clone(),
+            pty_manager.clone(),
+            registry.clone(),
+        ));
+
+        // Create source session with pane
+        let (source_session_id, source_pane_id) = {
+            let mut manager = session_manager.write().await;
+            let session = manager.create_session("source").unwrap();
+            let session_id = session.id();
+
+            let session = manager.get_session_mut(session_id).unwrap();
+            let window = session.create_window(None);
+            let window_id = window.id();
+
+            let window = session.get_window_mut(window_id).unwrap();
+            let pane = window.create_pane();
+            let pane_id = pane.id();
+
+            (session_id, pane_id)
+        };
+
+        // Create mirror session with mirror pane
+        let (mirror_session_id, mirror_pane_id) = {
+            let mut manager = session_manager.write().await;
+            let session = manager.create_session("mirror").unwrap();
+            let session_id = session.id();
+
+            let session = manager.get_session_mut(session_id).unwrap();
+            let window = session.create_window(None);
+            let window_id = window.id();
+
+            let window = session.get_window_mut(window_id).unwrap();
+            // Create a mirror pane pointing to the source
+            let index = window.pane_count();
+            let mirror_pane = crate::session::Pane::create_mirror(window_id, index, source_pane_id);
+            let mirror_pane_id = mirror_pane.id();
+            window.add_pane(mirror_pane);
+
+            // Register the mirror relationship
+            manager.mirror_registry_mut().register(source_pane_id, mirror_pane_id);
+
+            (session_id, mirror_pane_id)
+        };
+
+        (
+            session_manager,
+            pty_manager,
+            registry,
+            executor,
+            source_session_id,
+            source_pane_id,
+            mirror_session_id,
+            mirror_pane_id,
+        )
+    }
+
+    #[tokio::test]
+    async fn test_bug066_cross_session_mirror_output_forwarding() {
+        // Setup: Create source session and mirror session with mirror pane
+        let (
+            session_manager,
+            _pty_manager,
+            registry,
+            executor,
+            source_session_id,
+            source_pane_id,
+            mirror_session_id,
+            mirror_pane_id,
+        ) = create_cross_session_mirror_setup().await;
+
+        // Create clients attached to each session
+        let (source_tx, mut source_rx) = tokio_mpsc::channel(10);
+        let source_client_id = registry.register_client(source_tx);
+        registry.attach_to_session(source_client_id, source_session_id);
+
+        let (mirror_tx, mut mirror_rx) = tokio_mpsc::channel(10);
+        let mirror_client_id = registry.register_client(mirror_tx);
+        registry.attach_to_session(mirror_client_id, mirror_session_id);
+
+        // Create reader with test data
+        let test_data = b"Hello from source pane!\n";
+        let reader = create_reader(test_data);
+
+        // Spawn poller for the SOURCE pane
+        let handle = PtyOutputPoller::spawn_with_sideband(
+            source_pane_id,
+            source_session_id,
+            reader,
+            registry,
+            None,
+            executor,
+        );
+
+        // Wait for messages to be received
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        handle.cancel();
+
+        // Verify the source session received the output with SOURCE pane_id
+        let source_msg = timeout(Duration::from_millis(100), source_rx.recv()).await;
+        assert!(source_msg.is_ok(), "Source session should receive output");
+        if let Ok(Some(ServerMessage::Output { pane_id, data })) = source_msg {
+            assert_eq!(pane_id, source_pane_id, "Source output should have source pane_id");
+            assert_eq!(data, test_data);
+        } else {
+            panic!("Expected Output message for source session");
+        }
+
+        // Verify the mirror session received the output with MIRROR pane_id
+        let mirror_msg = timeout(Duration::from_millis(100), mirror_rx.recv()).await;
+        assert!(mirror_msg.is_ok(), "Mirror session should receive forwarded output");
+        if let Ok(Some(ServerMessage::Output { pane_id, data })) = mirror_msg {
+            assert_eq!(pane_id, mirror_pane_id, "Mirror output should have mirror pane_id");
+            assert_eq!(data, test_data);
+        } else {
+            panic!("Expected Output message for mirror session, got {:?}", mirror_msg);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_bug066_same_session_mirror_no_duplicate() {
+        // Setup: Create a single session with source and mirror pane
+        let session_manager = Arc::new(RwLock::new(SessionManager::new()));
+        let pty_manager = Arc::new(RwLock::new(PtyManager::new()));
+        let registry = Arc::new(ClientRegistry::new());
+
+        let executor = Arc::new(AsyncCommandExecutor::new(
+            session_manager.clone(),
+            pty_manager.clone(),
+            registry.clone(),
+        ));
+
+        // Create session with source and mirror panes
+        let (session_id, source_pane_id, _mirror_pane_id) = {
+            let mut manager = session_manager.write().await;
+            let session = manager.create_session("same-session").unwrap();
+            let session_id = session.id();
+
+            let session = manager.get_session_mut(session_id).unwrap();
+            let window = session.create_window(None);
+            let window_id = window.id();
+
+            let window = session.get_window_mut(window_id).unwrap();
+            let source_pane = window.create_pane();
+            let source_pane_id = source_pane.id();
+
+            // Create mirror in SAME session
+            let index = window.pane_count();
+            let mirror_pane = crate::session::Pane::create_mirror(window_id, index, source_pane_id);
+            let mirror_pane_id = mirror_pane.id();
+            window.add_pane(mirror_pane);
+
+            manager.mirror_registry_mut().register(source_pane_id, mirror_pane_id);
+
+            (session_id, source_pane_id, mirror_pane_id)
+        };
+
+        // Create client attached to the session
+        let (tx, mut rx) = tokio_mpsc::channel(10);
+        let client_id = registry.register_client(tx);
+        registry.attach_to_session(client_id, session_id);
+
+        // Create reader with test data
+        let test_data = b"Test output\n";
+        let reader = create_reader(test_data);
+
+        // Spawn poller for source pane
+        let handle = PtyOutputPoller::spawn_with_sideband(
+            source_pane_id,
+            session_id,
+            reader,
+            registry,
+            None,
+            executor,
+        );
+
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        handle.cancel();
+
+        // Should receive exactly ONE output message (the source pane broadcast)
+        // Same-session mirrors should NOT receive duplicate via cross-session forwarding
+        let first_msg = timeout(Duration::from_millis(100), rx.recv()).await;
+        assert!(first_msg.is_ok(), "Should receive at least one output");
+        if let Ok(Some(ServerMessage::Output { pane_id, .. })) = first_msg {
+            assert_eq!(pane_id, source_pane_id, "Output should be for source pane");
+        }
+
+        // Check if there's another message (there might be a PaneClosed, but not another Output)
+        // We allow any non-duplicate Output messages
+        if let Ok(Some(msg)) = timeout(Duration::from_millis(100), rx.recv()).await {
+            if let ServerMessage::Output { pane_id, .. } = msg {
+                // If we get another Output, it should still be the same pane_id
+                // (this tests that same-session mirrors don't get forwarded duplicates)
+                assert_eq!(pane_id, source_pane_id,
+                    "Same-session mirror should not cause duplicate forwarding");
+            }
+        }
     }
 }

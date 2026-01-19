@@ -3,7 +3,7 @@
 **Priority**: P2
 **Component**: session/mirror
 **Severity**: medium
-**Status**: new
+**Status**: resolved
 
 ## Problem
 
@@ -72,3 +72,26 @@ This bug significantly reduces the value of the mirror pane feature for "plate s
 ## Discovery Context
 
 Found during Session 14 QA while attempting to monitor bug-065-worker agent via mirror pane. Mirror was created correctly in session-0 but showed no output from the worker session.
+
+## Resolution
+
+Fixed in Session 15 by implementing cross-session output forwarding in two places:
+
+### 1. Output Forwarding (`ccmux-server/src/pty/output.rs`)
+
+Added logic to the `flush()` method of `PtyOutputPoller` to check if the source pane has any mirrors in other sessions. When forwarding output:
+- Query the `MirrorRegistry` for all mirrors of the source pane
+- For each mirror in a different session, create an `Output` message with the **mirror's pane_id**
+- Broadcast to the mirror's session so the TUI routes it correctly
+
+### 2. Initial Scrollback (`ccmux-server/src/handlers/pane.rs`)
+
+Added logic to `handle_create_mirror()` to copy existing scrollback content when a mirror is created:
+- Read the source pane's scrollback lines
+- Send as an initial `Output` message to the mirror's session
+- Ensures mirror shows existing content, not just new output
+
+### Tests Added
+
+- `test_bug066_cross_session_mirror_output_forwarding`: Verifies output is forwarded to mirror panes in other sessions with correct pane_id
+- `test_bug066_same_session_mirror_no_duplicate`: Ensures same-session mirrors don't receive duplicate forwarding
