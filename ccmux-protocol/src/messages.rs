@@ -432,6 +432,22 @@ pub enum ClientMessage {
         /// Worker ID (session UUID or name)
         worker_id: String,
     },
+
+    // ==================== FEAT-102: Agent Status Pane ====================
+
+    /// Create a dedicated agent status pane
+    CreateStatusPane {
+        /// Position relative to current pane
+        position: Option<String>,
+        /// Width as percentage (10-90)
+        width_percent: Option<i64>,
+        /// Whether to show activity feed
+        show_activity_feed: bool,
+        /// Whether to show output preview
+        show_output_preview: bool,
+        /// Filter tags
+        filter_tags: Option<Vec<String>>,
+    },
 }
 
 impl ClientMessage {
@@ -489,6 +505,7 @@ impl ClientMessage {
             ClientMessage::CreateMirror { .. } => "CreateMirror",
             ClientMessage::GetWorkerStatus { .. } => "GetWorkerStatus",
             ClientMessage::PollMessages { .. } => "PollMessages",
+            ClientMessage::CreateStatusPane { .. } => "CreateStatusPane",
         }
     }
 }

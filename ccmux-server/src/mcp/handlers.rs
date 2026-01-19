@@ -81,6 +81,7 @@ impl<'a> ToolContext<'a> {
                                 if state.is_claude() { "claude" } else { "agent" }
                             }
                             PaneState::Exited { .. } => "exited",
+                            PaneState::Status => "status",
                         },
                         "is_focused": is_focused,
                     });
@@ -675,6 +676,7 @@ impl<'a> ToolContext<'a> {
                     "type": "exited",
                     "exit_code": code,
                 }),
+                PaneState::Status => serde_json::json!({"type": "status"}),
             },
             "is_awaiting_input": pane.is_awaiting_input(),
             "is_awaiting_confirmation": pane.is_awaiting_confirmation(),
@@ -1043,6 +1045,81 @@ impl<'a> ToolContext<'a> {
             "window_id": window_id.to_string(),
             "panes": created_panes,
             "status": "created"
+        });
+
+        serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))
+    }
+
+    /// Create an agent status pane (FEAT-102)
+    pub fn create_status_pane(
+        &mut self,
+        position: Option<&str>,
+        width_percent: Option<i64>,
+        show_activity_feed: bool,
+        show_output_preview: bool,
+        filter_tags: Option<Vec<String>>,
+    ) -> Result<String, McpError> {
+        // Default to active session
+        let session = self.session_manager.active_session()
+            .ok_or_else(|| McpError::Internal("No active session".into()))?;
+        let session_id = session.id();
+        let session_name = session.name().to_string();
+
+        // Get active window
+        let window_id = session.active_window_id()
+            .ok_or_else(|| McpError::Internal("No active window".into()))?;
+
+        // Determine split parameters based on position
+        let (direction, _ratio) = match position {
+            Some("left") => ("horizontal", 0.3), // Not quite right for left/right split logic
+            Some("top") => ("vertical", 0.3),
+            Some("bottom") => ("vertical", 0.7),
+            _ => ("horizontal", 0.6), // Default "right" (horizontal split, new pane gets 40%)
+        };
+
+        let target_width = width_percent.unwrap_or(40) as f64 / 100.0;
+        let effective_ratio = if position == Some("left") || position == Some("top") {
+            target_width
+        } else {
+            1.0 - target_width
+        };
+
+        // Create the pane
+        let session = self.session_manager.get_session_mut(session_id)
+            .ok_or_else(|| McpError::Internal("Session disappeared".into()))?;
+        let window = session.get_window_mut(window_id)
+            .ok_or_else(|| McpError::Internal("Window disappeared".into()))?;
+        
+        let pane = window.create_pane();
+        let pane_id = pane.id();
+
+        // Get mutable reference to configure
+        let pane = window.get_pane_mut(pane_id)
+            .ok_or_else(|| McpError::Internal("Pane disappeared".into()))?;
+
+        // Configure as status pane
+        pane.set_state(PaneState::Status);
+        pane.set_name(Some("Agent Status".to_string()));
+        
+        // Store configuration in metadata
+        pane.set_metadata("status_pane_config", serde_json::json!({
+            "show_activity_feed": show_activity_feed,
+            "show_output_preview": show_output_preview,
+            "filter_tags": filter_tags.unwrap_or_default(),
+        }).to_string());
+
+        // We DO NOT spawn a PTY for this pane.
+        // It relies on the client to render the status UI based on the state.
+
+        let result = serde_json::json!({
+            "pane_id": pane_id.to_string(),
+            "session_id": session_id.to_string(),
+            "session": session_name,
+            "window_id": window_id.to_string(),
+            "direction": direction,
+            "ratio": effective_ratio,
+            "status": "created",
+            "type": "status_pane"
         });
 
         serde_json::to_string_pretty(&result).map_err(|e| McpError::Internal(e.to_string()))

@@ -267,6 +267,15 @@ impl McpServer {
                 window: arguments["window"].as_str().map(String::from),
                 layout: arguments["layout"].clone(),
             },
+            "ccmux_create_status_pane" => ToolParams::CreateStatusPane {
+                position: arguments["position"].as_str().map(String::from),
+                width_percent: arguments["width_percent"].as_i64(),
+                show_activity_feed: arguments["show_activity_feed"].as_bool().unwrap_or(true),
+                show_output_preview: arguments["show_output_preview"].as_bool().unwrap_or(false),
+                filter_tags: arguments["filter_tags"].as_array().map(|arr| {
+                    arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                }),
+            },
             _ => unreachable!(), // Already validated above
         };
 
@@ -320,6 +329,15 @@ impl McpServer {
             ToolParams::CreateLayout { session, window, layout } => {
                 ctx.create_layout(session.as_deref(), window.as_deref(), &layout)
             }
+            ToolParams::CreateStatusPane { position, width_percent, show_activity_feed, show_output_preview, filter_tags } => {
+                ctx.create_status_pane(
+                    position.as_deref(),
+                    width_percent,
+                    show_activity_feed,
+                    show_output_preview,
+                    filter_tags,
+                )
+            }
         };
 
         // Convert Result to ToolResult
@@ -351,6 +369,7 @@ fn is_known_tool(name: &str) -> bool {
             | "ccmux_split_pane"
             | "ccmux_resize_pane"
             | "ccmux_create_layout"
+            | "ccmux_create_status_pane"
     )
 }
 
@@ -391,6 +410,13 @@ enum ToolParams {
         session: Option<String>,
         window: Option<String>,
         layout: serde_json::Value,
+    },
+    CreateStatusPane {
+        position: Option<String>,
+        width_percent: Option<i64>,
+        show_activity_feed: bool,
+        show_output_preview: bool,
+        filter_tags: Option<Vec<String>>,
     },
 }
 

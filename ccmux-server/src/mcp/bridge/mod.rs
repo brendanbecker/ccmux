@@ -640,6 +640,23 @@ impl McpBridge {
                     .to_string();
                 handlers.tool_poll_messages(worker_id).await
             }
+            "ccmux_create_status_pane" => {
+                let position = arguments["position"].as_str().map(String::from);
+                let width_percent = arguments["width_percent"].as_i64();
+                let show_activity_feed = arguments["show_activity_feed"].as_bool().unwrap_or(true);
+                let show_output_preview = arguments["show_output_preview"].as_bool().unwrap_or(false);
+                let filter_tags = arguments["filter_tags"].as_array().map(|arr| {
+                    arr.iter().filter_map(|v| v.as_str().map(String::from)).collect()
+                });
+                handlers.tool_create_status_pane(
+                    position,
+                    width_percent,
+                    show_activity_feed,
+                    show_output_preview,
+                    filter_tags,
+                )
+                .await
+            }
             _ => Err(McpError::UnknownTool(name.into())),
         }
     }

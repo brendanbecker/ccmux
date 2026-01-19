@@ -418,6 +418,8 @@ impl SessionRestorer {
             PaneState::Agent(_) => true,
             // Exited panes don't need a PTY
             PaneState::Exited { .. } => false,
+            // Status panes don't need a PTY
+            PaneState::Status => false,
         }
     }
 }
