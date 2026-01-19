@@ -8,7 +8,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Widget};
 
-use ccmux_protocol::{AgentActivity, AgentState, PaneState};
+use ccmux_protocol::{AgentActivity, PaneState};
 
 use super::pane::Pane;
 use super::state::ClientState;
@@ -117,7 +117,7 @@ fn render_activity_feed(state: &ClientState, area: Rect, buf: &mut Buffer) {
     
     let items: Vec<ListItem> = state.mailbox.iter().rev().take(10).map(|msg| {
         let style = match msg.priority {
-            c => Style::default().fg(Color::White), // Default
+            _c => Style::default().fg(Color::White), // Default
         };
         ListItem::new(format!("> {}", msg.summary)).style(style)
     }).collect();
