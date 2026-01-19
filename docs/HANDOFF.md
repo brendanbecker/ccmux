@@ -23,7 +23,7 @@
 
 **All Refactoring Complete!** (Session 9)
 
-**Session 14**: QA, BUG-065 fix implemented, new bugs/features filed.
+**Session 14**: QA complete, BUG-065 fixed and verified, new bugs/features filed.
 
 ### Active Bugs (1)
 
@@ -31,13 +31,7 @@
 |----|----------|-------------|--------|
 | BUG-066 | P2 | Mirror panes don't forward output across sessions | new |
 
-### Pending Verification
-
-| ID | Description | Commit | Status |
-|----|-------------|--------|--------|
-| BUG-065 | Parallel MCP request serialization | a358bf1 | **Needs daemon rebuild to test** |
-
-**Note**: BUG-065 fix adds `request_lock` mutex to serialize daemon requests. Committed but daemon needs restart to pick up changes.
+**BUG-065 VERIFIED FIXED** (commit a358bf1) - Parallel MCP calls now work correctly after daemon rebuild.
 
 ### Remaining Backlog
 
@@ -76,11 +70,10 @@ Verified fixes from Sessions 12-13, discovered and fixed BUG-065, filed new bugs
 - `a358bf1`: fix: serialize MCP daemon requests (BUG-065)
 - `168303e`: docs: Session 14 QA results, new bugs and feature filed
 
-**Next Session:**
-1. Rebuild daemon: `cargo build --release`
-2. Restart daemon
-3. Test parallel MCP calls to verify BUG-065 fix
-4. Clean up `bug-065-worker` session
+**Verification (after rebuild):**
+- Tested 4 parallel MCP calls - all returned correct responses
+- No more "Unexpected response" errors
+- BUG-065 confirmed fixed
 
 ### Previous Session (2026-01-19, Session 13)
 
@@ -404,11 +397,10 @@ All refactoring features merged in Session 9:
 
 ## Backlog Summary
 
-### Bugs (1 open, 1 pending verification)
+### Bugs (1 open)
 
 | Priority | Count | IDs |
 |----------|-------|-----|
-| P1 | 0 | (BUG-065 fixed, pending verification) |
 | P2 | 1 | BUG-066 |
 
 ### Features (backlog)
@@ -543,8 +535,8 @@ ccmux is agent-agnostic:
 | Metric | Value |
 |--------|-------|
 | Total Bugs | 66 |
-| Open Bugs | 1 (+1 pending) |
-| Resolution Rate | 97% |
+| Open Bugs | 1 |
+| Resolution Rate | 98% |
 | Total Features | 103 |
 | Completed Features | 102 |
 | Completion Rate | 99% |
