@@ -23,15 +23,21 @@
 
 **All Refactoring Complete!** (Session 9)
 
-**Session 14**: QA of Session 12-13 bug fixes. Found new P1 bug (BUG-065).
+**Session 14**: QA, BUG-065 fix implemented, new bugs/features filed.
 
 ### Active Bugs (1)
 
 | ID | Priority | Description | Status |
 |----|----------|-------------|--------|
-| BUG-065 | P1 | Parallel MCP requests cause response mismatches | new |
+| BUG-066 | P2 | Mirror panes don't forward output across sessions | new |
 
-**Note**: BUG-065 is distinct from BUG-064. BUG-064's fix handles post-timeout stale messages. BUG-065 occurs when MCP client sends parallel requests - responses get delivered to wrong callers due to lack of request-response correlation in the daemon protocol.
+### Pending Verification
+
+| ID | Description | Commit | Status |
+|----|-------------|--------|--------|
+| BUG-065 | Parallel MCP request serialization | a358bf1 | **Needs daemon rebuild to test** |
+
+**Note**: BUG-065 fix adds `request_lock` mutex to serialize daemon requests. Committed but daemon needs restart to pick up changes.
 
 ### Remaining Backlog
 
@@ -41,9 +47,9 @@
 
 ### Latest Session (2026-01-19, Session 14)
 
-**QA Session - Bug Fix Verification**
+**QA + BUG-065 Fix + New Issues Filed**
 
-Verified fixes from Sessions 12-13, discovered new P1 bug.
+Verified fixes from Sessions 12-13, discovered and fixed BUG-065, filed new bugs/features.
 
 **QA Results:**
 
@@ -53,12 +59,28 @@ Verified fixes from Sessions 12-13, discovered new P1 bug.
 | BUG-062 | Close mirror pane | ✅ Pass | No timeout, immediate response |
 | BUG-063 | Mirror pane cross-session | ✅ Pass | Mirror created in caller's session |
 | BUG-064 | Sequential MCP calls after timeout | ✅ Pass | Drain works for post-timeout scenarios |
-| BUG-064 | Parallel MCP calls | ❌ Fail | Responses delivered to wrong callers |
+| BUG-064 | Parallel MCP calls | ❌ Fail | Led to BUG-065 discovery |
 
-**New Bug Filed:**
-- **BUG-065** (P1): Parallel MCP requests cause response mismatches. When Claude Code makes 4 tool calls in one message, all 4 fail with "Unexpected response" - each receives another request's response. Root cause: daemon protocol has no request-response correlation by ID.
+**BUG-065 Fixed:**
+- Spawned worker agent in `bug-065-worker` session to implement fix
+- Agent added `request_lock` mutex to serialize daemon requests (Option B from spec)
+- All handlers updated to use atomic `send_and_recv()` methods
+- Tests pass, committed as `a358bf1`
+- **Requires daemon rebuild to verify** - fix not yet tested with new daemon
 
-**Workaround**: Make MCP calls sequentially instead of parallel. This works but is slower.
+**New Issues Filed:**
+- **BUG-066** (P2): Mirror panes don't forward output across sessions - mirror displays blank
+- **FEAT-103** (P1): Visualization Architecture Review - screen rendering artifacts with Claude Code TUI (stacked "thinking" messages, ghost content). Agent council recommended.
+
+**Commits:**
+- `a358bf1`: fix: serialize MCP daemon requests (BUG-065)
+- `168303e`: docs: Session 14 QA results, new bugs and feature filed
+
+**Next Session:**
+1. Rebuild daemon: `cargo build --release`
+2. Restart daemon
+3. Test parallel MCP calls to verify BUG-065 fix
+4. Clean up `bug-065-worker` session
 
 ### Previous Session (2026-01-19, Session 13)
 
@@ -382,16 +404,18 @@ All refactoring features merged in Session 9:
 
 ## Backlog Summary
 
-### Bugs (1 open)
+### Bugs (1 open, 1 pending verification)
 
 | Priority | Count | IDs |
 |----------|-------|-----|
-| P1 | 1 | BUG-065 |
+| P1 | 0 | (BUG-065 fixed, pending verification) |
+| P2 | 1 | BUG-066 |
 
 ### Features (backlog)
 
 | Priority | ID | Title | Effort |
 |----------|----|-------|--------|
+| P1 | FEAT-103 | Visualization Architecture Review | Large |
 | P3 | FEAT-069 | TLS/auth for TCP connections | Large |
 | P3 | FEAT-072 | Per-pane MCP mode control | Small |
 | P3 | FEAT-090-092 | Remaining refactoring | Various |
@@ -518,12 +542,12 @@ ccmux is agent-agnostic:
 
 | Metric | Value |
 |--------|-------|
-| Total Bugs | 65 |
-| Open Bugs | 1 |
-| Resolution Rate | 98% |
-| Total Features | 102 |
+| Total Bugs | 66 |
+| Open Bugs | 1 (+1 pending) |
+| Resolution Rate | 97% |
+| Total Features | 103 |
 | Completed Features | 102 |
-| Completion Rate | 100% |
+| Completion Rate | 99% |
 | Test Count | 1,714+ |
 
 ---
