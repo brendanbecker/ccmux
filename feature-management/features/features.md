@@ -5,9 +5,9 @@
 
 ## Summary Statistics
 
-- **Total Features**: 102
-- **Completed**: 92
-- **Backlog**: 10
+- **Total Features**: 103
+- **Completed**: 97
+- **Backlog**: 6
 
 ## Current Status
 
@@ -15,10 +15,11 @@ Core terminal multiplexer fully functional with MCP integration, multi-agent orc
 
 ## Active Backlog
 
-### High Priority - Orchestration Tools (P1)
+### High Priority (P1)
 
 | ID | Title | Component | Priority | Status |
 |----|-------|-----------|----------|--------|
+| FEAT-103 | Visualization Architecture Review | ccmux-client/rendering | P1 | new |
 | FEAT-094 | ccmux_run_parallel - Parallel Command Execution | ccmux-server/mcp | P1 | done |
 | FEAT-095 | ccmux_run_pipeline - Sequential Command Pipeline | ccmux-server/mcp | P1 | done |
 | FEAT-096 | ccmux_expect - Pattern-Based Wait | ccmux-server/mcp | P1 | done |

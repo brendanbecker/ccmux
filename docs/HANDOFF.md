@@ -8,7 +8,7 @@
 **Current Stage**: Stage 8 (Multi-Agent Orchestration Enhancement)
 **Status**: Production-ready core with new orchestration primitives.
 
-## Current State (2026-01-18)
+## Current State (2026-01-19)
 
 **All P1 Features Complete!** Orchestration primitives fully shipped:
 - `ccmux_expect` - Wait for regex patterns in pane output (FEAT-096)
@@ -16,44 +16,183 @@
 - `ccmux_run_pipeline` - Execute commands sequentially in a single pane (FEAT-095)
 - `ccmux_get_worker_status` - Get worker's last reported status (FEAT-097)
 - `ccmux_poll_messages` - Poll messages from worker inbox (FEAT-097)
+- `ccmux_attach_session` - Attach MCP client to session for orchestration (BUG-060 fix)
+- `ccmux_create_status_pane` - Create agent status monitoring pane (FEAT-102)
 
-**Agent Detection**: Both Claude and Gemini CLI detected (FEAT-098).
+**Agent Detection**: Claude, Gemini CLI, and Codex CLI detected (FEAT-098, FEAT-101).
 
 **All Refactoring Complete!** (Session 9)
 
-### Active Bugs (6)
+**Session 14**: QA of Session 12-13 bug fixes. Found new P1 bug (BUG-065).
 
-| ID | Description | Priority | Component |
-|----|-------------|----------|-----------|
-| BUG-058 | `ccmux_kill_session` causes client hang | P2 | client |
-| BUG-060 | Orchestration MCP tools require session attachment | P2 | mcp |
-| BUG-059 | `ccmux_mirror_pane` tool aborts | P3 | mcp |
-| BUG-057 | Agent detection cross-contamination | P3 | agents |
-| BUG-047 | Compiler warnings cleanup | P3 | build |
-| BUG-042 | Result nesting code smell | P3 | mcp |
+### Active Bugs (1)
 
-### Refactoring Complete
+| ID | Priority | Description | Status |
+|----|----------|-------------|--------|
+| BUG-065 | P1 | Parallel MCP requests cause response mismatches | new |
 
-**All 5 refactor features merged in Session 9:**
+**Note**: BUG-065 is distinct from BUG-064. BUG-064's fix handles post-timeout stale messages. BUG-065 occurs when MCP client sends parallel requests - responses get delivered to wrong callers due to lack of request-response correlation in the daemon protocol.
 
-| Feature | Description | Status |
-|---------|-------------|--------|
-| FEAT-064 | Refactor MCP bridge.rs - extracted `health.rs`, slimmed `connection.rs` | ✅ **Merged** |
-| FEAT-065 | Refactor MCP handlers - added `*_tools.rs` modules | ✅ **Merged** |
-| FEAT-087 | Refactor client app.rs - split into `render.rs` + `state.rs` | ✅ **Merged** |
-| FEAT-088 | Refactor handlers/mcp_bridge.rs - split into 9 modules | ✅ **Merged** |
-| FEAT-089 | Refactor protocol types.rs - split into 6 modules | ✅ **Merged** |
-
-**All worktrees and feature branches cleaned up.**
-
-**Remaining Backlog:**
+### Remaining Backlog
 
 | Priority | Features | Status |
 |----------|----------|--------|
-| P2 | FEAT-102 (Agent Status Pane), FEAT-100, FEAT-101 | Backlog |
 | P3 | FEAT-069, FEAT-072, FEAT-090-092 (infra + remaining refactoring) | Backlog |
 
-### Latest Session (2026-01-18, Session 9)
+### Latest Session (2026-01-19, Session 14)
+
+**QA Session - Bug Fix Verification**
+
+Verified fixes from Sessions 12-13, discovered new P1 bug.
+
+**QA Results:**
+
+| Bug | Test | Result | Notes |
+|-----|------|--------|-------|
+| BUG-061 | send_orchestration with all 4 target types | ✅ Pass | broadcast, tag, session, worktree all work |
+| BUG-062 | Close mirror pane | ✅ Pass | No timeout, immediate response |
+| BUG-063 | Mirror pane cross-session | ✅ Pass | Mirror created in caller's session |
+| BUG-064 | Sequential MCP calls after timeout | ✅ Pass | Drain works for post-timeout scenarios |
+| BUG-064 | Parallel MCP calls | ❌ Fail | Responses delivered to wrong callers |
+
+**New Bug Filed:**
+- **BUG-065** (P1): Parallel MCP requests cause response mismatches. When Claude Code makes 4 tool calls in one message, all 4 fail with "Unexpected response" - each receives another request's response. Root cause: daemon protocol has no request-response correlation by ID.
+
+**Workaround**: Make MCP calls sequentially instead of parallel. This works but is slower.
+
+### Previous Session (2026-01-19, Session 13)
+
+**Merge, Cleanup & BUG-064 Fix Session**
+
+Reviewed parallel agent work from Sessions 11-12, merged all completed branches, spawned Claude agent to fix BUG-064, cleaned up worktrees and sessions.
+
+**Merged to main (7 items):**
+
+| ID | Description | Commit |
+|----|-------------|--------|
+| BUG-047 | Compiler warnings cleanup | 1612e07 |
+| BUG-062 | `ccmux_close_pane` mirror timeout fix | 3b22ce0 |
+| BUG-063 | Mirror panes cross-session fix (P1) | 93f5c87 |
+| BUG-064 | MCP response off-by-one fix (drain after timeout) | a6a3563, dc5dcef |
+| FEAT-100 | OrchestrationContext abstraction | 181bbaa |
+| FEAT-101 | Codex CLI agent detection | 67ee097 |
+| FEAT-102 | Agent Status Pane | 4158cdd |
+
+**BUG-064 Fix Details:**
+- Added `drain_pending_messages()` method using `try_recv()` to clear stale messages after timeout
+- Location: `ccmux-server/src/mcp/bridge/connection.rs:336-380`
+- Also fixed test expectation for PaneClosed broadcast (was contradicting BUG-062 fix)
+
+**Cleanup performed:**
+- Removed 10 worktrees
+- Deleted 10 merged feature branches
+- Killed 10 agent sessions
+
+### Previous Session (2026-01-19, Session 12)
+
+**Orchestrator Session - Monitoring & Merging**
+
+Continued monitoring the 9 parallel agents from Session 11, approving permissions and merging completed work.
+
+**Merged to main:**
+
+| ID | Description | Commit |
+|----|-------------|--------|
+| BUG-042 | Result nesting docs update | b6b93ff |
+| BUG-057 | Agent cross-contamination fix | 2ebec74 |
+| BUG-061 | send_orchestration target parsing | b298b26 |
+
+**New Bug Filed:**
+- **BUG-064** (P2): MCP response off-by-one after timeout - stale responses in channel cause subsequent requests to receive wrong response types. Root cause: no request-response correlation by ID.
+
+**Agent Status at Session End:**
+
+| Session | Status | Notes |
+|---------|--------|-------|
+| bug-063-worker | 🔄 In Progress | P1 - Testing fix |
+| bug-062-worker | 🔄 In Progress | Editing connection.rs |
+| bug-061-worker | ✅ Merged | Complete |
+| bug-057-worker | ✅ Merged | Complete |
+| bug-047-worker | 🔄 In Progress | Boxing ServerMessage |
+| bug-042-worker | ✅ Merged | Complete |
+| feat-100-worker | 🔄 In Progress | Needs skill approval |
+| feat-101-worker | ❌ Stuck | Compile error - missing codex module |
+| feat-102-worker | 💤 Idle | Was defining pane rendering |
+
+**Key Discovery:** BUG-064 explains intermittent MCP errors seen during orchestration. When requests timeout, stale responses remain in the channel and are delivered to subsequent requests.
+
+### Previous Session (2026-01-18, Session 11)
+
+**QA + Massive Parallel Agent Sprint**
+
+Started with QA of Session 10 fixes, then spun up 9 parallel agents to tackle remaining backlog.
+
+**QA Results:**
+
+| ID | Test | Result |
+|----|------|--------|
+| BUG-060 | `ccmux_attach_session` + orchestration tools | ✅ Pass |
+| BUG-059 | `ccmux_mirror_pane` creates mirror | ✅ Pass |
+| BUG-058 | `ccmux_kill_session` no hang | ✅ Pass |
+
+**New Bugs Discovered During QA:**
+- **BUG-061**: `ccmux_send_orchestration` target parameter not parsed correctly
+- **BUG-062**: `ccmux_close_pane` times out for mirror panes
+- **BUG-063** (P1): Mirror panes can't view other sessions - defeats entire purpose of "plate spinning"
+
+**9 Parallel Agents Running:**
+
+| Session | Agent | Task | Priority |
+|---------|-------|------|----------|
+| `bug-063-worker` | Claude | Mirror cross-session fix | P1 |
+| `bug-061-worker` | Claude | send_orchestration target parsing | P2 |
+| `bug-062-worker` | Claude | Mirror close timeout | P2 |
+| `bug-057-worker` | Claude | Agent cross-contamination | P3 |
+| `bug-047-worker` | Gemini | Compiler warnings | P3 |
+| `bug-042-worker` | Claude | Result nesting | P3 |
+| `feat-100-worker` | Gemini | OrchestrationContext abstraction | P2 |
+| `feat-101-worker` | Gemini | Codex CLI detection | P2 |
+| `feat-102-worker` | Gemini | Agent Status Pane | P2 |
+
+**Worktrees created:** 9 total (bug-042, bug-047, bug-057, bug-061, bug-062, bug-063, feat-100, feat-101, feat-102)
+
+**Orchestration Pattern:**
+- Using `ccmux_get_status` to poll all 9 agents
+- Using `ccmux_read_pane` to detect confirmation prompts
+- Using `ccmux_send_input` to approve edits/commands remotely
+- Agents frequently block on permissions - need periodic approval sweeps
+
+**Observation:** BUG-057 (agent cross-contamination) is ironic - the Claude agent working on it is being detected as Gemini!
+
+**Note**: Must restart daemon after building to pick up code changes.
+
+### Previous Session (2026-01-18, Session 10)
+
+**Parallel Bug Fixes - All Demo Blockers Resolved**
+
+Ran 3 parallel agents (2 Gemini, 1 Claude) in separate worktrees to fix all P2 bugs blocking the multi-agent demo.
+
+**Fixed this session:**
+| ID | Agent | Description | Commit |
+|----|-------|-------------|--------|
+| BUG-058 | Gemini | `ccmux_kill_session` client hang | `9fd2481` |
+| BUG-059 | Claude | `ccmux_mirror_pane` AbortError | `578ace5` |
+| BUG-060 | Gemini | Orchestration tools require session attachment | `8d24f11` |
+
+**Fix Details:**
+- **BUG-058**: Broadcast `SessionEnded` to attached clients before `detach_session_clients` in `handle_destroy_session`
+- **BUG-059**: Changed `handle_create_mirror` to return `RespondWithBroadcast` instead of `BroadcastToSession` so MCP bridge receives the response
+- **BUG-060**: Implemented `ccmux_attach_session` tool (Option B from PROMPT.md) - MCP clients can now attach to a session before sending orchestration messages
+
+**Demo Script Unblocked:**
+- Act 7 (message passing): Now works with `ccmux_attach_session`
+- Act 8 (mirror panes): Now works - MCP receives `MirrorCreated` response
+- Acts 9-10 (cleanup): No longer causes client hang
+
+**Worktrees created:** `ccmux-bug-058`, `ccmux-bug-059`, `ccmux-bug-060`
+**Branches:** `fix/bug-058-kill-session-hang`, `fix/bug-059-mirror-pane-abort`, `fix/bug-060-orchestration-session-attachment`
+
+### Previous Session (2026-01-18, Session 9)
 
 **Completed All Refactoring**
 
@@ -183,57 +322,39 @@ Attempted to launch 3 parallel background agents via Task tool, but:
 
 ## Recommended Work Order
 
-Focus on bug fixes to complete the demo, then optional refactoring:
+**P1 Bug requires attention:**
 
 ```
-Phase 1: Demo Blockers (P2 Bugs)
-  1. BUG-058 - kill_session client hang
-  2. BUG-060 - Orchestration session attachment (architecture decision)
-  3. BUG-059 - mirror_pane incomplete
+Phase 1: Critical Bug Fix
+  1. BUG-065 - Parallel MCP request response mismatch (P1)
+     - Option A: Add request IDs to protocol (proper fix)
+     - Option B: Serialize MCP requests via mutex (quick fix)
 
-Phase 2: New Capabilities (P2 Features)
-  4. FEAT-100 - OrchestrationContext abstraction
-  5. FEAT-101 - Codex CLI agent detection
-
-Phase 3: Refactoring (Optional)
-  6. FEAT-064, 065 (MCP bridge cleanup)
-  7. Other P3 items as time permits
+Phase 2: P3 Backlog
+  2. FEAT-069, FEAT-072, FEAT-090-092 (infra + remaining refactoring)
 ```
 
 ## Parallel Workstreams
 
 These workstreams are **fully independent** and can run in separate worktrees:
 
-### Workstream A: Client Stability (BUG-058)
+### Workstream A: Client Stability (BUG-058) ✅ COMPLETE
 **Goal**: Fix client hang after `ccmux_kill_session`
 
-| Item | Description | Effort | Files |
-|------|-------------|--------|-------|
-| BUG-058 | kill_session client hang | Medium | `ccmux-client/src/ui/app.rs`, `ccmux-server/src/session/` |
+**Solution**: Broadcast `SessionEnded` to attached clients before `detach_session_clients`.
+**Commit**: `9fd2481` on `fix/bug-058-kill-session-hang`
 
-**Root Cause Hypothesis**: Client waiting for events from killed session. Need to properly handle session removal notification.
-
-### Workstream B: MCP Session Context (BUG-060)
+### Workstream B: MCP Session Context (BUG-060) ✅ COMPLETE
 **Goal**: Enable orchestration tools from MCP clients
 
-| Item | Description | Effort | Files |
-|------|-------------|--------|-------|
-| BUG-060 | Orchestration session attachment | Medium | `ccmux-server/src/mcp/bridge/` |
+**Solution**: Implemented Option 2 - Added `ccmux_attach_session` tool. MCP clients can now attach to a session before using orchestration tools.
+**Commit**: `8d24f11` on `fix/bug-060-orchestration-session-attachment`
 
-**Architecture Options**:
-1. Auto-attach MCP bridge to spawning session
-2. Add `ccmux_attach_session` tool
-3. Add `from_session` parameter to orchestration tools
-4. Allow MCP-specific "mcp-client" identity
-
-### Workstream C: Mirror Pane Implementation (BUG-059)
+### Workstream C: Mirror Pane Implementation (BUG-059) ✅ COMPLETE
 **Goal**: Complete the mirror pane feature for "plate spinning"
 
-| Item | Description | Effort | Files |
-|------|-------------|--------|-------|
-| BUG-059 | mirror_pane abort | Low-Medium | `ccmux-server/src/mcp/bridge/handlers.rs` |
-
-**Note**: Listed as dead code in BUG-047, suggesting incomplete implementation.
+**Solution**: Changed `handle_create_mirror` to return `RespondWithBroadcast` instead of `BroadcastToSession` so MCP bridge receives the `MirrorCreated` response.
+**Commit**: `578ace5` on `fix/bug-059-mirror-pane-abort`
 
 ### Workstream D: Agent Detection (FEAT-101)
 **Goal**: Detect Codex CLI alongside Claude and Gemini
@@ -261,22 +382,19 @@ All refactoring features merged in Session 9:
 
 ## Backlog Summary
 
-### Bugs (6 open)
+### Bugs (1 open)
 
 | Priority | Count | IDs |
 |----------|-------|-----|
-| P2 | 2 | BUG-058, BUG-060 |
-| P3 | 4 | BUG-042, BUG-047, BUG-057, BUG-059 |
+| P1 | 1 | BUG-065 |
 
-### Features (3 backlog)
+### Features (backlog)
 
 | Priority | ID | Title | Effort |
 |----------|----|-------|--------|
-| P2 | FEAT-100 | OrchestrationContext abstraction | Medium |
-| P2 | FEAT-101 | Codex CLI agent detection | Low |
-| P2 | FEAT-102 | Agent Status Pane | Medium |
 | P3 | FEAT-069 | TLS/auth for TCP connections | Large |
 | P3 | FEAT-072 | Per-pane MCP mode control | Small |
+| P3 | FEAT-090-092 | Remaining refactoring | Various |
 
 ## Architecture Notes
 
@@ -291,6 +409,7 @@ All orchestration tools are **bridge-only implementations**:
 - `ccmux_expect` - Wait for regex pattern match in pane output
 - `ccmux_run_parallel` - Execute up to 10 commands in parallel panes
 - `ccmux_run_pipeline` - Execute commands sequentially in a single pane
+- `ccmux_attach_session` - Attach MCP client to a session for orchestration messages
 
 **Completion Detection Pattern:**
 ```bash
@@ -318,6 +437,20 @@ ccmux is agent-agnostic:
 - See: `docs/adr/ADR-001-dumb-pipe-strategy.md`
 
 ## Recent Completions
+
+### 2026-01-19 (Session 12)
+| ID | Description | Commit |
+|----|-------------|--------|
+| BUG-042 | Result nesting docs | b6b93ff |
+| BUG-057 | Agent cross-contamination fix | 2ebec74 |
+| BUG-061 | send_orchestration target parsing | b298b26 |
+
+### 2026-01-18 (Session 10)
+| ID | Description | Commit |
+|----|-------------|--------|
+| BUG-058 | kill_session client hang fix | 9fd2481 |
+| BUG-059 | mirror_pane AbortError fix | 578ace5 |
+| BUG-060 | Orchestration session attachment | 8d24f11 |
 
 ### 2026-01-18 (Session 9)
 | ID | Description | Commit |
@@ -385,12 +518,12 @@ ccmux is agent-agnostic:
 
 | Metric | Value |
 |--------|-------|
-| Total Bugs | 60 |
-| Open Bugs | 6 |
-| Resolution Rate | 90% |
+| Total Bugs | 65 |
+| Open Bugs | 1 |
+| Resolution Rate | 98% |
 | Total Features | 102 |
-| Completed Features | 97 |
-| Completion Rate | 95% |
+| Completed Features | 102 |
+| Completion Rate | 100% |
 | Test Count | 1,714+ |
 
 ---

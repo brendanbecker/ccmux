@@ -1,36 +1,40 @@
 # Bug Reports
 
 **Project**: ccmux
-**Last Updated**: 2026-01-18
+**Last Updated**: 2026-01-19
 
 ## Summary Statistics
-- Total Bugs: 60
-- Open: 5
-- Resolved: 54
+- Total Bugs: 66
+- Open: 2
+- Resolved: 63
 - Deprecated: 1
 
 ## Active Bugs
 
 | ID | Description | Priority | Status | Component |
 |----|-------------|----------|--------|-----------|
-| BUG-058 | ccmux_kill_session causes client hang | P2 | new | mcp, client |
-| BUG-060 | Orchestration MCP tools require session attachment | P2 | new | mcp, orchestration |
-| BUG-059 | ccmux_mirror_pane tool aborts | P3 | new | mcp |
-| BUG-057 | Agent detection cross-contamination between panes | P3 | new | agents |
-| BUG-047 | Clean up compiler warnings across ccmux crates | P3 | partial | build |
+| BUG-065 | Parallel MCP requests cause response mismatches | P1 | new | mcp/bridge |
+| BUG-066 | Mirror panes don't forward output across sessions | P2 | new | session/mirror |
 
 ## Priority Queue
 
 | Priority | Bug | Risk | Effort | Notes |
 |----------|-----|------|--------|-------|
-| **P2** | BUG-058 | Medium | Medium | Client hangs after kill_session |
-| **P2** | BUG-060 | Medium | Medium | Blocks orchestration from MCP |
-| **P3** | BUG-059 | Low | Low | Mirror pane feature incomplete |
-| **P3** | BUG-057 | Low | Low | Agent detection isolation |
-| **P3** | BUG-047 | Low | Low | Code quality cleanup |
+| **P1** | BUG-065 | High | Medium | Parallel MCP calls fail - Claude Code pattern |
+| **P2** | BUG-066 | Medium | Medium | Cross-session mirror output broken |
 
 ## Recent Activity
 
+- 2026-01-19: Filed BUG-066 - Mirror panes don't forward output across sessions
+- 2026-01-19: Filed BUG-065 - Parallel MCP requests cause response mismatches (discovered during QA)
+- 2026-01-19: Fixed BUG-064 - MCP response off-by-one (drain pending after timeout) (commit a6a3563)
+- 2026-01-19: Fixed BUG-063 - Mirror pane cross-session (commit 93f5c87)
+- 2026-01-19: Fixed BUG-062 - Mirror pane close timeout (commit 3b22ce0)
+- 2026-01-19: Fixed BUG-047 - Compiler warnings cleanup (commit 1612e07)
+- 2026-01-18: Fixed BUG-064 - MCP response off-by-one after timeout (stale responses in channel)
+- 2026-01-18: Fixed BUG-061 - send_orchestration target parsing (commit b298b26)
+- 2026-01-18: Fixed BUG-057 - Agent detection cross-contamination (commit 2ebec74)
+- 2026-01-18: Fixed BUG-058, BUG-059, BUG-060 - Demo blockers resolved (Session 10)
 - 2026-01-18: Fixed BUG-042 - Result nesting flattened in recv_from_daemon_with_timeout
 - 2026-01-18: Filed BUG-058, BUG-059, BUG-060 - Issues from multi-agent orchestration demo
 - 2026-01-18: Fixed BUG-054 - Add 50ms delay before Enter for TUI compatibility (commit 6abb547, Gemini)
@@ -46,7 +50,13 @@
 
 | ID | Description | Resolution | Commit |
 |----|-------------|------------|--------|
-| BUG-042 | Excessive Result Nesting (Ok(Ok(...))) code smell | Fixed - flatten Result in recv_from_daemon_with_timeout | N/A |
+| BUG-064 | MCP response off-by-one after timeout | Fixed - drain pending messages after timeout | a6a3563 |
+| BUG-063 | Mirror panes can't view other sessions | Fixed - create mirror in caller's attached session | 93f5c87 |
+| BUG-062 | ccmux_close_pane times out for mirror panes | Fixed - RespondWithBroadcast for mirror close | 3b22ce0 |
+| BUG-061 | send_orchestration target parsing fails | Fixed - parse target as JSON string or object | b298b26 |
+| BUG-057 | Agent detection cross-contamination | Fixed - reset state between agent checks | 2ebec74 |
+| BUG-047 | Compiler warnings across crates | Fixed - addressed 51+ warnings | 1612e07 |
+| BUG-042 | Excessive Result Nesting (Ok(Ok(...))) code smell | Fixed - flatten Result in recv_from_daemon_with_timeout | b6b93ff |
 | BUG-054 | submit:true doesn't trigger Enter in TUI apps | Fixed - 50ms delay before Enter | 6abb547 |
 | BUG-053 | Codex CLI cursor position error (DSR [6n]) | Fixed - handle DSR escape sequence in PTY | cb1839c |
 | BUG-052 | Nested agents cannot connect to MCP | Verified working - no longer reproduces | N/A |
