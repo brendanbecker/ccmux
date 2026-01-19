@@ -953,6 +953,42 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                 "required": ["worker_id"]
             }),
         },
+        // ==================== FEAT-102: Agent Status Pane ====================
+        Tool {
+            name: "ccmux_create_status_pane".into(),
+            description: "Create an agent status pane showing real-time activity across all sessions".into(),
+            input_schema: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "position": {
+                        "type": "string",
+                        "enum": ["left", "right", "top", "bottom"],
+                        "default": "right",
+                        "description": "Where to place the status pane relative to current pane"
+                    },
+                    "width_percent": {
+                        "type": "integer",
+                        "default": 40,
+                        "description": "Width of status pane as percentage (10-90)"
+                    },
+                    "show_activity_feed": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Include scrolling activity feed"
+                    },
+                    "show_output_preview": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Show last few lines of each agent's output"
+                    },
+                    "filter_tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Only show agents with these tags (empty = all)"
+                    }
+                }
+            }),
+        },
     ]
 }
 

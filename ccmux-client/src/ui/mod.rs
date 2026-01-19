@@ -12,6 +12,7 @@ mod render;
 mod resize;
 mod state;
 mod status;
+mod status_pane;
 mod terminal;
 
 pub use app::App;

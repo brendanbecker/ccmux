@@ -406,6 +406,9 @@ impl Pane {
                 let code_str = code.map(|c| c.to_string()).unwrap_or_else(|| "?".to_string());
                 format!("{} [Exit:{}]", base_title, code_str)
             }
+            PaneState::Status => {
+                format!("{} [Status]", base_title)
+            }
         }
     }
 

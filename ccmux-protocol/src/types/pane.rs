@@ -14,6 +14,8 @@ pub enum PaneState {
     Agent(AgentState),
     /// Process exited
     Exited { code: Option<i32> },
+    /// Status pane (FEAT-102)
+    Status,
 }
 
 impl PaneState {

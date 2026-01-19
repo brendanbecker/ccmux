@@ -35,6 +35,7 @@ pub fn format_pane_list(panes: &[PaneListEntry]) -> Vec<serde_json::Value> {
         if state.is_claude() { "claude" } else { "agent" }
     }
     ccmux_protocol::PaneState::Exited { .. } => "exited",
+    ccmux_protocol::PaneState::Status => "status",
     };
 
     serde_json::json!({
@@ -207,6 +208,7 @@ impl<'a> ToolHandlers<'a> {
         "type": "exited",
         "exit_code": code,
     }),
+    ccmux_protocol::PaneState::Status => serde_json::json!({"type": "status"}),
     };
 
     let result = serde_json::json!({

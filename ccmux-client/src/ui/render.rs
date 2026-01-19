@@ -10,6 +10,7 @@ use ccmux_protocol::{
 };
 
 use super::pane::render_pane;
+use super::status_pane::render_status_pane;
 use super::state::{AppState, ClientState, ViewMode};
 
 /// Draw the UI
@@ -139,7 +140,11 @@ fn draw_panes(state: &mut ClientState, frame: &mut ratatui::Frame, area: Rect, i
         // Render each pane
         for (pane_id, rect) in &pane_rects {
             if let Some(ui_pane) = state.pane_manager.get(*pane_id) {
-                render_pane(ui_pane, *rect, frame.buffer_mut(), state.tick_count);
+                if let PaneState::Status = ui_pane.pane_state() {
+                    render_status_pane(ui_pane, *rect, frame.buffer_mut(), state);
+                } else {
+                    render_pane(ui_pane, *rect, frame.buffer_mut(), state.tick_count);
+                }
             } else {
                 // Fallback if UI pane not found
                 let pane_block = Block::default()
@@ -154,7 +159,11 @@ fn draw_panes(state: &mut ClientState, frame: &mut ratatui::Frame, area: Rect, i
     } else if let Some(pane_id) = state.active_pane_id {
         // Fallback: single pane, no layout, render single active pane
         if let Some(ui_pane) = state.pane_manager.get(pane_id) {
-            render_pane(ui_pane, pane_area, frame.buffer_mut(), state.tick_count);
+            if let PaneState::Status = ui_pane.pane_state() {
+                render_status_pane(ui_pane, pane_area, frame.buffer_mut(), state);
+            } else {
+                render_pane(ui_pane, pane_area, frame.buffer_mut(), state.tick_count);
+            }
         } else {
             let pane_block = Block::default()
                 .borders(Borders::ALL)
@@ -249,6 +258,7 @@ fn draw_system_graph(state: &ClientState, frame: &mut ratatui::Frame, area: Rect
                             }
                         }
                         PaneState::Exited { .. } => Color::Gray,
+                        PaneState::Status => Color::Blue,
                     }
                 };
 
@@ -323,6 +333,7 @@ fn build_status_bar(state: &ClientState, mode_indicator: &str) -> String {
                             format_agent_indicator(&agent_state.agent_type, &agent_state.activity, state.tick_count)
                         }
                         PaneState::Exited { code } => format!("[Exit:{}]", code.unwrap_or(-1)),
+                        PaneState::Status => "[Status]".to_string(),
                     },
                 }
             } else {
@@ -332,6 +343,7 @@ fn build_status_bar(state: &ClientState, mode_indicator: &str) -> String {
                         format_agent_indicator(&agent_state.agent_type, &agent_state.activity, state.tick_count)
                     }
                     PaneState::Exited { code } => format!("[Exit:{}]", code.unwrap_or(-1)),
+                    PaneState::Status => "[Status]".to_string(),
                 }
             }
         } else {
