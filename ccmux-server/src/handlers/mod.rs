@@ -442,6 +442,23 @@ impl HandlerContext {
             ClientMessage::PollMessages { worker_id } => {
                 self.handle_poll_messages(worker_id).await
             }
+
+            ClientMessage::CreateStatusPane {
+                position,
+                width_percent,
+                show_activity_feed,
+                show_output_preview,
+                filter_tags,
+            } => {
+                self.handle_create_status_pane(
+                    position,
+                    width_percent,
+                    show_activity_feed,
+                    show_output_preview,
+                    filter_tags,
+                )
+                .await
+            }
         }
     }
 

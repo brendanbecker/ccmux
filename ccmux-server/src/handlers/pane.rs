@@ -545,6 +545,94 @@ impl HandlerContext {
             broadcast: response,
         }
     }
+
+    /// Handle CreateStatusPane message (FEAT-102)
+    pub async fn handle_create_status_pane(
+        &self,
+        position: Option<String>,
+        width_percent: Option<i64>,
+        show_activity_feed: bool,
+        show_output_preview: bool,
+        filter_tags: Option<Vec<String>>,
+    ) -> HandlerResult {
+        use ccmux_protocol::PaneState;
+
+        info!("CreateStatusPane request from {}", self.client_id);
+
+        let (session_id, _session_name, window_id) = {
+            let session_manager = self.session_manager.read().await;
+            
+            // Use active session/window for the client if possible
+            if let Some(s_id) = self.resolve_active_session(&session_manager) {
+                if let Some(session) = session_manager.get_session(s_id) {
+                    if let Some(w_id) = self.resolve_active_window(session) {
+                        (s_id, session.name().to_string(), w_id)
+                    } else {
+                        return HandlerContext::error(ErrorCode::WindowNotFound, "No active window");
+                    }
+                } else {
+                    return HandlerContext::error(ErrorCode::SessionNotFound, "Active session not found");
+                }
+            } else {
+                return HandlerContext::error(ErrorCode::SessionNotFound, "No active session");
+            }
+        };
+
+        // Determine direction based on position
+        let direction = match position.as_deref() {
+            Some("left") | Some("right") => SplitDirection::Horizontal, // Note: ccmux layout logic is simple
+            Some("top") | Some("bottom") => SplitDirection::Vertical,
+            _ => SplitDirection::Horizontal,
+        };
+
+        // Create the status pane
+        let pane_info = {
+            let mut session_manager = self.session_manager.write().await;
+            
+            if let Some(session) = session_manager.get_session_mut(session_id) {
+                if let Some(window) = session.get_window_mut(window_id) {
+                    let pane_id = window.create_pane().id();
+                    
+                    // Configure as status pane
+                    if let Some(pane) = window.get_pane_mut(pane_id) {
+                        pane.set_state(PaneState::Status);
+                        pane.set_name(Some("Agent Status".to_string()));
+                        
+                        let config = serde_json::json!({
+                            "position": position,
+                            "width_percent": width_percent,
+                            "show_activity_feed": show_activity_feed,
+                            "show_output_preview": show_output_preview,
+                            "filter_tags": filter_tags,
+                        });
+                        pane.set_metadata("status_pane_config", config.to_string());
+                        
+                        pane.to_info()
+                    } else {
+                        return HandlerContext::error(ErrorCode::InternalError, "Failed to get created pane");
+                    }
+                } else {
+                    return HandlerContext::error(ErrorCode::WindowNotFound, "Window not found");
+                }
+            } else {
+                return HandlerContext::error(ErrorCode::SessionNotFound, "Session not found");
+            }
+        };
+
+        info!("Status pane created: {}", pane_info.id);
+
+        let response = ServerMessage::PaneCreated {
+            pane: pane_info.clone(),
+            direction,
+            should_focus: true,
+        };
+
+        HandlerResult::ResponseWithBroadcast {
+            response: response.clone(),
+            session_id,
+            broadcast: response,
+        }
+    }
 }
 
 #[cfg(test)]

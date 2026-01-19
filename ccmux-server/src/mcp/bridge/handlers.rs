@@ -1822,10 +1822,49 @@ impl<'a> ToolHandlers<'a> {
                     .map_err(|e| McpError::Internal(e.to_string()))?;
                 Ok(ToolResult::text(json))
             }
-            ServerMessage::Error { code, message, .. } => {
-                Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+                        ServerMessage::Error { code, message, .. } => {
+                            Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+                        }
+                        msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+                    }
+                }
+            
+                pub async fn tool_create_status_pane(
+                    &mut self,
+                    position: Option<String>,
+                    width_percent: Option<i64>,
+                    show_activity_feed: bool,
+                    show_output_preview: bool,
+                    filter_tags: Option<Vec<String>>,
+                ) -> Result<ToolResult, McpError> {
+                    self.connection.send_to_daemon(ClientMessage::CreateStatusPane {
+                        position,
+                        width_percent,
+                        show_activity_feed,
+                        show_output_preview,
+                        filter_tags,
+                    })
+                    .await?;
+            
+                    match self.connection.recv_response_from_daemon().await? {
+                        ServerMessage::PaneCreated { pane, direction, .. } => {
+                            let result = serde_json::json!({
+                                "pane_id": pane.id.to_string(),
+                                "window_id": pane.window_id.to_string(),
+                                "direction": format!("{:?}", direction).to_lowercase(),
+                                "status": "created",
+                                "type": "status_pane"
+                            });
+            
+                            let json = serde_json::to_string_pretty(&result)
+                                .map_err(|e| McpError::Internal(e.to_string()))?;
+                            Ok(ToolResult::text(json))
+                        }
+                        ServerMessage::Error { code, message, .. } => {
+                            Ok(ToolResult::error(format!("{:?}: {}", code, message)))
+                        }
+                        msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
+                    }
+                }
             }
-            msg => Err(McpError::UnexpectedResponse(format!("{:?}", msg))),
-        }
-    }
-}
+            
