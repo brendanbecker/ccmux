@@ -24,6 +24,7 @@
 
 pub mod claude;
 pub mod gemini;
+pub mod codex;
 
 use std::collections::HashMap;
 use ccmux_protocol::{AgentActivity, AgentState, JsonValue};
@@ -102,6 +103,7 @@ impl DetectorRegistry {
         let mut registry = Self::new();
         registry.register(Box::new(claude::ClaudeAgentDetector::new()));
         registry.register(Box::new(gemini::GeminiAgentDetector::new()));
+        registry.register(Box::new(crate::agents::codex::CodexAgentDetector::new()));
         registry
     }
 
@@ -310,7 +312,7 @@ mod tests {
         assert!(!registry.is_claude());
     }
 
-    // BUG-057: Test that active agent detection cannot be stolen by another detector
+// BUG-057: Test that active agent detection cannot be stolen by another detector
     #[test]
     fn test_bug_057_active_detector_not_hijacked() {
         let mut registry = DetectorRegistry::with_defaults();
@@ -379,6 +381,19 @@ mod tests {
         let state = registry.analyze("Welcome to Gemini CLI");
         assert!(state.is_some());
         assert_eq!(state.unwrap().agent_type, "gemini");
+        assert!(!registry.is_claude());
+    }
+
+    #[test]
+    fn test_registry_analyze_detects_codex() {
+        let mut registry = DetectorRegistry::with_defaults();
+
+        let state = registry.analyze("Welcome to OpenAI Codex");
+        assert!(state.is_some());
+
+        let state = state.unwrap();
+        assert_eq!(state.agent_type, "codex");
+        assert!(registry.is_agent_active());
         assert!(!registry.is_claude());
     }
 }
