@@ -334,15 +334,48 @@ impl ConnectionManager {
     }
 
     /// Receive a message from the daemon with a timeout
+    ///
+    /// BUG-064 FIX: After a timeout, drain any pending messages from the channel
+    /// to prevent response correlation issues. When a request times out, its
+    /// response may still arrive later and sit in the channel. Without draining,
+    /// the next request would receive that stale response instead of its own.
     pub async fn recv_from_daemon_with_timeout(
         &mut self,
         timeout: Duration,
     ) -> Result<ServerMessage, McpError> {
         match tokio::time::timeout(timeout, self.recv_from_daemon()).await {
             Ok(result) => result,
-            Err(_) => Err(McpError::ResponseTimeout {
-                seconds: timeout.as_secs(),
-            }),
+            Err(_) => {
+                // BUG-064 FIX: Drain stale messages after timeout
+                self.drain_pending_messages();
+
+                Err(McpError::ResponseTimeout {
+                    seconds: timeout.as_secs(),
+                })
+            }
+        }
+    }
+
+    /// Drain any pending messages from the daemon receive channel
+    ///
+    /// Used after timeouts to clear stale responses that might otherwise
+    /// be incorrectly returned for subsequent requests (BUG-064).
+    fn drain_pending_messages(&mut self) {
+        if let Some(rx) = self.daemon_rx.as_mut() {
+            let mut drained_count = 0;
+
+            // Use try_recv for non-blocking checks - returns immediately
+            // if no messages are pending
+            while rx.try_recv().is_ok() {
+                drained_count += 1;
+            }
+
+            if drained_count > 0 {
+                warn!(
+                    count = drained_count,
+                    "Drained stale messages from daemon channel after timeout"
+                );
+            }
         }
     }
 
