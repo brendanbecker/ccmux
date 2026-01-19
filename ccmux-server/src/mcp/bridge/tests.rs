@@ -166,13 +166,16 @@ mod tests {
     }
 
     #[test]
-    fn test_is_broadcast_message_pane_closed() {
-        // BUG-035 fix: PaneClosed is now filtered as a broadcast
+    fn test_is_not_broadcast_message_pane_closed() {
+        // BUG-062 fix: PaneClosed is NOT filtered as broadcast because it's
+        // needed as a direct response to ClosePane requests. The tool_close_pane
+        // handler uses recv_filtered with a predicate that checks for the specific
+        // pane_id, so spurious broadcasts are already ignored.
         let msg = ServerMessage::PaneClosed {
             pane_id: Uuid::new_v4(),
             exit_code: Some(0),
         };
-        assert!(ConnectionManager::is_broadcast_message(&msg));
+        assert!(!ConnectionManager::is_broadcast_message(&msg));
     }
 
     #[test]

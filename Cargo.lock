@@ -246,6 +246,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "lazy_static",
  "lz4_flex",
  "notify",
  "notify-debouncer-full",
