@@ -23,27 +23,25 @@
 
 **All Refactoring Complete!** (Session 9)
 
-**Session 14**: QA complete, BUG-065 fixed and verified, new bugs/features filed.
+**Session 14**: QA complete, BUG-065 + BUG-066 fixed, FEAT-104 designed.
 
-### Active Bugs (1)
+### Active Bugs (0)
 
-| ID | Priority | Description | Status |
-|----|----------|-------------|--------|
-| BUG-066 | P2 | Mirror panes don't forward output across sessions | new |
-
-**BUG-065 VERIFIED FIXED** (commit a358bf1) - Parallel MCP calls now work correctly after daemon rebuild.
+**ZERO BUGS!** All 66 bugs resolved (65 fixed, 1 deprecated).
 
 ### Remaining Backlog
 
-| Priority | Features | Status |
-|----------|----------|--------|
-| P3 | FEAT-069, FEAT-072, FEAT-090-092 (infra + remaining refactoring) | Backlog |
+| Priority | ID | Description | Status |
+|----------|----|-------------|--------|
+| P1 | FEAT-104 | Watchdog Orchestration Skill | new |
+| P1 | FEAT-103 | Visualization Architecture Review | new |
+| P3 | FEAT-069, FEAT-072 | TLS/auth, per-pane MCP mode | backlog |
 
 ### Latest Session (2026-01-19, Session 14)
 
-**QA + BUG-065 Fix + New Issues Filed**
+**QA + Bug Fixes + Feature Design - ZERO BUGS ACHIEVED**
 
-Verified fixes from Sessions 12-13, discovered and fixed BUG-065, filed new bugs/features.
+Verified fixes from Sessions 12-13, fixed BUG-065 + BUG-066, designed FEAT-104.
 
 **QA Results:**
 
@@ -53,27 +51,36 @@ Verified fixes from Sessions 12-13, discovered and fixed BUG-065, filed new bugs
 | BUG-062 | Close mirror pane | ✅ Pass | No timeout, immediate response |
 | BUG-063 | Mirror pane cross-session | ✅ Pass | Mirror created in caller's session |
 | BUG-064 | Sequential MCP calls after timeout | ✅ Pass | Drain works for post-timeout scenarios |
-| BUG-064 | Parallel MCP calls | ❌ Fail | Led to BUG-065 discovery |
+| BUG-065 | Parallel MCP calls | ✅ Pass | Fixed with request_lock mutex, verified after rebuild |
+| BUG-066 | Mirror cross-session output | ✅ Pass | Fixed with output forwarding + scrollback copy |
 
-**BUG-065 Fixed:**
-- Spawned worker agent in `bug-065-worker` session to implement fix
-- Agent added `request_lock` mutex to serialize daemon requests (Option B from spec)
+**BUG-065 Fixed** (commit a358bf1):
+- Spawned worker agent to implement fix
+- Added `request_lock` mutex to serialize daemon requests
 - All handlers updated to use atomic `send_and_recv()` methods
-- Tests pass, committed as `a358bf1`
-- **Requires daemon rebuild to verify** - fix not yet tested with new daemon
+- Verified after daemon rebuild - parallel MCP calls work correctly
+
+**BUG-066 Fixed** (commit 5fa9ee7):
+- Spawned worker agent to implement fix
+- Copies existing scrollback to mirror on creation
+- Forwards live output to cross-session mirrors via `broadcast_to_session`
+
+**FEAT-104 Designed** (commit fc8a85e):
+- Watchdog Orchestration Skill for multi-agent monitoring
+- Architecture: Orchestrator ← Watchdog → Workers
+- Background timer triggers watchdog every 90s
+- Tag-based discovery and orchestration messaging
+- `/orchestrate spawn|status|monitor|kill|collect` commands
 
 **New Issues Filed:**
-- **BUG-066** (P2): Mirror panes don't forward output across sessions - mirror displays blank
-- **FEAT-103** (P1): Visualization Architecture Review - screen rendering artifacts with Claude Code TUI (stacked "thinking" messages, ghost content). Agent council recommended.
+- **FEAT-103** (P1): Visualization Architecture Review - screen rendering artifacts
+- **FEAT-104** (P1): Watchdog Orchestration Skill - multi-agent monitoring
 
 **Commits:**
 - `a358bf1`: fix: serialize MCP daemon requests (BUG-065)
-- `168303e`: docs: Session 14 QA results, new bugs and feature filed
-
-**Verification (after rebuild):**
-- Tested 4 parallel MCP calls - all returned correct responses
-- No more "Unexpected response" errors
-- BUG-065 confirmed fixed
+- `5fa9ee7`: fix: forward output to cross-session mirror panes (BUG-066)
+- `fc8a85e`: feat: add FEAT-104 watchdog orchestration skill spec
+- `c1920a4`: docs: update tracking - zero bugs, add FEAT-104
 
 ### Previous Session (2026-01-19, Session 13)
 
@@ -397,20 +404,18 @@ All refactoring features merged in Session 9:
 
 ## Backlog Summary
 
-### Bugs (1 open)
+### Bugs (0 open)
 
-| Priority | Count | IDs |
-|----------|-------|-----|
-| P2 | 1 | BUG-066 |
+All bugs resolved! 66 total (65 fixed, 1 deprecated).
 
 ### Features (backlog)
 
 | Priority | ID | Title | Effort |
 |----------|----|-------|--------|
+| P1 | FEAT-104 | Watchdog Orchestration Skill | Medium |
 | P1 | FEAT-103 | Visualization Architecture Review | Large |
 | P3 | FEAT-069 | TLS/auth for TCP connections | Large |
 | P3 | FEAT-072 | Per-pane MCP mode control | Small |
-| P3 | FEAT-090-092 | Remaining refactoring | Various |
 
 ## Architecture Notes
 
@@ -535,11 +540,11 @@ ccmux is agent-agnostic:
 | Metric | Value |
 |--------|-------|
 | Total Bugs | 66 |
-| Open Bugs | 1 |
-| Resolution Rate | 98% |
-| Total Features | 103 |
+| Open Bugs | 0 |
+| Resolution Rate | 100% |
+| Total Features | 104 |
 | Completed Features | 102 |
-| Completion Rate | 99% |
+| Completion Rate | 98% |
 | Test Count | 1,714+ |
 
 ---
