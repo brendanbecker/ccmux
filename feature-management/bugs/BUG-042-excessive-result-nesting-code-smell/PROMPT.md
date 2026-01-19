@@ -24,6 +24,36 @@ This leads to `Ok(Ok(msg))` matching.
 2. **Refactor Match Arms**: Update `handlers.rs` to match on `Ok(ServerMessage::...)` or `Err(McpError::...)`.
 
 ## Tasks
-- [ ] Analyze `recv_response_from_daemon` signature and implementation in `connection.rs`.
-- [ ] Refactor to flatten the return type.
-- [ ] Update all call sites in `handlers.rs` to remove the double `Ok`.
+- [x] Analyze `recv_response_from_daemon` signature and implementation in `connection.rs`.
+- [x] Refactor to flatten the return type.
+- [x] Update all call sites in `handlers.rs` to remove the double `Ok`.
+
+## Resolution
+
+The fix was already implemented in `connection.rs`:
+
+1. **`recv_from_daemon_with_timeout()`** (lines 337-347) properly flattens the Result:
+   ```rust
+   match tokio::time::timeout(timeout, self.recv_from_daemon()).await {
+       Ok(result) => result,  // Returns inner Result directly (flattened!)
+       Err(_) => Err(McpError::ResponseTimeout { seconds: timeout.as_secs() }),
+   }
+   ```
+
+2. **`recv_filtered()`** uses `recv_from_daemon_with_timeout()` internally and returns `Result<ServerMessage, McpError>`.
+
+3. **`recv_response_from_daemon()`** calls `recv_filtered()` and returns `Result<ServerMessage, McpError>`.
+
+4. **All handlers** in `handlers.rs` now use the clean pattern:
+   ```rust
+   match self.connection.recv_response_from_daemon().await? {
+       ServerMessage::SessionList { sessions } => { ... }
+       ServerMessage::Error { code, message, .. } => { ... }
+       msg => Err(McpError::UnexpectedResponse(...)),
+   }
+   ```
+
+No `Ok(Ok(...))` patterns exist in the codebase. The fix ensures:
+- Timeout errors are mapped to `McpError::ResponseTimeout`
+- Inner `Result` is returned directly, flattening the double-wrapped Result
+- Clean, idiomatic Rust error handling throughout handlers
