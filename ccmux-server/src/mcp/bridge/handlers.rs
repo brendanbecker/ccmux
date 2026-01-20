@@ -232,6 +232,7 @@ impl<'a> ToolHandlers<'a> {
     }
 
     // BUG-065 FIX: Use atomic send_and_recv to prevent response mismatches
+    // FEAT-106: Added tags parameter for session creation
     pub async fn tool_create_session(
     &mut self,
     name: Option<String>,
@@ -240,6 +241,7 @@ impl<'a> ToolHandlers<'a> {
     claude_model: Option<String>,
     claude_config: Option<serde_json::Value>,
     preset: Option<String>,
+    tags: Vec<String>,
     ) -> Result<ToolResult, McpError> {
     match self.connection.send_and_recv(ClientMessage::CreateSessionWithOptions {
     name,
@@ -256,11 +258,31 @@ impl<'a> ToolHandlers<'a> {
                 pane_id,
                 ..
             } => {
+    // FEAT-106: Apply tags if provided
+    let applied_tags = if !tags.is_empty() {
+        match self.connection.send_and_recv(ClientMessage::SetTags {
+            session_filter: Some(session_id.to_string()),
+            add: tags,
+            remove: vec![],
+        }).await {
+            Ok(ServerMessage::TagsSet { tags: set_tags, .. }) => {
+                set_tags.into_iter().collect::<Vec<_>>()
+            }
+            Ok(_) | Err(_) => {
+                // Tags failed to apply, but session was created - return empty tags
+                vec![]
+            }
+        }
+    } else {
+        vec![]
+    };
+
     let result = serde_json::json!({
     "session_id": session_id.to_string(),
     "session_name": session_name,
     "window_id": window_id.to_string(),
     "pane_id": pane_id.to_string(),
+    "tags": applied_tags,
     "status": "created"
     });
 

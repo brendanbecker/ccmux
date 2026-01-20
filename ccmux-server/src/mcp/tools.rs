@@ -224,6 +224,11 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                     "cwd": {
                         "type": "string",
                         "description": "Working directory for the session"
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional tags to apply to the session for routing (e.g., ['worker', 'feat-123'])"
                     }
                 }
             }),
