@@ -338,7 +338,15 @@ impl McpBridge {
                 let model = arguments["model"].as_str().map(String::from);
                 let config = arguments["config"].as_object().map(|o| serde_json::Value::Object(o.clone()));
                 let preset = arguments["preset"].as_str().map(String::from);
-                handlers.tool_create_session(name, command, cwd, model, config, preset).await
+                let tags = arguments["tags"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(String::from))
+                            .collect::<Vec<_>>()
+                    })
+                    .unwrap_or_default();
+                handlers.tool_create_session(name, command, cwd, model, config, preset, tags).await
             }
             "ccmux_attach_session" => {
                 let session_id = parse_uuid(arguments, "session_id")?;
