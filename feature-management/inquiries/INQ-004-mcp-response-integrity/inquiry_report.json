@@ -1,0 +1,22 @@
+{
+  "inquiry_id": "INQ-004",
+  "title": "MCP Response Integrity",
+  "component": "mcp/bridge",
+  "priority": "P1",
+  "status": "new",
+  "phase": "research",
+  "created_date": "2026-01-19",
+  "updated_date": "2026-01-19",
+  "question": "Why does the MCP bridge return unexpected/mismatched responses, and what architectural changes are needed to guarantee response integrity?",
+  "context": "Despite fixes for BUG-064 (drain after timeout) and BUG-065 (request_lock serialization), MCP calls still return unexpected response types (PaneResized, SessionList, PaneContent instead of expected responses) and sometimes execute on wrong targets (kill_session killing different session than requested). This was observed in Session 18 when killing midwestmtg sessions.",
+  "constraints": [
+    "Must not break existing working features",
+    "Backward compatible with MCP protocol",
+    "No significant latency impact",
+    "Prefer simple fixes over architectural rewrites"
+  ],
+  "research_agents": 2,
+  "tags": ["mcp", "bridge", "response-mixing", "concurrency", "bug-064", "bug-065"],
+  "related_bugs": ["BUG-064", "BUG-065"],
+  "spawned_features": []
+}

@@ -35,11 +35,90 @@
 
 | Priority | ID | Description | Status |
 |----------|----|-------------|--------|
-| P1 | FEAT-105 | Universal Agent Presets | new |
-| P1 | FEAT-103 | Visualization Architecture Review | new |
+| P1 | FEAT-105 | Universal Agent Presets | in_progress (Gemini worker) |
+| P1 | INQ-001 | Visualization Architecture Review | new |
+| P1 | INQ-002 | Intelligent Pipe Fabric | new |
+| P1 | INQ-003 | Hierarchical Orchestration Messaging | new |
+| P1 | INQ-004 | MCP Response Integrity | new |
 | P3 | FEAT-069, FEAT-072 | TLS/auth, per-pane MCP mode | backlog |
 
-### Latest Session (2026-01-19, Session 15)
+### Latest Session (2026-01-19, Session 18)
+
+**Cleanup + INQ-004 Creation**
+
+**Completed:**
+- Checked on FEAT-105 Gemini worker (idle, implementation complete, awaiting merge)
+- Killed stale midwestmtg sessions (orchestrator, claude-worker, gemini-worker)
+- Created INQ-004 (MCP Response Integrity) to investigate response mixing issues
+
+**Discovered:**
+- MCP response integrity issues persist despite BUG-064/BUG-065 fixes
+- `ccmux_kill_session` returned unexpected responses (PaneResized, SessionList)
+- Session name resolution incorrect (killed wrong session on first attempts)
+
+### Previous Session (2026-01-19, Session 17)
+
+**Merge + Documentation + Multi-Project Orchestration**
+
+**Completed:**
+- FEAT-106 merged (`feb8e72`) - adds `tags` parameter to `ccmux_create_session`
+- Fixed missing `#[cfg(test)]` on app.rs test module (`91ee4f9`)
+- Added inquiry documentation to feature-management (`60f6b7b`):
+  - `schemas/inquiry-report.schema.json`
+  - `docs/WORK-ITEM-TYPES.md`
+  - `inquiries/inquiries.md`
+
+**Active Workers:**
+| Feature | Agent | Session | Status |
+|---------|-------|---------|--------|
+| FEAT-105 | Gemini 3 | feat-105-worker | coding (fixing split_pane args) |
+
+**Multi-Project Orchestration:**
+Launched 3 sessions for midwestmtg project inquiry:
+- `midwestmtg-orchestrator` (Claude, orchestrator tag)
+- `midwestmtg-claude-worker` (Claude, worker tag)
+- `midwestmtg-gemini-worker` (Gemini, worker tag)
+
+**Known Issue - Agent Launch Input Consumption:**
+When launching Claude agents via `ccmux_create_session` + `ccmux_send_input`, the first input may be consumed by Claude's "trust this folder?" permission prompt. Workaround: use `ccmux_expect` to wait for the prompt to clear, or send input twice.
+
+**Commits:**
+- `feb8e72`: feat: add tags parameter to ccmux_create_session (FEAT-106)
+- `91ee4f9`: fix: add missing #[cfg(test)] to app.rs test module
+- `60f6b7b`: docs: add inquiry schema and work item type documentation
+
+### Previous Session (2026-01-19, Session 16)
+
+**Multi-Agent Orchestration + Inquiry System + Documentation**
+
+First session with parallel workers (Gemini + Claude) and introduction of Inquiry work item type.
+
+**Work Items Created:**
+- `docs/TAGS.md` - Tag conventions (orchestrator, worker, watchdog)
+- `FEAT-106` - Session Creation Tags (add `tags` param to `ccmux_create_session`)
+- `INQ-001` - Visualization Architecture Review (converted from FEAT-103)
+- `INQ-002` - Intelligent Pipe Fabric ("replace | with mux" vision)
+
+**Global CLAUDE.md Updates:**
+- Role checking to prevent cascade spawning
+- Delegation strategy from `~/.ccmux/config.toml`
+- watchdog tag handling (forward to orchestrator)
+
+**FEAT-105 Spec Updates:**
+- Added `DelegationConfig` schema with strategy (random/round-robin) and pool
+- Added `ccmux_select_worker` MCP tool spec
+
+**Active Workers:**
+| Feature | Agent | Session | Status |
+|---------|-------|---------|--------|
+| FEAT-105 | Gemini 3 | feat-105-worker | coding |
+| FEAT-106 | Claude | feat-106-worker | testing |
+
+**Commits:**
+- `42a2c55`: docs: add INQ-001, FEAT-106, tag conventions, delegation strategy
+- `96d6d7d`: docs: add INQ-002 Intelligent Pipe Fabric
+
+### Previous Session (2026-01-19, Session 15)
 
 **FEAT-104 Implementation + FEAT-105 Spec - Delegated Worker Pattern**
 
