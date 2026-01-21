@@ -1,12 +1,12 @@
 # Inquiries (Deliberation Processes)
 
 **Project**: ccmux
-**Last Updated**: 2026-01-19
+**Last Updated**: 2026-01-20
 
 ## Summary Statistics
-- Total Inquiries: 4
+- Total Inquiries: 5
 - By Phase:
-  - Research: 4
+  - Research: 5
   - Synthesis: 0
   - Debate: 0
   - Consensus: 0
@@ -20,6 +20,7 @@
 | INQ-002 | Intelligent Pipe Fabric | P1 | research | 3 | - | `INQ-002-intelligent-pipe-fabric/` |
 | INQ-003 | Hierarchical Orchestration Messaging | P1 | research | 3 | - | `INQ-003-hierarchical-orchestration-messaging/` |
 | INQ-004 | MCP Response Integrity | P1 | research | 2 | - | `INQ-004-mcp-response-integrity/` |
+| INQ-005 | Submit/Enter Behavior in ccmux Input Tools | P2 | research | 2 | - | `INQ-005-submit-enter-behavior/` |
 
 ## Completed Inquiries
 
@@ -27,6 +28,9 @@
 |----|-------|-----------------|------------------|----------------|----------|
 
 ## Recent Activity
+
+### 2026-01-20
+- INQ-005 created (submit/Enter behavior - observed during orchestration watchdog setup)
 
 ### 2026-01-19
 - INQ-004 created (MCP response integrity, observed in Session 18)

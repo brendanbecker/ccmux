@@ -8,7 +8,7 @@
 **Current Stage**: Stage 8 (Multi-Agent Orchestration Enhancement)
 **Status**: Production-ready core with new orchestration primitives.
 
-## Current State (2026-01-19)
+## Current State (2026-01-20)
 
 **All P1 Features Complete!** Orchestration primitives fully shipped:
 - `ccmux_expect` - Wait for regex patterns in pane output (FEAT-096)
@@ -35,14 +35,91 @@
 
 | Priority | ID | Description | Status |
 |----------|----|-------------|--------|
-| P1 | FEAT-105 | Universal Agent Presets | in_progress (Gemini worker) |
 | P1 | INQ-001 | Visualization Architecture Review | new |
 | P1 | INQ-002 | Intelligent Pipe Fabric | new |
 | P1 | INQ-003 | Hierarchical Orchestration Messaging | new |
 | P1 | INQ-004 | MCP Response Integrity | new |
 | P3 | FEAT-069, FEAT-072 | TLS/auth, per-pane MCP mode | backlog |
 
-### Latest Session (2026-01-19, Session 18)
+### Latest Session (2026-01-20, Session 20)
+
+**QA Validation + Watchdog Architecture + Inquiry System Design**
+
+**QA Completed:**
+| Feature/Bug | Test | Result |
+|-------------|------|--------|
+| FEAT-106 | Tags on session creation | ✅ Pass |
+| FEAT-105 | Agent presets | ⚠️ Partial (requires daemon restart) |
+| FEAT-104 | Watchdog tools | ✅ Pass |
+| BUG-062 | Mirror pane creation | ✅ Pass |
+| BUG-063 | Mirror pane close | ✅ Pass |
+| BUG-065 | Parallel MCP calls | ✅ Pass |
+| BUG-066 | Cross-session mirror output | ✅ Pass |
+
+**FEAT-109 Implemented** (via delegated worker):
+- `ccmux_drain_messages` MCP tool - clears stale broadcast messages from response channel
+- Workaround for INQ-004 (MCP response mixing)
+- Returns diagnostic info: `drained_count`, `message_types`, `status`
+
+**New Feature Specs Created:**
+
+| ID | Title | Project | Description |
+|----|-------|---------|-------------|
+| FEAT-110 | Watchdog Monitor Agent | ccmux | Dedicated agent that monitors workers, notifies orchestrator only when action needed |
+| FEAT-111 | Watchdog Auto-Clear Cycle | ccmux | `/clear` after each monitoring cycle to keep watchdog context minimal |
+| FEAT-021 | Inquiry Orchestration Skill | featmgmt | `/inquiry` command to launch and manage inquiries |
+| FEAT-022 | Research Agent Prompt Generator | featmgmt | Parse QUESTION.md, distribute research areas to agents |
+| FEAT-023 | Inquiry Output Collector | featmgmt | Collect research findings, create agent-N.md files |
+
+**Architecture Designed - Watchdog Monitoring Pattern:**
+```
+Watchdog Agent (monitors workers directly)
+    │ polls ccmux_get_worker_status()
+    │ only notifies on: stuck, error, complete, needs_input
+    ▼
+Orchestrator (acts on issues, context preserved)
+```
+
+Key decisions:
+1. Watchdog monitors workers directly (not orchestrator polling)
+2. Only notify orchestrator when action needed (saves context)
+3. Auto-clear after each cycle (watchdog stays lean, no compaction)
+4. Orchestrator per level (meta-orchestrator → orchestrators → workers)
+
+**Commits:**
+- `ee5b2b3`: feat: add ccmux_drain_messages MCP tool (FEAT-109)
+
+**Notes:** Obsidian vault updated with architecture documentation.
+
+### Previous Session (2026-01-19, Session 19)
+
+**FEAT-105 Merged + QA Prep**
+
+**Completed:**
+- Merged FEAT-105 (Universal Agent Presets) from Gemini worker
+- Had Gemini document the preset format in `docs/architecture/CONFIGURATION.md`
+- Investigated PaneContent message flooding - documented in INQ-004
+
+**Rebuild includes:**
+
+| Type | ID | Description |
+|------|-----|-------------|
+| Feature | FEAT-105 | Universal Agent Presets - multi-harness support (claude, gemini, codex, shell, custom) |
+| Feature | FEAT-106 | Tags parameter on `ccmux_create_session` |
+| Feature | FEAT-104 | Watchdog timer tools (`ccmux_watchdog_start/stop/status`) |
+| Bug Fix | BUG-066 | Forward output to cross-session mirror panes |
+| Bug Fix | BUG-065 | Serialize MCP daemon requests with request_lock mutex |
+| Bug Fix | BUG-064 | Drain pending messages after timeout |
+| Bug Fix | BUG-063 | Create mirror panes in caller's attached session |
+| Bug Fix | BUG-062 | Don't filter PaneClosed - needed for close_pane response |
+
+**Commits:**
+- `8a0107a`: Merge branch 'feat-105'
+- `6b3aae1`: docs: add FEAT-105 agent preset documentation
+
+**Next:** QA session to validate rebuild
+
+### Previous Session (2026-01-19, Session 18)
 
 **Cleanup + INQ-004 Creation**
 
@@ -460,12 +537,18 @@ Attempted to launch 3 parallel background agents via Task tool, but:
 ## Recommended Work Order
 
 ```
-Phase 1: P1 Features
-  1. FEAT-105 - Universal Agent Presets (enables configurable watchdog/worker models)
-  2. FEAT-103 - Visualization Architecture Review (screen rendering artifacts)
+Phase 1: Watchdog Architecture (enables inquiry system)
+  1. FEAT-110 - Watchdog Monitor Agent (monitors workers, notifies orchestrator)
+  2. FEAT-111 - Watchdog Auto-Clear Cycle (keeps watchdog context lean)
 
-Phase 2: P3 Backlog
-  3. FEAT-069, FEAT-072 (TLS/auth, per-pane MCP mode)
+Phase 2: Inquiry System (in featmgmt)
+  3. FEAT-021 - Inquiry Orchestration Skill
+  4. FEAT-022 - Research Agent Prompt Generator
+  5. FEAT-023 - Inquiry Output Collector
+
+Phase 3: Backlog
+  6. FEAT-103 - Visualization Architecture Review (screen rendering artifacts)
+  7. FEAT-069, FEAT-072 (TLS/auth, per-pane MCP mode)
 ```
 
 ## Parallel Workstreams
@@ -524,7 +607,8 @@ All bugs resolved! 66 total (65 fixed, 1 deprecated).
 
 | Priority | ID | Title | Effort |
 |----------|----|-------|--------|
-| P1 | FEAT-105 | Universal Agent Presets | Medium |
+| P1 | FEAT-110 | Watchdog Monitor Agent | Medium |
+| P1 | FEAT-111 | Watchdog Auto-Clear Cycle | Small |
 | P1 | FEAT-103 | Visualization Architecture Review | Large |
 | P3 | FEAT-069 | TLS/auth for TCP connections | Large |
 | P3 | FEAT-072 | Per-pane MCP mode control | Small |
@@ -570,6 +654,16 @@ ccmux is agent-agnostic:
 - See: `docs/adr/ADR-001-dumb-pipe-strategy.md`
 
 ## Recent Completions
+
+### 2026-01-20 (Session 20)
+| ID | Description | Commit |
+|----|-------------|--------|
+| FEAT-109 | ccmux_drain_messages MCP tool | ee5b2b3 |
+
+### 2026-01-19 (Session 19)
+| ID | Description | Commit |
+|----|-------------|--------|
+| FEAT-105 | Universal Agent Presets (implementation) | 578654d, 8a0107a |
 
 ### 2026-01-19 (Session 15)
 | ID | Description | Commit |
@@ -660,9 +754,9 @@ ccmux is agent-agnostic:
 | Total Bugs | 66 |
 | Open Bugs | 0 |
 | Resolution Rate | 100% |
-| Total Features | 105 |
-| Completed Features | 103 |
-| Completion Rate | 98% |
+| Total Features | 111 |
+| Completed Features | 106 |
+| Completion Rate | 95% |
 | Test Count | 1,714+ |
 
 ---
