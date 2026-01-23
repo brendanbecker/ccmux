@@ -449,8 +449,9 @@ impl<'a> ToolHandlers<'a> {
                 }
 
                 if submit {
-                    // Small delay to ensure TUI sees it as separate event
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    // Larger delay to ensure TUI sees it as separate event (BUG-054)
+                    // 50ms was not enough for some TUI apps (Gemini CLI, Claude Code)
+                    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                     let enter_data = b"\r".to_vec();
                     self.connection
                         .send_to_daemon(ClientMessage::Input {
