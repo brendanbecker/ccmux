@@ -33,6 +33,11 @@ pub fn get_tool_definitions() -> Vec<Tool> {
                     "lines": {
                         "type": "integer",
                         "description": "Number of lines to read (default: 100, max: 1000)"
+                    },
+                    "strip_escapes": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "If true, strip ANSI escape sequences from output for cleaner text processing"
                     }
                 },
                 "required": ["pane_id"]

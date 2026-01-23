@@ -325,7 +325,8 @@ impl McpBridge {
             "ccmux_read_pane" => {
                 let pane_id = parse_uuid(arguments, "pane_id")?;
                 let lines = arguments["lines"].as_u64().unwrap_or(100) as usize;
-                handlers.tool_read_pane(pane_id, lines).await
+                let strip_escapes = arguments["strip_escapes"].as_bool().unwrap_or(false);
+                handlers.tool_read_pane(pane_id, lines, strip_escapes).await
             }
             "ccmux_get_status" => {
                 let pane_id = parse_uuid(arguments, "pane_id")?;

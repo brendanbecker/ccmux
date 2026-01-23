@@ -157,9 +157,18 @@ impl<'a> ToolHandlers<'a> {
     &mut self,
     pane_id: Uuid,
     lines: usize,
+    strip_escapes: bool,
     ) -> Result<ToolResult, McpError> {
     match self.connection.send_and_recv(ClientMessage::ReadPane { pane_id, lines }).await? {
-    ServerMessage::PaneContent { content, .. } => Ok(ToolResult::text(content)),
+    ServerMessage::PaneContent { content, .. } => {
+        let output = if strip_escapes {
+            let stripped = strip_ansi_escapes::strip(&content);
+            String::from_utf8_lossy(&stripped).into_owned()
+        } else {
+            content
+        };
+        Ok(ToolResult::text(output))
+    }
     ServerMessage::Error { code, message, .. } => {
     Ok(ToolResult::error(format!("{:?}: {}", code, message)))
     }
