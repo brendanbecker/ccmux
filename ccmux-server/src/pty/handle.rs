@@ -51,6 +51,14 @@ impl PtyHandle {
             .map_err(|e| CcmuxError::pty(format!("Write failed: {}", e)))
     }
 
+    /// Flush the PTY writer
+    pub fn flush(&self) -> Result<()> {
+        let mut writer = self.writer.lock();
+        writer
+            .flush()
+            .map_err(|e| CcmuxError::pty(format!("Flush failed: {}", e)))
+    }
+
     /// Read data from the PTY (output from the child process)
     pub fn read(&self, buf: &mut [u8]) -> Result<usize> {
         let mut reader = self.reader.lock();
