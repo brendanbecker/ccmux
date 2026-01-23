@@ -1134,8 +1134,62 @@ async fn run_pane_cleanup_loop(
                         }
 
                         // Remove empty session (after releasing mutable borrow on session)
-                        if should_remove_session {
-                            session_manager.remove_session(session_id);
+                        let removed_session = if should_remove_session {
+                            session_manager.remove_session(session_id)
+                        } else {
+                            None
+                        };
+
+                        drop(session_manager);
+
+                        if let Some(session) = removed_session {
+                            let session_name = session.name().to_string();
+
+                            // Log to persistence so recovery doesn't resurrect the session.
+                            let mut commit_seq = 0;
+                            if let Some(persistence_lock) = &shared_state.persistence {
+                                let persistence = persistence_lock.read().await;
+                                if let Ok(seq) = persistence.log_session_destroyed(session_id) {
+                                    commit_seq = seq;
+                                    persistence.push_replay(seq, ServerMessage::SessionDestroyed {
+                                        session_id,
+                                        session_name: session_name.clone(),
+                                    });
+                                }
+                            }
+
+                            // Notify and detach any clients still attached to this session.
+                            shared_state
+                                .registry
+                                .broadcast_to_session(
+                                    session_id,
+                                    ServerMessage::SessionEnded { session_id },
+                                )
+                                .await;
+                            shared_state.registry.detach_session_clients(session_id);
+
+                            // Broadcast updated session list to all clients.
+                            let sessions: Vec<_> = {
+                                let session_manager = shared_state.session_manager.read().await;
+                                session_manager
+                                    .list_sessions()
+                                    .iter()
+                                    .map(|s| s.to_info())
+                                    .collect()
+                            };
+
+                            let broadcast_msg = ServerMessage::SessionsChanged { sessions };
+                            let broadcast_msg = if commit_seq > 0 {
+                                ServerMessage::Sequenced {
+                                    seq: commit_seq,
+                                    inner: Box::new(broadcast_msg),
+                                }
+                            } else {
+                                broadcast_msg
+                            };
+
+                            shared_state.registry.broadcast_to_all(broadcast_msg);
+
                             info!(
                                 session_id = %session_id,
                                 "Empty session removed"
