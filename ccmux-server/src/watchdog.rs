@@ -152,9 +152,15 @@ async fn watchdog_timer_task(
                         );
                         // Continue trying - the pane might recover
                     } else {
+                        // Flush to ensure text is sent
+                        if let Err(e) = handle.flush() {
+                            tracing::warn!(pane_id = %pane_id, error = %e, "Failed to flush watchdog message");
+                        }
+
                         // Small delay so TUI sees Enter as separate event
                         drop(pty_mgr); // Release lock during sleep
-                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        // BUG-071: Increased delay to 100ms and added explicit flushes
+                        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
                         // Send carriage return to submit
                         let pty_mgr = pty_manager.read().await;
@@ -166,6 +172,11 @@ async fn watchdog_timer_task(
                                     "Failed to send watchdog submit to pane"
                                 );
                             } else {
+                                // Flush again for the submit
+                                if let Err(e) = handle.flush() {
+                                    tracing::warn!(pane_id = %pane_id, error = %e, "Failed to flush watchdog submit");
+                                }
+                                
                                 tracing::debug!(
                                     pane_id = %pane_id,
                                     "Sent watchdog message"
