@@ -135,14 +135,16 @@ impl App {
 
         // Main event loop
         while !self.should_quit() {
-            // Draw UI
+            // BUG-070: Full terminal clear for major layout changes (session switch)
+            // This is separate from needs_redraw because minor state changes don't
+            // need a clear (and would cause flicker), but session switches do.
+            if self.state.needs_clear {
+                terminal.clear()?;
+                self.state.needs_clear = false;
+            }
+
+            // Draw UI (needs_redraw is for flagging layout invalidation, not clearing)
             if self.state.needs_redraw {
-                // NOTE: Commented out to fix flicker on session completion.
-                // PaneStateChanged/ClaudeStateChanged set needs_redraw=true, which
-                // triggered terminal.clear() causing visible flash. Ratatui's
-                // differential rendering should handle layout changes without clearing.
-                // If visual artifacts appear, uncomment this line.
-                // terminal.clear()?;
                 self.state.needs_redraw = false;
             }
             self.draw(&mut terminal)?;
@@ -662,6 +664,8 @@ impl App {
                 self.state.layout = None;
                 self.state.pending_split_direction = None;
                 self.state.status_message = Some("Detached from session".to_string());
+                // BUG-070: Force full terminal clear when detaching
+                self.state.needs_clear = true;
                 self.connection.send(ClientMessage::ListSessions).await?;
             }
 
@@ -797,6 +801,8 @@ impl App {
 
             ClientCommand::ListSessions => {
                 self.state.state = AppState::SessionSelect;
+                // BUG-070: Force terminal clear when going to session selection
+                self.state.needs_clear = true;
                 self.connection.send(ClientMessage::ListSessions).await?;
             }
 
@@ -1038,7 +1044,8 @@ impl App {
             }
 
             ClientCommand::Redraw => {
-                self.state.needs_redraw = true;
+                // BUG-070: Use needs_clear for full terminal clear
+                self.state.needs_clear = true;
                 self.state.status_message = Some("Screen redrawn".to_string());
                 // Also notify server to signal child PTYs
                 self.connection.send(ClientMessage::Redraw { pane_id: None }).await?;
@@ -1494,6 +1501,11 @@ impl App {
                 self.state.last_beads_request_tick = 0;
                 // Clear any stale beads count
                 self.state.beads_ready_count = None;
+
+                // BUG-070: Force full terminal clear on session switch
+                // Ratatui's differential rendering needs a clean slate when session content
+                // changes completely, otherwise visual artifacts occur.
+                self.state.needs_clear = true;
             }
             ServerMessage::StateSnapshot {
                 commit_seq,
@@ -1559,6 +1571,9 @@ impl App {
 
                 self.state.last_beads_request_tick = 0;
                 self.state.beads_ready_count = None;
+
+                // BUG-070: Force full terminal clear on state resync
+                self.state.needs_clear = true;
             }
             ServerMessage::WindowCreated { window, should_focus: _ } => {
                 self.state.windows.insert(window.id, window);
@@ -1749,6 +1764,8 @@ impl App {
                     self.state.layout = None;
                     self.state.state = AppState::SessionSelect;
                     self.state.status_message = Some("Session has no active panes".to_string());
+                    // BUG-070: Force full terminal clear when all panes are closed
+                    self.state.needs_clear = true;
                 }
             }
             ServerMessage::WindowClosed { window_id } => {
@@ -1766,6 +1783,8 @@ impl App {
                 self.state.pending_split_direction = None;
                 self.state.state = AppState::SessionSelect;
                 self.state.status_message = Some("Session ended".to_string());
+                // BUG-070: Force full terminal clear when session ends
+                self.state.needs_clear = true;
                 // Refresh session list
                 self.connection.send(ClientMessage::ListSessions).await?;
             }

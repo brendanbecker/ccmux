@@ -104,6 +104,8 @@ pub struct ClientState {
     pub last_seen_commit_seq: u64,
     /// Whether a full screen redraw is requested
     pub needs_redraw: bool,
+    /// Whether a full terminal clear is needed (for major layout changes like session switch)
+    pub needs_clear: bool,
 }
 
 impl ClientState {
@@ -136,6 +138,7 @@ impl ClientState {
             human_control_lock_expiry: None,
             last_seen_commit_seq: 0,
             needs_redraw: false,
+            needs_clear: false,
         }
     }
 

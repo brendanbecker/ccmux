@@ -8,7 +8,7 @@
 **Current Stage**: Stage 8 (Multi-Agent Orchestration Enhancement)
 **Status**: Production-ready core with new orchestration primitives.
 
-## Current State (2026-01-20)
+## Current State (2026-01-22)
 
 **All P1 Features Complete!** Orchestration primitives fully shipped:
 - `ccmux_expect` - Wait for regex patterns in pane output (FEAT-096)
@@ -29,7 +29,7 @@
 
 ### Active Bugs (0)
 
-**ZERO BUGS!** All 66 bugs resolved (65 fixed, 1 deprecated).
+**ZERO BUGS!** All 70 bugs resolved (69 fixed, 1 deprecated).
 
 ### Remaining Backlog
 
@@ -41,7 +41,30 @@
 | P1 | INQ-004 | MCP Response Integrity | new |
 | P3 | FEAT-069, FEAT-072 | TLS/auth, per-pane MCP mode | backlog |
 
-### Latest Session (2026-01-20, Session 20)
+### Latest Session (2026-01-22, Session 21)
+
+**BUG-070: Session Switch Rendering Corruption**
+
+Fixed critical rendering corruption when switching sessions or closing sessions. The display would show garbled content (characters arranged diagonally, overlapping text) because Ratatui's differential rendering wasn't cleared on major layout changes.
+
+**Root Cause**: `terminal.clear()` was commented out to prevent flicker on minor state changes, but this also prevented proper clearing on major layout changes like session switches.
+
+**Solution**: Added `needs_clear` flag separate from `needs_redraw`:
+- `needs_redraw` - for minor state changes (no clear needed)
+- `needs_clear` - for major layout changes (full terminal clear)
+
+**Places fixed** (all Attached→SessionSelect transitions):
+- `ServerMessage::Attached` (session switch)
+- `ServerMessage::StateSnapshot` (resync)
+- `ServerMessage::SessionEnded` (session killed)
+- `InputAction::Detach` (user detaches)
+- `ClientCommand::ListSessions` (`:list-sessions`)
+- `ClientCommand::Redraw` (`:redraw` now works)
+- PaneClosed when panes empty
+
+---
+
+### Session 20 (2026-01-20)
 
 **QA Validation + Watchdog Architecture + Inquiry System Design**
 
